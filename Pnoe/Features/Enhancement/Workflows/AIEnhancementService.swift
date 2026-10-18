@@ -79,10 +79,6 @@ class AIEnhancementService: ObservableObject {
     func isConfigured(for configuration: EnhancementRuntimeConfiguration) -> Bool {
         guard let provider = configuration.provider else { return false }
 
-        if provider == .voiceInkRefine {
-            return aiService.voiceInkRefineService.isAvailableInModes
-        }
-
         guard configuration.prompt != nil else { return false }
 
         if provider == .localCLI || provider == .ollama {
@@ -198,27 +194,6 @@ class AIEnhancementService: ObservableObject {
 
         guard !text.isEmpty else {
             return ("", nil, nil)
-        }
-
-        if provider == .voiceInkRefine {
-            do {
-                let result = try await aiService.enhanceWithVoiceInkRefine(transcript: text)
-                let filteredResult = AIEnhancementOutputFilter.filter(
-                    result.trimmingCharacters(in: .whitespacesAndNewlines)
-                )
-                guard !filteredResult.isEmpty else {
-                    throw EnhancementError.enhancementFailed
-                }
-                return (
-                    filteredResult,
-                    nil,
-                    text
-                )
-            } catch is CancellationError {
-                throw CancellationError()
-            } catch {
-                throw EnhancementError.customError(error.localizedDescription)
-            }
         }
 
         guard let prompt = configuration.prompt else {
@@ -477,11 +452,14 @@ class AIEnhancementService: ObservableObject {
         var didUpdateModes = false
 
         for index in updatedConfigurations.indices {
-            if updatedConfigurations[index].selectedAIProvider == AIProvider.voiceInkRefine.rawValue {
-                if updatedConfigurations[index].selectedAIModel != VoiceInkRefineService.modelName {
-                    updatedConfigurations[index].selectedAIModel = VoiceInkRefineService.modelName
-                    didUpdateModes = true
-                }
+            // A mode saved with a provider Pnoe no longer ships falls back to no cleanup.
+            if let providerName = updatedConfigurations[index].selectedAIProvider,
+                AIProvider(rawValue: providerName) == nil
+            {
+                updatedConfigurations[index].isAIEnhancementEnabled = false
+                updatedConfigurations[index].selectedAIProvider = nil
+                updatedConfigurations[index].selectedAIModel = nil
+                didUpdateModes = true
             }
 
             let selectedPrompt = updatedConfigurations[index].selectedPrompt

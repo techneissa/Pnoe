@@ -15,7 +15,6 @@ enum AIProvider: String, CaseIterable {
     case soniox = "Soniox"
     case speechmatics = "Speechmatics"
     case assemblyAI = "AssemblyAI"
-    case voiceInkRefine = "VoiceInk Refine"
     case ollama = "Ollama"
     case localCLI = "Local CLI"
     case custom = "Custom"
@@ -46,8 +45,6 @@ enum AIProvider: String, CaseIterable {
             return "https://asr.api.speechmatics.com/v2"
         case .assemblyAI:
             return "https://api.assemblyai.com/v2/transcript"
-        case .voiceInkRefine:
-            return ""
         case .ollama:
             return UserDefaults.standard.string(forKey: "ollamaBaseURL") ?? "http://localhost:11434"
         case .localCLI:
@@ -81,8 +78,6 @@ enum AIProvider: String, CaseIterable {
             return "speechmatics-enhanced"
         case .assemblyAI:
             return "universal-3-5-pro"
-        case .voiceInkRefine:
-            return VoiceInkRefineService.modelName
         case .ollama:
             return UserDefaults.standard.string(forKey: "ollamaSelectedModel") ?? "mistral"
         case .localCLI:
@@ -154,8 +149,6 @@ enum AIProvider: String, CaseIterable {
             return ["speechmatics-enhanced"]
         case .assemblyAI:
             return ["universal-3-5-pro"]
-        case .voiceInkRefine:
-            return [VoiceInkRefineService.modelName]
         case .ollama:
             return []
         case .localCLI:
@@ -169,7 +162,7 @@ enum AIProvider: String, CaseIterable {
 
     var requiresAPIKey: Bool {
         switch self {
-        case .voiceInkRefine, .ollama, .localCLI:
+        case .ollama, .localCLI:
             return false
         default:
             return true
@@ -228,8 +221,6 @@ class AIService: ObservableObject {
                 self.apiKey = ""
                 if selectedProvider == .localCLI {
                     self.isAPIKeyValid = localCLIService.isConfigured
-                } else if selectedProvider == .voiceInkRefine {
-                    self.isAPIKeyValid = voiceInkRefineService.isAvailableInModes
                 } else {
                     self.isAPIKeyValid = true
                 }
@@ -245,12 +236,10 @@ class AIService: ObservableObject {
 
     @Published private var selectedModels: [AIProvider: String] = [:]
     private let userDefaults = UserDefaults.standard
-    let voiceInkRefineService = VoiceInkRefineService.shared
     private lazy var ollamaService = OllamaService()
     private lazy var localCLIService = LocalCLIService()
     private var apiKeyChangeObserver: NSObjectProtocol?
     private var settingsChangeObserver: NSObjectProtocol?
-    private var voiceInkRefineObserver: AnyCancellable?
 
     @Published private var openRouterModels: [String] = []
     @Published private var openRouterModelCatalog: [OpenRouterModel] = []
@@ -265,8 +254,6 @@ class AIService: ObservableObject {
 
             if provider == .custom {
                 return CustomAIProviderManager.shared.hasConfiguredModels
-            } else if provider == .voiceInkRefine {
-                return voiceInkRefineService.isAvailableInModes
             } else if provider == .ollama {
                 return ollamaService.isConnected
             } else if provider == .localCLI {
@@ -279,10 +266,6 @@ class AIService: ObservableObject {
     }
 
     var currentModel: String {
-        if selectedProvider == .voiceInkRefine {
-            return selectedProvider.defaultModel
-        }
-
         if let selectedModel = selectedModels[selectedProvider],
             !selectedModel.isEmpty,
             (selectedProvider.supportsCustomModelID || selectedProvider == .ollama
@@ -294,10 +277,6 @@ class AIService: ObservableObject {
     }
 
     func selectedModel(for provider: AIProvider) -> String {
-        if provider == .voiceInkRefine {
-            return provider.defaultModel
-        }
-
         if let selectedModel = selectedModels[provider], !selectedModel.isEmpty {
             return selectedModel
         }
@@ -362,8 +341,6 @@ class AIService: ObservableObject {
         } else {
             if selectedProvider == .localCLI {
                 self.isAPIKeyValid = localCLIService.isConfigured
-            } else if selectedProvider == .voiceInkRefine {
-                self.isAPIKeyValid = voiceInkRefineService.isAvailableInModes
             } else {
                 self.isAPIKeyValid = true
             }
@@ -372,29 +349,6 @@ class AIService: ObservableObject {
         loadSavedModelSelections()
         loadSavedOpenRouterModels()
         initializeAutoLearnSelectionIfNeeded()
-
-        // Observe installation state without forwarding every progress update to the entire scene.
-        voiceInkRefineObserver = voiceInkRefineService.$isDownloaded
-            .removeDuplicates()
-            .dropFirst()
-            .sink { [weak self] _ in
-                DispatchQueue.main.async {
-                    guard let self else { return }
-
-                    if self.selectedProvider == .voiceInkRefine {
-                        let isAvailable = self.voiceInkRefineService.isAvailableInModes
-                        if self.isAPIKeyValid != isAvailable {
-                            self.isAPIKeyValid = isAvailable
-                        }
-                    }
-
-                    if self.voiceInkRefineService.isAvailableInModes {
-                        self.initializeAutoLearnSelectionIfNeeded()
-                    }
-
-                    self.objectWillChange.send()
-                }
-            }
 
         apiKeyChangeObserver = NotificationCenter.default.addObserver(
             forName: .aiProviderKeyChanged,
@@ -424,7 +378,6 @@ class AIService: ObservableObject {
         if let settingsChangeObserver {
             NotificationCenter.default.removeObserver(settingsChangeObserver)
         }
-        voiceInkRefineObserver?.cancel()
     }
 
     private func reloadSelectedProviderConfiguration() {
@@ -434,9 +387,7 @@ class AIService: ObservableObject {
         }
 
         let selectedModelKey = "\(selectedProvider.rawValue)SelectedModel"
-        if selectedProvider == .voiceInkRefine {
-            selectedModels[selectedProvider] = selectedProvider.defaultModel
-        } else if let savedModel = userDefaults.string(forKey: selectedModelKey), !savedModel.isEmpty {
+        if let savedModel = userDefaults.string(forKey: selectedModelKey), !savedModel.isEmpty {
             selectedModels[selectedProvider] = savedModel
         }
 
@@ -452,8 +403,6 @@ class AIService: ObservableObject {
             apiKey = ""
             if selectedProvider == .localCLI {
                 isAPIKeyValid = localCLIService.isConfigured
-            } else if selectedProvider == .voiceInkRefine {
-                isAPIKeyValid = voiceInkRefineService.isAvailableInModes
             } else {
                 isAPIKeyValid = true
             }
@@ -493,11 +442,6 @@ class AIService: ObservableObject {
 
     private func loadSavedModelSelections() {
         for provider in AIProvider.allCases {
-            if provider == .voiceInkRefine {
-                selectedModels[provider] = provider.defaultModel
-                continue
-            }
-
             let key = "\(provider.rawValue)SelectedModel"
             if let savedModel = userDefaults.string(forKey: key), !savedModel.isEmpty {
                 selectedModels[provider] = savedModel
@@ -557,16 +501,15 @@ class AIService: ObservableObject {
             guard CustomAIProviderManager.shared.applyConfiguration(forModel: resolvedInput) else { return }
         }
 
-        let resolvedModel = provider == .voiceInkRefine ? provider.defaultModel : resolvedInput
-        selectedModels[provider] = resolvedModel
+        selectedModels[provider] = resolvedInput
         let key = "\(provider.rawValue)SelectedModel"
-        userDefaults.set(resolvedModel, forKey: key)
-        if provider.supportsCustomModelID, !provider.availableModels.contains(resolvedModel) {
-            userDefaults.set(resolvedModel, forKey: "\(provider.rawValue)CustomModelID")
+        userDefaults.set(resolvedInput, forKey: key)
+        if provider.supportsCustomModelID, !provider.availableModels.contains(resolvedInput) {
+            userDefaults.set(resolvedInput, forKey: "\(provider.rawValue)CustomModelID")
         }
 
         if provider == .ollama {
-            updateSelectedOllamaModel(resolvedModel)
+            updateSelectedOllamaModel(resolvedInput)
         } else if provider == .custom {
             reloadSelectedProviderConfiguration()
         }
@@ -764,10 +707,6 @@ class AIService: ObservableObject {
         async throws -> String
     {
         try await ollamaService.enhance(text, withSystemPrompt: systemPrompt, model: model, timeout: timeout)
-    }
-
-    func enhanceWithVoiceInkRefine(transcript: String) async throws -> String {
-        try await voiceInkRefineService.enhance(transcript: transcript)
     }
 
     func reviewAutoLearnCandidates(

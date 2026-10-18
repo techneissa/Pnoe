@@ -1,74 +1,52 @@
 import AppKit
 import Combine
 import Foundation
-import MediaRemoteAdapter
 import SwiftUI
 
+/// Pauses media while Pnoe records and resumes it afterwards.
+///
+/// macOS has no public API that says whether the "Now Playing" app is playing. Pnoe uses what is public:
+/// the CoreAudio process list (`AudioOutputProcesses`) to see that some app is producing audio, and the
+/// system Play/Pause media key to pause and resume it. Because the key is a toggle that goes to whichever
+/// app is "Now Playing", Pnoe only presses it when audio is running, and presses it again to resume only
+/// after it has seen that audio stop.
 @MainActor
 class PlaybackController: ObservableObject {
     static let shared = PlaybackController()
-    private var mediaController: MediaRemoteAdapter.MediaController
+
+    /// A pause Pnoe started and still has to undo.
     private struct OwnedPause {
         let id = UUID()
-        let bundleID: String
-        let stateRevision: UInt64
+        /// Processes that had audio output running when the key was pressed.
+        let playingProcessIDs: Set<pid_t>
+        let pressedAt: TimeInterval
+        /// Processes from `playingProcessIDs` that stopped output after the key press. Empty until one has.
+        var stoppedProcessIDs: Set<pid_t> = []
     }
+
+    /// How long after the key press a process that was not playing before is read as the key having
+    /// started playback, which Pnoe then undoes.
+    private let startedPlaybackWindow: TimeInterval = 1.5
+    /// How long Pnoe waits for the audio to stop before it gives up on resuming. Players keep their
+    /// output running for several seconds after a pause (QuickTime Player: about 8 s).
+    private let pauseConfirmationTimeout: TimeInterval = 12
+    private let pollInterval: Duration = .milliseconds(100)
 
     private var ownedPause: OwnedPause?
     private var recordingSessionID = UUID()
-    private var mediaStateRevision: UInt64 = 0
-    private var isMediaPlaying = false
-    private var lastKnownTrackInfo: TrackInfo?
-    private var stateRequests: [UUID: CheckedContinuation<TrackInfo?, Never>] = [:]
 
     @Published var isPauseMediaEnabled: Bool = UserDefaults.standard.bool(forKey: "isPauseMediaEnabled") {
         didSet {
             UserDefaults.standard.set(isPauseMediaEnabled, forKey: "isPauseMediaEnabled")
 
-            if isPauseMediaEnabled {
-                startMediaTracking()
-            } else {
-                stopMediaTracking()
+            if !isPauseMediaEnabled {
+                recordingSessionID = UUID()
+                ownedPause = nil
             }
         }
     }
 
-    private init() {
-        mediaController = MediaRemoteAdapter.MediaController()
-
-        setupMediaControllerCallbacks()
-
-        if isPauseMediaEnabled {
-            startMediaTracking()
-        }
-    }
-
-    private func setupMediaControllerCallbacks() {
-        mediaController.onTrackInfoReceived = { [weak self] trackInfo in
-            // MediaRemoteAdapter delivers its callbacks on the main queue.
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                self.isMediaPlaying = trackInfo?.payload.isPlaying ?? false
-                self.lastKnownTrackInfo = trackInfo
-                self.mediaStateRevision &+= 1
-
-            }
-        }
-
-        mediaController.onListenerTerminated = {}
-    }
-
-    private func startMediaTracking() {
-        mediaController.startListening()
-    }
-
-    private func stopMediaTracking() {
-        recordingSessionID = UUID()
-        ownedPause = nil
-        mediaController.stopListening()
-        isMediaPlaying = false
-        lastKnownTrackInfo = nil
-    }
+    private init() {}
 
     func beginRecordingSession() -> UUID {
         recordingSessionID = UUID()
@@ -77,108 +55,65 @@ class PlaybackController: ObservableObject {
     }
 
     func pauseMedia(sessionID: UUID) async {
-        guard sessionID == recordingSessionID, !Task.isCancelled, isPauseMediaEnabled else {
-            return
+        guard canAct(sessionID: sessionID) else { return }
+        // A pause that never showed the audio stopping is stale and no longer owned.
+        if let ownedPause, ownedPause.stoppedProcessIDs.isEmpty,
+            Self.now - ownedPause.pressedAt >= pauseConfirmationTimeout
+        {
+            self.ownedPause = nil
         }
-        if let ownedPause {
-            if let currentApp = lastKnownTrackInfo?.payload.bundleIdentifier,
-                currentApp != ownedPause.bundleID {
-                self.ownedPause = nil
-            } else if lastKnownTrackInfo?.payload.isPlaying != true {
-                return
-            }
-        }
-        guard isMediaPlaying, lastKnownTrackInfo?.payload.isPlaying == true else {
-            return
-        }
-        guard let bundleId = lastKnownTrackInfo?.payload.bundleIdentifier else {
-            return
-        }
+        // Media Pnoe already paused for an earlier recording stays paused; the key is not pressed twice.
+        guard ownedPause == nil else { return }
+        guard !AudioOutputProcesses.currentProcessIDs().isEmpty else { return }
 
-        try? await Task.sleep(nanoseconds: 50_000_000)
-        guard !Task.isCancelled, sessionID == recordingSessionID, isPauseMediaEnabled else {
-            return
-        }
-        guard lastKnownTrackInfo?.payload.bundleIdentifier == bundleId,
-            lastKnownTrackInfo?.payload.isPlaying == true else {
-            return
-        }
+        try? await Task.sleep(for: .milliseconds(50))
+        guard canAct(sessionID: sessionID) else { return }
 
-        // Own only commands actually queued, not a cancelled 50 ms pre-pause delay.
-        ownedPause = OwnedPause(bundleID: bundleId, stateRevision: mediaStateRevision)
-        mediaController.pause()
+        // Read again right before the key press: the audio may have stopped during the delay.
+        let playingProcessIDs = AudioOutputProcesses.currentProcessIDs()
+        guard !playingProcessIDs.isEmpty else { return }
+
+        // Own the pause from the moment the key is sent, whether or not this task is cancelled later.
+        let pause = OwnedPause(playingProcessIDs: playingProcessIDs, pressedAt: Self.now)
+        ownedPause = pause
+        Self.sendMediaPlayPauseKey()
+
+        await undoIfPlaybackStarted(pause, sessionID: sessionID)
     }
 
     func resumeMedia(sessionID: UUID) async {
-        guard sessionID == recordingSessionID, !Task.isCancelled, isPauseMediaEnabled else {
-            return
-        }
-        guard let pause = ownedPause else {
-            return
-        }
-        // Recorder owns the cancellable restoration task; no nested task is needed.
-        await restorePlayback(pause: pause, sessionID: sessionID)
-    }
+        guard canAct(sessionID: sessionID), var pause = ownedPause else { return }
 
-    private func canRestore(_ pause: OwnedPause, sessionID: UUID) -> Bool {
-        !Task.isCancelled && isPauseMediaEnabled
-            && sessionID == recordingSessionID && ownedPause?.id == pause.id
-    }
+        // The key only toggles, so it is pressed again only once the audio is seen to have stopped. Without
+        // that proof the first press may have reached an app that was not playing, and a second press
+        // would start it.
+        while pause.stoppedProcessIDs.isEmpty {
+            guard canRestore(pause, sessionID: sessionID) else { return }
 
-    private func restorePlayback(pause: OwnedPause, sessionID: UUID) async {
+            let currentProcessIDs = AudioOutputProcesses.currentProcessIDs()
+            pause.stoppedProcessIDs = pause.playingProcessIDs.subtracting(currentProcessIDs)
+            if !pause.stoppedProcessIDs.isEmpty { break }
+
+            guard Self.now - pause.pressedAt < pauseConfirmationTimeout else {
+                ownedPause = nil
+                return
+            }
+            guard (try? await Task.sleep(for: pollInterval)) != nil else { return }
+        }
+        ownedPause = pause
+
         let delay = MediaController.shared.audioResumptionDelay
-
-        // The adapter debounces state changes. Keep ownership while its pause update arrives.
-        let deadline = ProcessInfo.processInfo.systemUptime + 2
-        while canRestore(pause, sessionID: sessionID),
-            ProcessInfo.processInfo.systemUptime < deadline {
-            if mediaStateRevision > pause.stateRevision,
-                lastKnownTrackInfo?.payload.bundleIdentifier == pause.bundleID,
-                lastKnownTrackInfo?.payload.isPlaying == false {
-                break
-            }
-            if let currentApp = lastKnownTrackInfo?.payload.bundleIdentifier,
-                currentApp != pause.bundleID {
-                break
-            }
-            do {
-                try await Task.sleep(nanoseconds: 25_000_000)
-            } catch {
-                return
-            }
-        }
-
-        guard canRestore(pause, sessionID: sessionID) else { return }
         if delay > 0 {
-            do {
-                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            } catch {
-                return
-            }
+            guard (try? await Task.sleep(for: .seconds(delay))) != nil else { return }
         }
         guard canRestore(pause, sessionID: sessionID) else { return }
 
-        // Re-read live state after the delay: a global toggle must not pause media
-        // the user already resumed, or act on another player.
-        let currentTrackInfo = await fetchCurrentTrackInfo()
-        guard canRestore(pause, sessionID: sessionID) else { return }
-        guard isAppStillRunning(bundleId: pause.bundleID) else {
+        // Something else is playing now, or the user already resumed the player: leave it alone.
+        let currentProcessIDs = AudioOutputProcesses.currentProcessIDs()
+        let startedElsewhere = !currentProcessIDs.subtracting(pause.playingProcessIDs).isEmpty
+        let resumedByUser = !currentProcessIDs.isDisjoint(with: pause.stoppedProcessIDs)
+        guard !startedElsewhere, !resumedByUser else {
             ownedPause = nil
-            return
-        }
-        guard let currentTrackInfo, let currentBundleId = currentTrackInfo.payload.bundleIdentifier else {
-            // Do not blindly toggle or forget a pause if the state lookup failed.
-            return
-        }
-        guard currentBundleId == pause.bundleID else {
-            ownedPause = nil
-            return
-        }
-        guard currentTrackInfo.payload.isPlaying != true else {
-            ownedPause = nil
-            return
-        }
-        guard currentTrackInfo.payload.isPlaying == false else {
             return
         }
 
@@ -186,39 +121,35 @@ class PlaybackController: ObservableObject {
         ownedPause = nil
     }
 
-    private func fetchCurrentTrackInfo() async -> TrackInfo? {
-        let requestID = UUID()
-        return await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                guard !Task.isCancelled else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-                stateRequests[requestID] = continuation
-                mediaController.getTrackInfo { [weak self] trackInfo in
-                    MainActor.assumeIsolated {
-                        self?.finishStateRequest(requestID, trackInfo: trackInfo)
-                    }
-                }
-                Task { [weak self] in
-                    try? await Task.sleep(nanoseconds: 1_000_000_000)
-                    self?.finishStateRequest(requestID, trackInfo: nil)
-                }
-            }
-        } onCancel: {
-            Task { @MainActor [weak self] in
-                self?.finishStateRequest(requestID, trackInfo: nil)
+    private func canAct(sessionID: UUID) -> Bool {
+        !Task.isCancelled && isPauseMediaEnabled && sessionID == recordingSessionID
+    }
+
+    private func canRestore(_ pause: OwnedPause, sessionID: UUID) -> Bool {
+        canAct(sessionID: sessionID) && ownedPause?.id == pause.id
+    }
+
+    /// If the key press made an app that was not playing start, press it again so nothing new plays.
+    /// This happens when the "Now Playing" app is not the app producing the audio, for example during a call.
+    private func undoIfPlaybackStarted(_ pause: OwnedPause, sessionID: UUID) async {
+        while Self.now - pause.pressedAt < startedPlaybackWindow {
+            guard (try? await Task.sleep(for: pollInterval)) != nil else { return }
+            guard canRestore(pause, sessionID: sessionID) else { return }
+
+            let currentProcessIDs = AudioOutputProcesses.currentProcessIDs()
+            if !currentProcessIDs.subtracting(pause.playingProcessIDs).isEmpty {
+                Self.sendMediaPlayPauseKey()
+                ownedPause = nil
+                return
             }
         }
     }
 
-    private func finishStateRequest(_ requestID: UUID, trackInfo: TrackInfo?) {
-        stateRequests.removeValue(forKey: requestID)?.resume(returning: trackInfo)
+    private static var now: TimeInterval {
+        ProcessInfo.processInfo.systemUptime
     }
 
     /// Simulate the hardware media Play/Pause key (NX_KEYTYPE_PLAY = 16).
-    /// Some apps (e.g. Plexamp) ignore the MediaRemote `play` command but
-    /// respond to the same HID key event the physical F8 key produces.
     private static func sendMediaPlayPauseKey() {
         func post(down: Bool) {
             let flags: UInt = down ? 0xa00 : 0xb00
@@ -238,10 +169,5 @@ class PlaybackController: ObservableObject {
         }
         post(down: true)
         post(down: false)
-    }
-
-    private func isAppStillRunning(bundleId: String) -> Bool {
-        let runningApps = NSWorkspace.shared.runningApplications
-        return runningApps.contains { $0.bundleIdentifier == bundleId }
     }
 }
