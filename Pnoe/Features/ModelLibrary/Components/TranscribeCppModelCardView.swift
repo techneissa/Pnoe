@@ -130,5 +130,6 @@ struct TranscribeCppModelCardView: View {
                 .buttonStyle(.plain)
             }
         }
+        .focusEffectDisabled()
     }
 }

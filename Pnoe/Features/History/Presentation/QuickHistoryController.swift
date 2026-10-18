@@ -70,6 +70,7 @@ final class QuickHistoryController: NSObject {
             .modelContainer(modelContext.container)
             .environmentObject(engine)
             .environmentObject(enhancementService)
+            .autocorrectionDisabled()
 
         let hostingController = NSHostingController(rootView: rootView)
         let panel = PersistentQuickPanel(

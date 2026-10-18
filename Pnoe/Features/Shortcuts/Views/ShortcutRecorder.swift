@@ -49,6 +49,7 @@ struct ShortcutRecorder: View {
             .help(accessibilityLabel)
 
         }
+        .focusEffectDisabled()
         .onReceive(NotificationCenter.default.publisher(for: ShortcutStore.shortcutDidChange)) { notification in
             guard let changedAction = notification.object as? ShortcutAction, changedAction == action else { return }
             shortcut = ShortcutStore.shortcut(for: action)

@@ -65,6 +65,7 @@ private struct ModelSettingsTabBar: View {
                 .buttonStyle(.plain)
             }
         }
+        .focusEffectDisabled()
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
     }
@@ -142,6 +143,7 @@ private struct WhisperPromptSettingsSection: View {
                         }
                         .keyboardShortcut(.defaultAction)
                     }
+                    .focusEffectDisabled()
                     .controlSize(.small)
                 } else if promptLanguage != "auto" {
                     if !savedPrompt.isEmpty {
@@ -155,6 +157,7 @@ private struct WhisperPromptSettingsSection: View {
                         draftPrompt = savedPrompt
                         isEditing = true
                     }
+                    .focusEffectDisabled()
                 }
             }
             .padding(.vertical, 2)

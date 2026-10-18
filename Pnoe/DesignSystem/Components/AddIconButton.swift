@@ -14,6 +14,7 @@ struct AddIconButton: View {
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(isDisabled ? .tertiary : .secondary)
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .help(helpText)
         .accessibilityLabel(helpText)

@@ -354,6 +354,7 @@ struct PnoeApp: App {
                             })
                 }
             }
+            .autocorrectionDisabled()
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: AppWindowLayout.width, height: AppWindowLayout.minimumHeight)
@@ -385,6 +386,7 @@ struct PnoeApp: App {
                 Button("Toggle Menu Bar Only") {
                     menuBarManager.isMenuBarOnly.toggle()
                 }
+                .focusEffectDisabled()
             }
         #endif
     }

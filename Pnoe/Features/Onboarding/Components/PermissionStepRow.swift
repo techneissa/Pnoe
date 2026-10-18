@@ -88,6 +88,7 @@ struct PermissionStepRow: View {
                         .fill(AppTheme.Action.primaryFill)
                 )
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
     }
 
@@ -124,5 +125,6 @@ struct PermissionStepRow: View {
             .buttonStyle(.plain)
             .foregroundColor(AppTheme.Action.secondaryForeground)
         }
+        .focusEffectDisabled()
     }
 }

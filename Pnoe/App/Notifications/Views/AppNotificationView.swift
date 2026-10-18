@@ -79,6 +79,7 @@ struct AppNotificationView: View {
                 .buttonStyle(PlainButtonStyle())
                 .frame(width: 16, height: 16)
             }
+            .focusEffectDisabled()
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }

@@ -22,6 +22,8 @@
 		E1F511012FA3B47000F00001 /* SelectedTextKit in Frameworks */ = {isa = PBXBuildFile; productRef = E1F511032FA3B47000F00001 /* SelectedTextKit */; };
 		E1FA00062FA7000000000001 /* VoiceInkRefineXPCProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00052FA7000000000001 /* VoiceInkRefineXPCProtocol.swift */; };
 		E1FA00072FA7000000000001 /* VoiceInkRefineXPCProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00052FA7000000000001 /* VoiceInkRefineXPCProtocol.swift */; };
+		E1FA00A12FA7000000000001 /* TextFieldPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00A02FA7000000000001 /* TextFieldPolicy.swift */; };
+		E1FA00A22FA7000000000001 /* TextFieldPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00A02FA7000000000001 /* TextFieldPolicy.swift */; };
 		E1FA00082FA7000000000001 /* VoiceInkRefineXPC.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = E1FA00012FA7000000000001 /* VoiceInkRefineXPC.xpc */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		E1FA00132FA7000000000001 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = E1F900102FA6000000000001 /* MLXLLM */; };
 		E1FA00142FA7000000000001 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = E1F900112FA6000000000001 /* MLXLMCommon */; };
@@ -31,13 +33,6 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		E11473C42CBE0F0B00318EE4 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = E11473A82CBE0F0A00318EE4 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = E11473AF2CBE0F0A00318EE4;
-			remoteInfo = Pnoe;
-		};
 		E11473CE2CBE0F0B00318EE4 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = E11473A82CBE0F0A00318EE4 /* Project object */;
@@ -90,6 +85,7 @@
 		E1CE28772E4336150082B758 /* whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = whisper.xcframework; path = "../build-apple/whisper.xcframework"; sourceTree = "<group>"; };
 		E1FA00012FA7000000000001 /* VoiceInkRefineXPC.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = VoiceInkRefineXPC.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
 		E1FA00052FA7000000000001 /* VoiceInkRefineXPCProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceInkRefineXPCProtocol.swift; sourceTree = "<group>"; };
+		E1FA00A02FA7000000000001 /* TextFieldPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextFieldPolicy.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -233,6 +229,7 @@
 			isa = PBXGroup;
 			children = (
 				E1FA00052FA7000000000001 /* VoiceInkRefineXPCProtocol.swift */,
+				E1FA00A02FA7000000000001 /* TextFieldPolicy.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -285,7 +282,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				E11473C52CBE0F0B00318EE4 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				E11473C62CBE0F0B00318EE4 /* PnoeTests */,
@@ -449,6 +445,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E1FA00062FA7000000000001 /* VoiceInkRefineXPCProtocol.swift in Sources */,
+				E1FA00A12FA7000000000001 /* TextFieldPolicy.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -456,6 +453,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E1FA00A22FA7000000000001 /* TextFieldPolicy.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -477,11 +475,6 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		E11473C52CBE0F0B00318EE4 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = E11473AF2CBE0F0A00318EE4 /* Pnoe */;
-			targetProxy = E11473C42CBE0F0B00318EE4 /* PBXContainerItemProxy */;
-		};
 		E11473CF2CBE0F0B00318EE4 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = E11473AF2CBE0F0A00318EE4 /* Pnoe */;
@@ -696,7 +689,6 @@
 		E11473DB2CBE0F0B00318EE4 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
@@ -707,14 +699,12 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pnoe Dev.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Pnoe Dev";
 			};
 			name = Debug;
 		};
 		E11473DC2CBE0F0B00318EE4 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
@@ -725,7 +715,6 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pnoe.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Pnoe";
 			};
 			name = Release;
 		};

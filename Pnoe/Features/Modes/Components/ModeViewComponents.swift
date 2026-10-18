@@ -17,6 +17,7 @@ struct PnoeButton: View {
                         .fill(isDisabled ? AppTheme.Accent.disabled : AppTheme.Accent.primary)
                 )
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .disabled(isDisabled)
     }
@@ -254,6 +255,7 @@ struct ConfigurationRow: View {
                         .stroke(AppTheme.Border.control, lineWidth: 0.5)
                 )
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .help("Edit mode")
         .accessibilityLabel("Edit mode")
@@ -574,6 +576,7 @@ struct AppGridItem: View {
                     .stroke(isSelected ? AppTheme.Accent.primary : Color.clear, lineWidth: 1)
             )
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
     }
 }

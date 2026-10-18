@@ -567,6 +567,7 @@ private struct AutoLearnReviewProposalRow: View {
                 .frame(width: 30, height: 26)
                 .background(QuickPanelButtonBackground(isSelected: isSelected))
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .help(Text(title))
         .accessibilityLabel(title)

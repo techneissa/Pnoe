@@ -38,6 +38,7 @@ struct AppIconButton: View {
                     AppCardBackground(isSelected: false, cornerRadius: cornerRadius)
                 )
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .disabled(isDisabled)
         .help(help)
@@ -74,6 +75,7 @@ struct AppActionButton: View {
             Text(title)
                 .frame(minWidth: minWidth)
         }
+        .focusEffectDisabled()
         .buttonStyle(AppActionButtonStyle(kind: kind))
     }
 }

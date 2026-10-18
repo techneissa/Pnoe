@@ -169,6 +169,7 @@ struct QuickPanelEscapeButton: View {
                 .padding(.vertical, 4)
                 .background(AppTheme.Surface.controlActive, in: RoundedRectangle(cornerRadius: 5))
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .help(help)
         .accessibilityLabel("Escape")

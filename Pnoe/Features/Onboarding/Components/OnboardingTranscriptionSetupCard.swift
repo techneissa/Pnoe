@@ -107,6 +107,7 @@ struct OnboardingTranscriptionSetupCard: View {
             )
             .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
     }
 
@@ -167,6 +168,7 @@ struct OnboardingTranscriptionSetupCard: View {
                             }
                         }
                     }
+                    .focusEffectDisabled()
                     .font(.system(size: 12))
                     .foregroundColor(AppTheme.Text.secondary)
                 }
@@ -225,6 +227,7 @@ struct OnboardingTranscriptionSetupCard: View {
                 }
             }
         }
+        .focusEffectDisabled()
     }
 
     private var apiKeyField: some View {
@@ -251,6 +254,7 @@ struct OnboardingTranscriptionSetupCard: View {
                     .buttonStyle(.plain)
                 }
             }
+            .focusEffectDisabled()
 
             SecureField(apiKeyPlaceholder, text: $apiKey)
                 .textFieldStyle(.plain)
@@ -295,6 +299,7 @@ struct OnboardingTranscriptionSetupCard: View {
             .buttonStyle(.plain)
             .disabled(!canVerify)
         }
+        .focusEffectDisabled()
         .padding(.top, 2)
     }
 
@@ -528,6 +533,7 @@ private struct TranscriptionProviderChoiceButton: View {
             .background(ProviderSurface(isActive: isSelected, cornerRadius: 10))
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .help(provider.providerKey)
     }
