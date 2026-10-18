@@ -147,6 +147,7 @@ private struct TriggerTextChip: View {
             .buttonStyle(.plain)
             .help(removeHelp)
         }
+        .focusEffectDisabled()
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
         .background(AppCardBackground(cornerRadius: 7))
@@ -305,6 +306,7 @@ struct TriggerRemoveButton: View {
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(.secondary)
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .help("Remove trigger")
     }
@@ -320,6 +322,7 @@ struct TriggerEditButton: View {
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(.secondary)
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .help("Edit trigger group")
     }

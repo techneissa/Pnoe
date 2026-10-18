@@ -64,6 +64,7 @@ struct TriggerTemplateRow: View {
                     .strokeBorder(cardBorder, lineWidth: 0.5)
             }
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .help(isAdded ? String(localized: "Remove \(template.name) triggers") : group.summaryText)
     }

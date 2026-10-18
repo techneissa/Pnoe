@@ -30,6 +30,7 @@ struct ModeSettingsPanelView: View {
                 .keyboardShortcut(.escape, modifiers: [])
                 .help("Close")
             }
+            .focusEffectDisabled()
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
             .overlay(Divider().opacity(0.5), alignment: .bottom)

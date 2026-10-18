@@ -196,6 +196,7 @@ private struct DictionarySectionButton: View {
                 isSelected: isSelected
             )
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .help(section.description)
     }

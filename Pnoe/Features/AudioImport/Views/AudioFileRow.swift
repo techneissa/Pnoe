@@ -65,6 +65,7 @@ struct AudioFileRow: View {
             }
             .buttonStyle(.plain)
         }
+        .focusEffectDisabled()
     }
 
     // MARK: - Processing
@@ -181,6 +182,7 @@ struct AudioFileRow: View {
                         .fill(selectedTab == tab ? AppTheme.Accent.fill : Color.clear)
                 )
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
     }
 
@@ -212,6 +214,7 @@ struct AudioFileRow: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
         }
+        .focusEffectDisabled()
     }
 
     // MARK: - Helpers

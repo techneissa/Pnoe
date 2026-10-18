@@ -23,6 +23,7 @@ struct DiagnosticsSettingsView: View {
                 }
                 .disabled(isExportingLogs)
             }
+            .focusEffectDisabled()
         } label: {
             HStack(spacing: 4) {
                 if isExportingLogs {

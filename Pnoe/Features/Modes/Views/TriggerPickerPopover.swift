@@ -145,6 +145,7 @@ struct TriggerPickerPopover: View {
                         .foregroundColor(.secondary)
                         .font(.system(size: 12))
                 }
+                .focusEffectDisabled()
                 .buttonStyle(.plain)
             }
         }
@@ -278,6 +279,7 @@ struct TriggerPickerPopover: View {
             .contentShape(Rectangle())
             .background(RoundedRectangle(cornerRadius: 8).fill(AppTheme.Surface.card))
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .disabled(isUnavailable)
     }
@@ -327,6 +329,7 @@ struct TriggerPickerPopover: View {
                 RoundedRectangle(cornerRadius: 8).fill(
                     isSelected ? Color(nsColor: .unemphasizedSelectedContentBackgroundColor) : Color.clear))
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .disabled(claimedBy != nil)
     }

@@ -67,6 +67,7 @@ struct TranscriptionDetailView: View {
                     .frame(maxHeight: .infinity)
             }
         }
+        .focusEffectDisabled()
         .padding(.horizontal, HistoryLayout.headerInset)
         .frame(height: 52)
     }

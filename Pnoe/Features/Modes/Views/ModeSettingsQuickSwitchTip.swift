@@ -32,6 +32,7 @@ struct ModeSettingsQuickSwitchTip: View {
             .help("Dismiss")
             .accessibilityLabel("Dismiss shortcut tip")
         }
+        .focusEffectDisabled()
         .padding(12)
         .background(AppMaterialCardBackground(cornerRadius: AppTheme.Radius.card))
     }

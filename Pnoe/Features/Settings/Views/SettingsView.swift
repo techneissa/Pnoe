@@ -63,6 +63,7 @@ struct SettingsView: View {
                             }
                             .buttonStyle(.plain)
                         }
+                        .focusEffectDisabled()
                     }
                 }
 
@@ -70,6 +71,7 @@ struct SettingsView: View {
                     Button("Add Second Shortcut") {
                         withAnimation { recordingShortcutManager.secondaryRecordingShortcut = .custom }
                     }
+                    .focusEffectDisabled()
                 }
 
             } header: {
@@ -120,6 +122,7 @@ struct SettingsView: View {
                         .buttonStyle(.plain)
                         .help("Reset to default")
                     }
+                    .focusEffectDisabled()
                 } label: {
                     HStack(spacing: 2) {
                         Text("Cancel Recording")
@@ -242,6 +245,7 @@ struct SettingsView: View {
                 Button("Reset Onboarding") {
                     showResetOnboardingAlert = true
                 }
+                .focusEffectDisabled()
             }
 
             Section {
@@ -260,6 +264,7 @@ struct SettingsView: View {
                         }
                     }
                 }
+                .focusEffectDisabled()
 
                 LabeledContent("Import Settings") {
                     Button("Import") {
@@ -281,6 +286,7 @@ struct SettingsView: View {
                     }
                     .disabled(isImportingSettings)
                 }
+                .focusEffectDisabled()
             } header: {
                 Text("Backup")
             } footer: {

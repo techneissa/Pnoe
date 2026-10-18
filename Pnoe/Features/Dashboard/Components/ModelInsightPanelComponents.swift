@@ -20,6 +20,7 @@ struct ModelInsightPanelHeader: View {
             .help("Close")
             .accessibilityLabel("Close")
         }
+        .focusEffectDisabled()
         .padding(.horizontal, 20)
         .frame(height: QuickPanelMetrics.headerHeight)
     }

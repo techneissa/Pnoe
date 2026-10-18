@@ -161,6 +161,7 @@ private struct CustomEnhancementModelRow: View {
                 Image(systemName: "ellipsis.circle")
                     .font(.system(size: 14))
             }
+            .focusEffectDisabled()
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .frame(width: 22, height: 22)
@@ -678,6 +679,7 @@ private struct ConnectionTestRow: View {
 
             Spacer(minLength: 0)
         }
+        .focusEffectDisabled()
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 

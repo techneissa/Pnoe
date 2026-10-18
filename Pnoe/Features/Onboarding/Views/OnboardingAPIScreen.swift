@@ -76,6 +76,7 @@ struct OnboardingAPIScreen: View {
                 .buttonStyle(.plain)
                 .disabled(!(canContinue && isSelectedProviderVerified))
             }
+            .focusEffectDisabled()
             .frame(maxWidth: OnboardingLayout.chromeMaxWidth)
         }
         .alert("Set up AI enhancement later?", isPresented: $isShowingSkipWarning) {

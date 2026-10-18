@@ -87,6 +87,7 @@ struct AudioSetupView: View {
                     .rotationEffect(.degrees(refreshIconRotation))
             }
         }
+        .focusEffectDisabled()
         .buttonStyle(.borderless)
         .help("Refresh Microphones")
     }
@@ -148,6 +149,7 @@ struct AudioSetupView: View {
             }
             .contentShape(Rectangle())
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
     }
 
@@ -208,6 +210,7 @@ struct AudioSetupView: View {
                     }
                     .help("Remove")
                 }
+                .focusEffectDisabled()
                 .buttonStyle(.borderless)
                 .controlSize(.small)
             }

@@ -91,6 +91,7 @@ struct CustomSoundSettingsView: View {
                 .help("Reset")
             }
         }
+        .focusEffectDisabled()
     }
 
     private func soundSelectionBinding(for type: CustomSoundManager.SoundType) -> Binding<SoundMenuSelection> {

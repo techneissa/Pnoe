@@ -59,6 +59,7 @@ struct VocabularyView: View {
                 } label: {
                     Image(systemName: "info.circle")
                 }
+                .focusEffectDisabled()
                 .buttonStyle(.borderless)
                 .help("Vocabulary examples")
                 .popover(isPresented: $showInfoPopover) {
@@ -80,6 +81,7 @@ struct VocabularyView: View {
                                 .foregroundColor(.secondary)
                         }
                     }
+                    .focusEffectDisabled()
                     .buttonStyle(.plain)
                     .help("Change sort order")
 

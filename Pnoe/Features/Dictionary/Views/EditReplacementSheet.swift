@@ -55,6 +55,7 @@ struct EditReplacementSheet: View {
                 .disabled(originalWord.isEmpty || replacementWord.isEmpty)
                 .keyboardShortcut(.return, modifiers: [])
         }
+        .focusEffectDisabled()
         .padding(.horizontal)
         .padding(.vertical, 12)
         .background(AppCardBackground(isSelected: false, cornerRadius: 16))

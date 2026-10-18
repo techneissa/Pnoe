@@ -101,6 +101,7 @@ struct ModeConfigFormView: View {
                         AppCardBackground(isSelected: false, cornerRadius: 18)
                     )
             }
+            .focusEffectDisabled()
             .buttonStyle(.plain)
             .popover(isPresented: $isShowingIconPicker, arrowEdge: .bottom) {
                 ModeIconPickerView(
@@ -259,6 +260,7 @@ struct ModeConfigFormView: View {
                 Text(model.displayName)
             }
         }
+        .focusEffectDisabled()
     }
 
     @ViewBuilder
@@ -480,6 +482,7 @@ struct ModeConfigFormView: View {
                     Button("Refresh Models") {
                         Task { await aiService.fetchOpenRouterModels() }
                     }
+                    .focusEffectDisabled()
                     .help("Refresh models")
                 }
             }
@@ -540,6 +543,7 @@ struct ModeConfigFormView: View {
                 openPromptEditor(.add)
             }
         }
+        .focusEffectDisabled()
     }
 
     private var contextAwarenessRow: some View {
@@ -660,6 +664,7 @@ struct ModeConfigFormView: View {
                             draft.customCommand = template.command
                         }
                     }
+                    .focusEffectDisabled()
                 } label: {
                     Label("Template", systemImage: "doc.on.doc")
                 }

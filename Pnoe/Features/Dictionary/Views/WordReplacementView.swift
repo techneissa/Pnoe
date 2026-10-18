@@ -103,6 +103,7 @@ struct WordReplacementView: View {
                 } label: {
                     Image(systemName: "info.circle")
                 }
+                .focusEffectDisabled()
                 .buttonStyle(.borderless)
                 .help("Word replacement examples")
                 .popover(isPresented: $showInfoPopover) {
@@ -161,6 +162,7 @@ struct WordReplacementView: View {
                         .buttonStyle(.plain)
                         .help("Sort by replacement")
                     }
+                    .focusEffectDisabled()
                     .padding(.horizontal, 4)
                     .padding(.vertical, 8)
 
@@ -404,6 +406,7 @@ struct ReplacementRow: View {
                     .buttonStyle(.borderless)
                     .help("Remove replacement")
                 }
+                .focusEffectDisabled()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

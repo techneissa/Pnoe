@@ -137,6 +137,7 @@ struct TranscriptionModelDownloadCard: View {
                     .fill(isDownloading ? AppTheme.Action.destructiveFill : AppTheme.Action.primaryFill)
             )
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
     }
 

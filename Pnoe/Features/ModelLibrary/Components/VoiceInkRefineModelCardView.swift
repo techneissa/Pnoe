@@ -151,6 +151,7 @@ struct VoiceInkRefineModelCardView: View {
                         Image(systemName: "ellipsis.circle")
                             .font(.system(size: 14))
                     }
+                    .focusEffectDisabled()
                     .menuStyle(.borderlessButton)
                     .menuIndicator(.hidden)
                     .frame(width: 20, height: 20)
@@ -180,6 +181,7 @@ struct VoiceInkRefineModelCardView: View {
                 }
             }
         }
+        .focusEffectDisabled()
     }
 
     private var downloadDetail: String {

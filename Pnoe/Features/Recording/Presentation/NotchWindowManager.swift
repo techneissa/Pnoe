@@ -28,6 +28,7 @@ class NotchWindowManager {
                     onCloseTapped: onCloseTapped,
                     onAssistantFollowUp: onAssistantFollowUp
                 )
+                .autocorrectionDisabled()
             )
         }
     }

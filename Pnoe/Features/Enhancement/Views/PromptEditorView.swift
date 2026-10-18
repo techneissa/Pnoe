@@ -122,6 +122,7 @@ struct PromptEditorView: View {
                     .background(AppTheme.Surface.card)
                     .clipShape(Circle())
             }
+            .focusEffectDisabled()
             .buttonStyle(.plain)
             .keyboardShortcut(.escape, modifiers: [])
             .help("Back")
@@ -168,6 +169,7 @@ struct PromptEditorView: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(.secondary)
         }
+        .focusEffectDisabled()
         .menuStyle(.borderlessButton)
         .buttonStyle(.plain)
         .help("Start with a template")

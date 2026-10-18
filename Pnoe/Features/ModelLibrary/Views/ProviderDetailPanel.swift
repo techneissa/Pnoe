@@ -148,6 +148,7 @@ struct ProviderDetailPanel: View {
             .buttonStyle(.borderless)
             .help("Remove API key")
         }
+        .focusEffectDisabled()
         .padding(12)
         .background(ProviderSurface(cornerRadius: 8))
         .alert("Remove API Key?", isPresented: $isShowingRemoveAPIKeyConfirmation) {
@@ -200,6 +201,7 @@ struct ProviderDetailPanel: View {
                     }
                     .font(.system(size: 12, weight: .medium))
                 }
+                .focusEffectDisabled()
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isVerifying)
@@ -365,6 +367,7 @@ struct ProviderDetailPanel: View {
             .controlSize(.small)
             .disabled(isRefreshingOpenRouterModels)
         }
+        .focusEffectDisabled()
         .padding(.vertical, 8)
     }
 

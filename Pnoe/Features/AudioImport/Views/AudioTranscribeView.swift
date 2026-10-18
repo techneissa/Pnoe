@@ -81,6 +81,7 @@ struct AudioTranscribeView: View {
                     }
                     .buttonStyle(.bordered)
                 }
+                .focusEffectDisabled()
                 .padding(32)
             }
             .frame(maxWidth: 480, maxHeight: 200)
@@ -240,6 +241,7 @@ struct AudioTranscribeView: View {
             .buttonStyle(.plain)
             .help("Clear all items")
         }
+        .focusEffectDisabled()
         .padding(.horizontal, 24)
         .padding(.vertical, 10)
     }
@@ -294,6 +296,7 @@ struct AudioTranscribeView: View {
                 }
             }
         }
+        .focusEffectDisabled()
         .fixedSize(horizontal: true, vertical: false)
     }
 

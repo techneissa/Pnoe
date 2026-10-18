@@ -616,6 +616,7 @@ struct DashboardContent: View {
             .fixedSize(horizontal: true, vertical: true)
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSystemInfoCopied)
         }
+        .focusEffectDisabled()
     }
 
     @ViewBuilder
@@ -891,6 +892,7 @@ private struct DashboardAccessibilityReminder: View {
                 .controlSize(.small)
                 .help("Open Accessibility settings")
         }
+        .focusEffectDisabled()
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppCardBackground(cornerRadius: 16))
@@ -931,6 +933,7 @@ private struct DashboardNoModesReminder: View {
                 .controlSize(.small)
                 .help("Open Modes settings")
         }
+        .focusEffectDisabled()
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppCardBackground(cornerRadius: 16))

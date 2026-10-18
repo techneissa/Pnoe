@@ -66,6 +66,7 @@ struct DashboardHeroCard: View {
                     )
                 }
             }
+            .focusEffectDisabled()
             .padding(.top, 8)
         }
         .padding(.horizontal, 28)

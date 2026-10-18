@@ -102,6 +102,7 @@ struct OnboardingMicrophoneScreen: View {
             )
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
     }
 
@@ -144,6 +145,7 @@ struct OnboardingMicrophoneScreen: View {
             }
             .foregroundColor(AppTheme.Text.secondary)
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .help("Refresh Microphones")
     }
