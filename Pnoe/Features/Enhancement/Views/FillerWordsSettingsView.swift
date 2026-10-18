@@ -25,6 +25,7 @@ struct FillerWordChip: View {
                 }
             }
         }
+        .focusEffectDisabled()
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(
@@ -108,6 +109,7 @@ struct FillerWordsSettingsSection: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(newWord.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
+            .focusEffectDisabled()
         }
         .padding(16)
         .frame(width: 260)

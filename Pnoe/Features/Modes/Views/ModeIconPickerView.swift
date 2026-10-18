@@ -136,6 +136,7 @@ struct ModeIconPickerView: View {
                 Button("Add") {
                     attemptAddCustomEmoji()
                 }
+                .focusEffectDisabled()
                 .buttonStyle(.borderedProminent)
                 .disabled(
                     newEmojiText.isEmpty || !newEmojiText.isValidEmoji || emojiManager.allEmojis.contains(newEmojiText))
@@ -145,6 +146,7 @@ struct ModeIconPickerView: View {
                     newEmojiText = ""
                     inputFeedbackMessage = ""
                 }
+                .focusEffectDisabled()
                 .buttonStyle(.bordered)
             }
 
@@ -236,6 +238,7 @@ private struct ModeIconButton: View {
                 .offset(x: 6, y: -6)
             }
         }
+        .focusEffectDisabled()
     }
 }
 
@@ -254,6 +257,7 @@ private struct AddEmojiButton: View {
                         .strokeBorder(Color.gray.opacity(0.25), lineWidth: 1)
                 )
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .help("Add custom emoji")
     }

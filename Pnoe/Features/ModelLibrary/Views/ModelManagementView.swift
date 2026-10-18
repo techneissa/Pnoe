@@ -227,6 +227,7 @@ struct ModelManagementView: View {
                 .buttonStyle(PlainButtonStyle())
             }
         }
+        .focusEffectDisabled()
         .padding(.bottom, 8)
     }
 
@@ -302,6 +303,7 @@ struct ModelManagementView: View {
             InfoTip("Add a custom fine-tuned whisper model to use with Pnoe. Select the downloaded .bin file.")
             .help("Read more about custom local models")
         }
+        .focusEffectDisabled()
     }
 
     private var intelMacWarningBanner: some View {
@@ -335,6 +337,7 @@ struct ModelManagementView: View {
             }
             .buttonStyle(.plain)
         }
+        .focusEffectDisabled()
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(AppTheme.Status.warningStrong.opacity(0.08))

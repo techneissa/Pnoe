@@ -466,6 +466,7 @@ struct AudioPlayerView: View {
                             .help("View details")
                     }
                 }
+                .focusEffectDisabled()
 
                 Spacer()
 

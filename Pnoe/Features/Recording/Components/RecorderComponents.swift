@@ -30,6 +30,7 @@ struct RecorderToggleButton: View {
             }
             .foregroundColor(disabled ? .white.opacity(0.3) : (isEnabled ? .white : .white.opacity(0.6)))
         }
+        .focusEffectDisabled()
         .buttonStyle(PlainButtonStyle())
         .disabled(disabled)
     }
@@ -65,6 +66,7 @@ struct RecorderRecordButton: View {
         Button(action: action) {
             buttonFace
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .disabled(isDisabled)
         .help(accessibilityLabel)
@@ -175,6 +177,7 @@ struct RecorderCloseButton: View {
             .frame(width: 21, height: 21)
             .contentShape(Circle())
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .help("Close")
     }
@@ -493,6 +496,7 @@ struct AssistantPanelView: View {
                     .background(canSendDraft ? Color.white.opacity(0.88) : Color.white.opacity(0.10))
                     .clipShape(Circle())
             }
+            .focusEffectDisabled()
             .buttonStyle(.plain)
             .disabled(!canSendDraft)
             .help("Send follow up")

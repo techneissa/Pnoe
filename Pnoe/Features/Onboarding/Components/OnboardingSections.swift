@@ -118,6 +118,7 @@ struct OnboardingBottomBar: View {
                     .frame(width: Metrics.controlButtonWidth, height: Metrics.buttonHeight)
                     .background(AppMaterialCardBackground(cornerRadius: AppTheme.Radius.control))
             }
+            .focusEffectDisabled()
             .buttonStyle(.plain)
         } else {
             AppTheme.Surface.clear
@@ -140,6 +141,7 @@ struct OnboardingBottomBar: View {
                         .fill(isPrimaryEnabled ? AppTheme.Action.primaryFill : AppTheme.Action.disabledFill)
                 )
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .disabled(!isPrimaryEnabled)
     }

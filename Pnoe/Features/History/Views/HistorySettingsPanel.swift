@@ -57,6 +57,7 @@ struct HistorySettingsPanel: View {
                                 }
                             }
                         }
+                        .focusEffectDisabled()
                     }
                 } header: {
                     sectionHeader(
@@ -83,6 +84,7 @@ struct HistorySettingsPanel: View {
                             } label: {
                                 Text(isPerformingAudioCleanup ? "Analyzing..." : "Run Cleanup Now")
                             }
+                            .focusEffectDisabled()
                             .disabled(isPerformingAudioCleanup)
                         }
                     } header: {

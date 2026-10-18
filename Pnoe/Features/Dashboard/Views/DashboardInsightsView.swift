@@ -70,6 +70,7 @@ struct DashboardInsightsView: View {
                 selection: $selectedPeriod
             )
         }
+        .focusEffectDisabled()
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

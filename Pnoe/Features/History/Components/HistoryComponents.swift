@@ -129,6 +129,7 @@ struct HistoryTranscriptionRow: View {
                 )
             }
         }
+        .focusEffectDisabled()
         .frame(height: 28)
         .padding(.horizontal, HistoryLayout.rowHorizontalPadding)
         .padding(.vertical, HistoryLayout.rowVerticalPadding)
@@ -219,6 +220,7 @@ struct HistoryIconButton: View {
             .frame(width: 34, height: HistoryLayout.buttonHeight)
             .background(QuickPanelButtonBackground(isSelected: isSelected))
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .help(help)
         .accessibilityLabel(help)
@@ -275,6 +277,7 @@ struct HistoryCommandButton: View {
             .fixedSize(horizontal: true, vertical: false)
             .background(QuickPanelButtonBackground())
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
     }
 }

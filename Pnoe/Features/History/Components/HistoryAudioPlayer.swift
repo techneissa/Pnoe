@@ -64,6 +64,7 @@ struct HistoryAudioPlayer: View {
             .accessibilityLabel("Playback speed")
             .accessibilityValue(Text(playbackRateLabel))
         }
+        .focusEffectDisabled()
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(height: HistoryLayout.playerHeight)

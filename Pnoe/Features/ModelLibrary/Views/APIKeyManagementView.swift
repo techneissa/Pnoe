@@ -104,6 +104,7 @@ struct APIKeyManagementView: View {
                                 Label("Refresh", systemImage: "arrow.clockwise")
                             }
                         }
+                        .focusEffectDisabled()
                     } else {
                         HStack {
                             Picker(
@@ -128,6 +129,7 @@ struct APIKeyManagementView: View {
                                 Label("Refresh", systemImage: "arrow.clockwise")
                             }
                         }
+                        .focusEffectDisabled()
                     }
 
                 } else if !aiService.availableModels.isEmpty && aiService.selectedProvider != .ollama {
@@ -155,6 +157,7 @@ struct APIKeyManagementView: View {
                                 checkOllamaConnection()
                                 isEditingURL = false
                             }
+                            .focusEffectDisabled()
                         }
                     } else {
                         HStack {
@@ -170,6 +173,7 @@ struct APIKeyManagementView: View {
                             }
                             .help("Reset to default")
                         }
+                        .focusEffectDisabled()
                     }
 
                     if !ollamaModels.isEmpty {
@@ -200,6 +204,7 @@ struct APIKeyManagementView: View {
                                     }
                                 }
                             }
+                            .focusEffectDisabled()
                         }
 
                         TextEditor(text: $localCLICommandTemplate)
@@ -263,6 +268,7 @@ struct APIKeyManagementView: View {
                                 aiService.clearAPIKey()
                             }
                         }
+                        .focusEffectDisabled()
                     } else {
                         SecureField("API Key", text: $apiKey)
                             .textFieldStyle(.roundedBorder)
@@ -310,6 +316,7 @@ struct APIKeyManagementView: View {
                             }
                             .disabled(apiKey.isEmpty)
                         }
+                        .focusEffectDisabled()
                     }
                 }
             }

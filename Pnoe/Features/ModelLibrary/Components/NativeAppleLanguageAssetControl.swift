@@ -59,6 +59,7 @@ struct NativeAppleLanguageAssetControl: View {
                 Image(systemName: "arrow.down.circle.fill")
                     .font(.system(size: 14, weight: .semibold))
             }
+            .focusEffectDisabled()
             .buttonStyle(.plain)
             .controlSize(.small)
             .frame(width: 28, height: 24)
@@ -81,6 +82,7 @@ struct NativeAppleLanguageAssetControl: View {
                 Image(systemName: "exclamationmark.circle")
                     .font(.system(size: 14, weight: .semibold))
             }
+            .focusEffectDisabled()
             .buttonStyle(.plain)
             .controlSize(.small)
             .frame(width: 28, height: 24)
@@ -89,6 +91,7 @@ struct NativeAppleLanguageAssetControl: View {
                 Image(systemName: "arrow.clockwise.circle.fill")
                     .font(.system(size: 14, weight: .semibold))
             }
+            .focusEffectDisabled()
             .buttonStyle(.plain)
             .controlSize(.small)
             .frame(width: 28, height: 24)

@@ -77,6 +77,7 @@ struct CircularCheckboxStyle: ToggleStyle {
                 .foregroundColor(configuration.isOn ? AppTheme.Selection.foreground : .secondary)
                 .font(.system(size: 18))
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
     }
 }

@@ -192,6 +192,7 @@ struct LanguageSelectionView: View {
                                 .font(.system(size: 10))
                         }
                     }
+                    .focusEffectDisabled()
 
                     if isNativeAppleModelSelected() {
                         nativeAppleAssetControl
@@ -205,6 +206,7 @@ struct LanguageSelectionView: View {
                     Text("Language: English (only)")
                         .foregroundColor(.secondary)
                 }
+                .focusEffectDisabled()
                 .disabled(true)
                 .onAppear {
                     // Ensure English is set for English-only models

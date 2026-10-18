@@ -20,6 +20,7 @@ struct CopyIconButton: View {
                         }
                 )
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .help(accessibilityLabel)
         .accessibilityLabel(accessibilityLabel)

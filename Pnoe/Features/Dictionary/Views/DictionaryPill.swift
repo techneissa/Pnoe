@@ -43,6 +43,7 @@ struct DictionaryPill<Label: View>: View {
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(AppTheme.Text.primary)
             }
+            .focusEffectDisabled()
             .buttonStyle(.borderless)
             .help(removeHelp)
 

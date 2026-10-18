@@ -106,6 +106,7 @@ struct LocalEnhancementServiceManagementView: View {
                             Text(ollamaActionTitle)
                         }
                     }
+                    .focusEffectDisabled()
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(aiService.isOllamaRefreshing)
@@ -163,6 +164,7 @@ struct LocalEnhancementServiceManagementView: View {
                         Label("Template", systemImage: "doc.on.doc")
                             .font(.system(size: 12, weight: .medium))
                     }
+                    .focusEffectDisabled()
                     .menuStyle(.button)
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -316,6 +318,7 @@ private struct LocalProviderDisclosureRow<Content: View>: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 11)
             }
+            .focusEffectDisabled()
             .buttonStyle(.plain)
 
             if isExpanded {

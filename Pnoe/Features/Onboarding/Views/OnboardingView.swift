@@ -197,6 +197,7 @@ struct OnboardingView: View {
                         hasCompletedOnboardingV2 = true
                     }
                 }
+                .focusEffectDisabled()
                 .buttonStyle(.borderless)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(AppTheme.Action.secondaryForeground)

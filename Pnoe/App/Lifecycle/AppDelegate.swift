@@ -5,7 +5,12 @@ import UniformTypeIdentifiers
 class AppDelegate: NSObject, NSApplicationDelegate {
     weak var menuBarManager: MenuBarManager?
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        TextFieldPolicy.installLaunchDefaults()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        TextFieldPolicy.installObserver()
         menuBarManager?.applyActivationPolicy()
     }
 

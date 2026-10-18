@@ -99,6 +99,7 @@ struct AIProviderVerificationCard: View {
                 }
             }
         }
+        .focusEffectDisabled()
     }
 
     private var apiKeyField: some View {
@@ -125,6 +126,7 @@ struct AIProviderVerificationCard: View {
                     .buttonStyle(.plain)
                 }
             }
+            .focusEffectDisabled()
 
             SecureField(apiKeyPlaceholder, text: $apiKey)
                 .textFieldStyle(.plain)
@@ -169,6 +171,7 @@ struct AIProviderVerificationCard: View {
             .buttonStyle(.plain)
             .disabled(!canVerify)
         }
+        .focusEffectDisabled()
         .padding(.top, 2)
     }
 
@@ -380,6 +383,7 @@ private struct ProviderChoiceButton: View {
             .background(ProviderSurface(isActive: isSelected, cornerRadius: 10))
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .help(provider.rawValue)
     }

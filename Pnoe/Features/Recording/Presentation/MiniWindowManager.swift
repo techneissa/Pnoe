@@ -28,6 +28,7 @@ class MiniWindowManager {
                     onCloseTapped: onCloseTapped,
                     onAssistantFollowUp: onAssistantFollowUp
                 )
+                .autocorrectionDisabled()
             )
         }
     }

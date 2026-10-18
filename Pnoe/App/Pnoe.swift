@@ -354,6 +354,7 @@ struct PnoeApp: App {
                             })
                 }
             }
+            .autocorrectionDisabled()
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: AppWindowLayout.width, height: AppWindowLayout.minimumHeight)
@@ -375,7 +376,7 @@ struct PnoeApp: App {
                 .environmentObject(aiService)
                 .environmentObject(enhancementService)
         } label: {
-            Image(systemName: "waveform")
+            Image("MenuBarGlyph")
                 .background(MainWindowRequestBridge(menuBarManager: menuBarManager))
         }
         .menuBarExtraStyle(.menu)
@@ -385,6 +386,7 @@ struct PnoeApp: App {
                 Button("Toggle Menu Bar Only") {
                     menuBarManager.isMenuBarOnly.toggle()
                 }
+                .focusEffectDisabled()
             }
         #endif
     }

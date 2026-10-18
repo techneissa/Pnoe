@@ -51,6 +51,7 @@ struct HistoryDetailActionBar: View {
             Spacer(minLength: 8)
             textActionButton
         }
+        .focusEffectDisabled()
         .padding(.horizontal, 10)
         .frame(height: HistoryLayout.actionBarHeight)
     }

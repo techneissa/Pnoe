@@ -269,6 +269,7 @@ private struct ProviderListRow: View {
             .contentShape(Rectangle())
             .padding(14)
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .background(ProviderSurface(isActive: isSelected, cornerRadius: 10))
     }

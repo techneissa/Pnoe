@@ -44,6 +44,7 @@ final class DictionaryQuickAddManager {
             }
         )
         .modelContainer(modelContainer)
+        .autocorrectionDisabled()
 
         let controller = NSHostingController(rootView: AnyView(view))
         newPanel.contentView = controller.view
@@ -190,6 +191,7 @@ struct DictionaryQuickAddView: View {
                 action: onDismiss
             )
         }
+        .focusEffectDisabled()
         .padding(.horizontal, 14)
         .padding(.vertical, 7)
     }
@@ -280,6 +282,7 @@ struct DictionaryQuickAddView: View {
             .disabled(!canSubmitCurrentInput)
             .help("Add Now")
         }
+        .focusEffectDisabled()
         .padding(.horizontal, 10)
         .frame(height: 44)
     }

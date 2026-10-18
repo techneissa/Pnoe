@@ -22,6 +22,7 @@ struct SaveIconButton: View {
                 .background(AppTheme.Surface.control.opacity(0.9))
                 .clipShape(Circle())
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .help("Save to file")
     }

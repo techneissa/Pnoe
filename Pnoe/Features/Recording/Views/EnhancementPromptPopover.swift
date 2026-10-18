@@ -115,6 +115,7 @@ struct EnhancementPromptRow: View {
             .padding(.horizontal, 8)
             .contentShape(Rectangle())
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .background(isSelected ? AppTheme.Selection.fill : Color.clear)
         .cornerRadius(4)

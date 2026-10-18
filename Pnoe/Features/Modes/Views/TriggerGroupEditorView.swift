@@ -73,6 +73,7 @@ struct TriggerGroupEditorView: View {
                             .foregroundStyle(.secondary)
                             .font(.system(size: 12))
                     }
+                    .focusEffectDisabled()
                     .buttonStyle(.plain)
                 }
             }
@@ -114,6 +115,7 @@ struct TriggerGroupEditorView: View {
                     }
                     .buttonStyle(.plain)
                 }
+                .focusEffectDisabled()
             }
         }
     }
@@ -133,6 +135,7 @@ struct TriggerGroupEditorView: View {
             .contentShape(Rectangle())
             .background(RoundedRectangle(cornerRadius: 8).fill(AppTheme.Surface.card))
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
     }
 

@@ -39,6 +39,7 @@ struct InsightPeriodPicker: View {
                     .buttonStyle(DashboardInsightButtonStyle(isSelected: period == selection, isQuiet: true))
                     .accessibilityAddTraits(period == selection ? [.isSelected] : [])
                 }
+                .focusEffectDisabled()
             }
             .fixedSize(horizontal: true, vertical: false)
 
@@ -77,6 +78,7 @@ struct InsightPeriodPicker: View {
             .frame(height: 34)
             .background(AppTheme.Insights.selection, in: Capsule())
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .fixedSize()
         .help(Text(title))
@@ -159,6 +161,7 @@ struct ModelPreviewCardHeader: View {
             .fixedSize(horizontal: true, vertical: true)
             .help(viewMoreHelp)
         }
+        .focusEffectDisabled()
     }
 }
 

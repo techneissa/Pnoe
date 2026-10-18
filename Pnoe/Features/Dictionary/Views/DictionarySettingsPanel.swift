@@ -70,6 +70,7 @@ struct DictionarySettingsPanel: View {
                         Button("Review Now") {
                             onReviewNow()
                         }
+                        .focusEffectDisabled()
                         .disabled(pendingCorrectionCount == 0)
                     }
                 } header: {
@@ -82,12 +83,14 @@ struct DictionarySettingsPanel: View {
                             exportDictionary()
                         }
                     }
+                    .focusEffectDisabled()
 
                     LabeledContent("Import Dictionary") {
                         Button("Import") {
                             chooseDictionaryFile()
                         }
                     }
+                    .focusEffectDisabled()
                 } header: {
                     Text("Dictionary Data")
                 }

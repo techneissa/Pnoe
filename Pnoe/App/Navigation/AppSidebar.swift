@@ -158,6 +158,7 @@ private struct SidebarItemButton: View {
             .background(rowBackground)
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
+        .focusEffectDisabled()
         .buttonStyle(.plain)
         .help(viewType.title)
         .accessibilityLabel(viewType.title)
