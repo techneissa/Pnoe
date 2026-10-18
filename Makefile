@@ -1,18 +1,18 @@
 # Define a directory for dependencies in the user's home folder
-DEPS_DIR := $(HOME)/VoiceInk-Dependencies
+DEPS_DIR := $(HOME)/Pnoe-Dependencies
 WHISPER_CPP_DIR := $(DEPS_DIR)/whisper.cpp
 FRAMEWORK_PATH := $(WHISPER_CPP_DIR)/build-apple/whisper.xcframework
 LOCAL_DERIVED_DATA := $(CURDIR)/.local-build
 LOCAL_CODESIGN_IDENTITY ?=
-RUN_APP_NAME ?= VoiceInk
+RUN_APP_NAME ?= Pnoe
 
-.PHONY: all clean whisper setup build local check healthcheck help dev run release release-setup
+.PHONY: all clean whisper setup build local check healthcheck help dev run
 
 # Default target
 all: check build
 
 # Development workflow
-dev: RUN_APP_NAME = VoiceInk Dev
+dev: RUN_APP_NAME = Pnoe Dev
 dev: build run
 
 # Prerequisites
@@ -45,14 +45,14 @@ setup: whisper
 	@echo "Please ensure your Xcode project references the framework from this new location."
 
 build: setup
-	xcodebuild -project VoiceInk.xcodeproj -scheme VoiceInk -configuration Debug CODE_SIGN_IDENTITY="" \
+	xcodebuild -project Pnoe.xcodeproj -scheme Pnoe -configuration Debug CODE_SIGN_IDENTITY="" \
 		-skipPackagePluginValidation \
 		-skipMacroValidation \
 		build
 
 # Build locally with stable Apple Development signing when available.
 local: check setup
-	@echo "Building VoiceInk for local use (no Apple Developer certificate required)..."
+	@echo "Building Pnoe for local use (no Apple Developer certificate required)..."
 	@rm -rf "$(LOCAL_DERIVED_DATA)"
 	@SIGNING_IDENTITY="$(LOCAL_CODESIGN_IDENTITY)"; \
 	if [ -z "$$SIGNING_IDENTITY" ]; then \
@@ -72,33 +72,33 @@ local: check setup
 		SIGNING_REQUIRED=NO; \
 		echo "Using ad-hoc signing (permissions may need approval after rebuilds)"; \
 	fi; \
-	xcodebuild -project VoiceInk.xcodeproj -scheme VoiceInk -configuration Release \
+	xcodebuild -project Pnoe.xcodeproj -scheme Pnoe -configuration Release \
 		-derivedDataPath "$(LOCAL_DERIVED_DATA)" \
 		-xcconfig LocalBuild.xcconfig \
 		CODE_SIGN_IDENTITY="$$SIGNING_IDENTITY" \
 		CODE_SIGNING_REQUIRED="$$SIGNING_REQUIRED" \
 		CODE_SIGNING_ALLOWED=YES \
 		DEVELOPMENT_TEAM="" \
-		CODE_SIGN_ENTITLEMENTS="$(CURDIR)/VoiceInk/VoiceInk.local.entitlements" \
+		CODE_SIGN_ENTITLEMENTS="$(CURDIR)/Pnoe/Pnoe.local.entitlements" \
 		SWIFT_ACTIVE_COMPILATION_CONDITIONS='$$(inherited) LOCAL_BUILD' \
 		-skipPackagePluginValidation \
 		-skipMacroValidation \
 		build
-	@APP_PATH="$(LOCAL_DERIVED_DATA)/Build/Products/Release/VoiceInk.app" && \
+	@APP_PATH="$(LOCAL_DERIVED_DATA)/Build/Products/Release/Pnoe.app" && \
 	if [ -d "$$APP_PATH" ]; then \
-		echo "Copying VoiceInk.app to ~/Downloads..."; \
-		rm -rf "$$HOME/Downloads/VoiceInk.app"; \
-		ditto "$$APP_PATH" "$$HOME/Downloads/VoiceInk.app"; \
-		xattr -cr "$$HOME/Downloads/VoiceInk.app"; \
+		echo "Copying Pnoe.app to ~/Downloads..."; \
+		rm -rf "$$HOME/Downloads/Pnoe.app"; \
+		ditto "$$APP_PATH" "$$HOME/Downloads/Pnoe.app"; \
+		xattr -cr "$$HOME/Downloads/Pnoe.app"; \
 		echo ""; \
-		echo "Build complete! App saved to: ~/Downloads/VoiceInk.app"; \
-		echo "Run with: open ~/Downloads/VoiceInk.app"; \
+		echo "Build complete! App saved to: ~/Downloads/Pnoe.app"; \
+		echo "Run with: open ~/Downloads/Pnoe.app"; \
 		echo ""; \
 		echo "Limitations of local builds:"; \
 		echo "  - No iCloud dictionary sync"; \
 		echo "  - No automatic updates (pull new code and rebuild to update)"; \
 	else \
-		echo "Error: Could not find built VoiceInk.app at $$APP_PATH"; \
+		echo "Error: Could not find built Pnoe.app at $$APP_PATH"; \
 		exit 1; \
 	fi
 
@@ -119,18 +119,6 @@ run:
 		fi; \
 	fi
 
-# Build a signed, notarized DMG and matching local Sparkle Appcast.
-release: whisper
-	@if [ -n "$(NOTES)" ]; then \
-		./scripts/release.sh --notes "$(NOTES)" $(RELEASE_ARGS); \
-	else \
-		./scripts/release.sh $(RELEASE_ARGS); \
-	fi
-
-# Store Apple's notarization credentials securely in Keychain.
-release-setup:
-	@./scripts/setup-release-notarization.sh
-
 # Cleanup
 clean:
 	@echo "Cleaning build artifacts..."
@@ -142,14 +130,12 @@ help:
 	@echo "Available targets:"
 	@echo "  check/healthcheck  Check if required CLI tools are installed"
 	@echo "  whisper            Clone and build whisper.cpp XCFramework"
-	@echo "  setup              Copy whisper XCFramework to VoiceInk project"
-	@echo "  build              Build the VoiceInk Xcode project"
+	@echo "  setup              Copy whisper XCFramework to Pnoe project"
+	@echo "  build              Build the Pnoe Xcode project"
 	@echo "  local              Build locally with stable signing when available"
 	@echo "    LOCAL_CODESIGN_IDENTITY=<SHA or name> overrides automatic Apple Development detection"
-	@echo "  run                Launch the built VoiceInk app"
+	@echo "  run                Launch the built Pnoe app"
 	@echo "  dev                Build and run the app (for development)"
-	@echo "  release            Build DMG and Appcast using release-notes/<version>.html"
-	@echo "  release-setup      Store notarization credentials in Keychain"
 	@echo "  all                Run full build process (default)"
 	@echo "  clean              Remove build artifacts"
 	@echo "  help               Show this help message"
