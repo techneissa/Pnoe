@@ -375,7 +375,7 @@ struct PnoeApp: App {
                 .environmentObject(aiService)
                 .environmentObject(enhancementService)
         } label: {
-            Image(systemName: "waveform")
+            Image("MenuBarGlyph")
                 .background(MainWindowRequestBridge(menuBarManager: menuBarManager))
         }
         .menuBarExtraStyle(.menu)
