@@ -157,6 +157,7 @@ enum AppDefaults {
             RecorderDisplaySettingsKeys.showLiveTranscript: true,
             RecorderDisplaySettingsKeys.liveTranscriptSize: LiveTranscriptSize.medium.rawValue,
             RecorderDisplaySettingsKeys.theme: RecorderTheme.dark.rawValue,
+            RecorderDisplaySettingsKeys.levelDisplay: RecorderLevelDisplay.bars.rawValue,
             RecorderDisplaySettingsKeys.display: RecorderDisplaySelection.active.storedValue,
             RecorderDisplaySettingsKeys.miniPlacement: MiniRecorderPlacement.bottom.rawValue,
             RecorderDisplaySettingsKeys.visibility: RecorderVisibility.whileRecording.rawValue,
