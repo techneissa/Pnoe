@@ -209,6 +209,36 @@ extension Motion {
     }
 }
 
+// MARK: - Hold
+
+/// The check mark of a copy or save: on for `Motion.copiedHold`, then back. A new `hold` restarts the
+/// wait (cancelling the earlier one), so a second copy keeps its check for a full hold, and `cancel`
+/// (a view going away) stops the pending reset.
+@MainActor
+final class MotionHold: ObservableObject {
+    @Published private(set) var isHeld = false
+    private var reset: Task<Void, Never>?
+
+    func hold(
+        for duration: TimeInterval = Motion.copiedHold, reduceMotion: Bool = Motion.systemReducesMotion
+    ) {
+        reset?.cancel()
+        Motion.animate(.copy, reduceMotion: reduceMotion) { isHeld = true }
+        reset = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+            guard !Task.isCancelled, let self else { return }
+            Motion.animate(.copy, reduceMotion: reduceMotion) { self.isHeld = false }
+            self.reset = nil
+        }
+    }
+
+    func cancel() {
+        reset?.cancel()
+        reset = nil
+        isHeld = false
+    }
+}
+
 // MARK: - Transitions
 
 extension AnyTransition {

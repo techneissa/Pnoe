@@ -36,7 +36,7 @@ struct DashboardContent: View {
     @State private var selectedInsightPeriod: DashboardInsightPeriod = .allTime
     @State private var isAccessibilityEnabled = AXIsProcessTrusted()
     @ObservedObject private var modeManager = ModeManager.shared
-    @State private var isSystemInfoCopied = false
+    @StateObject private var systemInfoHold = MotionHold()
     @State private var isEditingDisplayName = false
     @State private var displayNameDraft = ""
     @AppStorage("dashboardDisplayName") private var dashboardDisplayName: String = ""
@@ -603,6 +603,8 @@ struct DashboardContent: View {
         )
     }
 
+    private var isSystemInfoCopied: Bool { systemInfoHold.isHeld }
+
     private var footerActionsView: some View {
         HStack(alignment: .center, spacing: 12) {
             Button(action: copySystemInfo) {
@@ -615,6 +617,7 @@ struct DashboardContent: View {
             .buttonStyle(.plain)
             .fixedSize(horizontal: true, vertical: true)
             .motion(.copy, value: isSystemInfoCopied)
+            .onDisappear { systemInfoHold.cancel() }
         }
         .focusEffectDisabled()
     }
@@ -637,15 +640,7 @@ struct DashboardContent: View {
     private func copySystemInfo() {
         SystemInfoService.shared.copySystemInfoToClipboard()
 
-        Motion.animate(.copy) {
-            isSystemInfoCopied = true
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + Motion.copiedHold) {
-            Motion.animate(.copy) {
-                isSystemInfoCopied = false
-            }
-        }
+        systemInfoHold.hold()
     }
 
     private var displayNameBinding: Binding<String> {

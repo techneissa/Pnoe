@@ -4,7 +4,9 @@ import UniformTypeIdentifiers
 struct SaveIconButton: View {
     let textToSave: String
     let suggestedBaseName: String
-    @State private var saved = false
+    @StateObject private var hold = MotionHold()
+
+    private var saved: Bool { hold.isHeld }
 
     var body: some View {
         Menu {
@@ -28,6 +30,7 @@ struct SaveIconButton: View {
         .buttonStyle(.plain)
         .motionHover(cornerRadius: 14)
         .help("Save to file")
+        .onDisappear { hold.cancel() }
     }
 
     private func saveFile(as contentType: UTType, extension fileExtension: String) {
@@ -41,10 +44,7 @@ struct SaveIconButton: View {
             do {
                 let content = fileExtension == "md" ? formatAsMarkdown(textToSave) : textToSave
                 try content.write(to: url, atomically: true, encoding: .utf8)
-                Motion.animate(.copy) { saved = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + Motion.copiedHold) {
-                    Motion.animate(.copy) { saved = false }
-                }
+                hold.hold()
             } catch {
                 print("Failed to save file: \(error.localizedDescription)")
             }

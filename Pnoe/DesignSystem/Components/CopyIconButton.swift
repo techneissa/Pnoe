@@ -3,7 +3,9 @@ import SwiftUI
 struct CopyIconButton: View {
     let textToCopy: String
     var accessibilityLabel: LocalizedStringResource = "Copy"
-    @State private var copied = false
+    @StateObject private var hold = MotionHold()
+
+    private var copied: Bool { hold.isHeld }
 
     var body: some View {
         Button(action: copy) {
@@ -20,14 +22,12 @@ struct CopyIconButton: View {
         .motionHover(cornerRadius: AppTheme.Radius.control)
         .help(accessibilityLabel)
         .accessibilityLabel(accessibilityLabel)
+        .onDisappear { hold.cancel() }
     }
 
     private func copy() {
         let _ = ClipboardManager.copyToClipboard(textToCopy)
-        Motion.animate(.copy) { copied = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + Motion.copiedHold) {
-            Motion.animate(.copy) { copied = false }
-        }
+        hold.hold()
     }
 }
 

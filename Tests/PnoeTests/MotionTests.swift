@@ -103,6 +103,34 @@ final class MotionTests: XCTestCase {
         XCTAssertEqual(Motion.toggleSymbol(isOn: false, on: "eye.slash", off: "eye"), "eye")
     }
 
+    // MARK: - Hold
+
+    @MainActor
+    func testASecondCopyKeepsItsCheckForAFullHold() async throws {
+        let hold = MotionHold()
+        hold.hold(for: 0.3, reduceMotion: true)
+        XCTAssertTrue(hold.isHeld)
+        try await Task.sleep(nanoseconds: 200_000_000)
+        hold.hold(for: 0.3, reduceMotion: true)
+        // 0.4 s after the first copy: the first hold would have ended at 0.3 s.
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertTrue(hold.isHeld, "the first copy's timer must not clear the second copy's check")
+        try await Task.sleep(nanoseconds: 250_000_000)
+        XCTAssertFalse(hold.isHeld)
+    }
+
+    @MainActor
+    func testLeavingTheViewCancelsThePendingReset() async throws {
+        let hold = MotionHold()
+        hold.hold(for: 0.1, reduceMotion: true)
+        hold.cancel()
+        XCTAssertFalse(hold.isHeld)
+        hold.hold(for: 0.1, reduceMotion: true)
+        hold.cancel()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertFalse(hold.isHeld)
+    }
+
     // MARK: - Hover
 
     func testHoverLightsOnlyAnEnabledUnselectedControlUnderThePointer() {

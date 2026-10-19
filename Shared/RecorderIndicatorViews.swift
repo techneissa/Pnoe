@@ -429,7 +429,7 @@ struct RecorderRecordButton: View {
                 .frame(width: 8, height: 8)
                 .motionJobSymbol(visualState == .recording ? .running : .idle)
         case .processing:
-            ProcessingIndicator(color: colors.mark)
+            ProcessingIndicator(color: colors.mark, isActive: visualState == .processing)
         }
     }
 
@@ -482,7 +482,7 @@ struct RecorderCloseButton: View {
 /// The ring that turns while a recording is processed. It turns only while `isActive`.
 struct ProcessingIndicator: View {
     let color: Color
-    var isActive = true
+    let isActive: Bool
 
     var body: some View {
         Circle()
@@ -521,6 +521,7 @@ struct ProgressAnimation: View {
             }
         }
         .onAppear { startAnimation() }
+        .onChange(of: reduceMotion) { _, _ in startAnimation() }
         .onDisappear {
             timer?.invalidate()
             timer = nil

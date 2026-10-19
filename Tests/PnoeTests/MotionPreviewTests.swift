@@ -139,11 +139,12 @@ final class MotionPreviewTests: XCTestCase {
                 ) {
                     Text("Options").foregroundStyle(.secondary)
                 }
+                // One row lit, the other not: the override is on the first row only.
+                .environment(\.motionHoverOverride, hovered)
                 Divider()
                 ExpandableSettingsRow(title: "Advanced", isExpanded: .constant(false)) { EmptyView() }
             }
             .padding(16)
-            .environment(\.motionHoverOverride, hovered)
         }
     }
 
