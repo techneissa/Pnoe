@@ -28,6 +28,7 @@ Each feature taken from another project gets one line in this format:
 Pnoe's formatter uses models that are already on the Mac and downloads nothing unless the user clicks Download.
 
 - [Gemma 4 E2B](https://huggingface.co/google/gemma-4-E2B-it) by Google DeepMind, as the [Unsloth GGUF build](https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF) (`gemma-4-E2B-it-Q4_K_M.gguf`), licensed Apache-2.0 as tagged on both model cards. It is the optional download for a Mac with no model installed. Pnoe does not bundle it; it fetches the file from Hugging Face from a pinned revision after the user clicks, and checks its size and SHA-256.
+- [llama.cpp](https://github.com/ggml-org/llama.cpp) by ggml-org, MIT: the Built-in engine runs GGUF models with its C API and Metal backend, from the official release asset `llama-b11734-xcframework.zip`, pinned by build and checksum. It runs only in the `PnoeFormatterXPC` service, never in the app. The Swift wrapper follows the pattern of llama.cpp's `examples/llama.swiftui`, and Gemma 4's turn format in `Packages/PnoeLlama` is written from the chat template that ships with llama.cpp (`models/templates/google-gemma-4-31B-it.jinja`).
 - Models found on the Mac (Ollama, the Hugging Face cache, LM Studio) belong to their authors and keep their own licences. Pnoe lists and reads them and never copies, moves or changes them.
 
 ## Not part of Pnoe

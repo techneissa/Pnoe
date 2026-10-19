@@ -172,7 +172,8 @@ final class BuiltInModelsModel: ObservableObject {
     private var storeObserver: AnyCancellable?
     private var lastState: FormatterModelDownloadState
 
-    init(store: FormatterModelStore = FormatterModelStore()) {
+    init(store: FormatterModelStore? = nil) {
+        let store = store ?? FormatterModelStore()
         self.store = store
         lastState = store.state
         storeObserver = store.objectWillChange.sink { [weak self] _ in

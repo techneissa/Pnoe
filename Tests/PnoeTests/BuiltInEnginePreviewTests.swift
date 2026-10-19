@@ -27,8 +27,17 @@ final class BuiltInEnginePreviewTests: XCTestCase {
         let rows: [BuiltInModelRow]
         @State var selection: String?
         let download: BuiltInDownloadRowState?
+        var listsEveryChoice = false
 
-        var body: some View {
+        @ViewBuilder var body: some View {
+            if listsEveryChoice {
+                form.pickerStyle(.inline)
+            } else {
+                form
+            }
+        }
+
+        private var form: some View {
             Form {
                 Section {
                     Toggle("AI Enhancement", isOn: .constant(true))
@@ -86,11 +95,14 @@ final class BuiltInEnginePreviewTests: XCTestCase {
         let view = Harness(providers: providers, rows: Self.installed, selection: "a", download: nil)
         try render(view, size: NSSize(width: 560, height: 330), to: "builtin-models")
         try render(view, size: NSSize(width: 560, height: 330), to: "builtin-models-dark", dark: true)
+        // The same rows with every choice listed: the providers and the four sample models.
+        let open = Harness(providers: providers, rows: Self.installed, selection: "a", download: nil, listsEveryChoice: true)
+        try render(open, size: NSSize(width: 560, height: 600), to: "builtin-choices")
     }
 
     func testRenderNothingInstalledWithTheDownloadRow() throws {
         let view = Harness(providers: providers, rows: [], selection: nil, download: gemma(.notInstalled))
-        try render(view, size: NSSize(width: 560, height: 330), to: "builtin-download-offer")
+        try render(view, size: NSSize(width: 560, height: 370), to: "builtin-download-offer")
     }
 
     func testRenderDownloadStates() throws {
@@ -100,7 +112,7 @@ final class BuiltInEnginePreviewTests: XCTestCase {
             ("builtin-failed", .failed("Not enough free disk space. The download needs 4 GB free.")),
         ] {
             let view = Harness(providers: providers, rows: Self.installed.prefix(1).map { $0 }, selection: "a", download: gemma(state))
-            try render(view, size: NSSize(width: 560, height: 350), to: name)
+            try render(view, size: NSSize(width: 560, height: 400), to: name)
         }
     }
 }
