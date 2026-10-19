@@ -616,8 +616,9 @@ struct RecorderStatusDisplay: View {
 
 // MARK: - Side Slots
 
-/// The recording time, `m:ss`, counting while recording and frozen at the length of the take
-/// while the recording is processed.
+/// The recording time, `m:ss`: it ticks while recording, and is plain text otherwise (frozen at
+/// the length of the take while the recording is processed, 0:00 when idle), so an idle bar
+/// that stays on screen schedules nothing.
 struct RecorderTimerLabel: View {
     @Environment(\.recorderPalette) private var palette
     let recordingState: RecordingState
@@ -625,15 +626,23 @@ struct RecorderTimerLabel: View {
     var width: CGFloat = RecorderSlotContent.timer.width
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.5)) { context in
-            Text(RecordingClock.format(clockProvider().elapsed(at: context.date)))
-                .font(.system(size: 12, weight: .medium).monospacedDigit())
-                .foregroundColor(palette.ink.opacity(recordingState == .recording ? 0.9 : 0.55))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .frame(width: width)
+        Group {
+            if recordingState == .recording {
+                TimelineView(.periodic(from: .now, by: 0.5)) { _ in text }
+            } else {
+                text
+            }
         }
         .accessibilityLabel(Text("Recording time"))
+    }
+
+    private var text: some View {
+        Text(RecordingClock.format(clockProvider().elapsed(at: RecordingClock.now)))
+            .font(.system(size: 12, weight: .medium).monospacedDigit())
+            .foregroundColor(palette.ink.opacity(recordingState == .recording ? 0.9 : 0.55))
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .frame(width: width)
     }
 }
 
@@ -710,12 +719,20 @@ struct RecorderDotView: View {
         }
     }
 
-    private var isAnimated: Bool { recordingState == .recording || Self.showsTimer(for: recordingState) }
+    /// Only a recording or a processing dot moves; an idle dot is still, and its timeline is
+    /// paused. With Reduce Motion the processing dot is still too.
+    private var isAnimated: Bool {
+        switch recordingState {
+        case .recording: return true
+        case .transcribing, .enhancing: return !reducesMotion
+        case .idle, .starting, .busy: return false
+        }
+    }
 
     var body: some View {
         let showsTimer = Self.showsTimer(for: recordingState)
         HStack(spacing: RecorderDotMetrics.spacing) {
-            TimelineView(.animation(minimumInterval: isAnimated ? 1 / RecorderLevelMetrics.samplesPerSecond : 1)) { context in
+            TimelineView(.animation(minimumInterval: 1 / RecorderLevelMetrics.samplesPerSecond, paused: !isAnimated)) { context in
                 dot(at: context.date)
             }
             .frame(width: RecorderDotMetrics.areaSize, height: RecorderDotMetrics.areaSize)

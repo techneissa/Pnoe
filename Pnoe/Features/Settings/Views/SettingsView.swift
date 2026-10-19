@@ -324,7 +324,7 @@ struct SettingsView: View {
                         HStack(spacing: 4) {
                             Text("Left Side")
                             InfoTip(
-                                "What the recorder shows on its left and right side. The same item cannot be on both sides. The Pill has no mode button, so the mode name is the only way to see the mode there.")
+                                "What the recorder shows on its left and right side. The level meter is in the centre unless you put it on a side; then the centre stays empty. The same item cannot be on both sides. On the Notch the centre is the camera housing, so the level meter sits right beside it. The Pill has no mode button, so the mode name is the only way to see the mode there.")
                         }
                     }
                     .pickerStyle(.menu)

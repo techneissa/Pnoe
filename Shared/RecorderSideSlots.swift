@@ -39,8 +39,13 @@ enum RecorderSlotSide {
     case right
 }
 
-/// The two side slots of one style. Stored as `"left,right"` of `RecorderSlotContent` raw
-/// values, one key per style.
+/// What a bar shows at its three positions: the record button stays at the far left, then the
+/// left slot, the centre, the right slot (and, on Mini, the mode button at the far right).
+///
+/// The user picks the two side slots, stored as `"left,right"` of `RecorderSlotContent` raw
+/// values, one key per style. The centre is not a setting: it shows the level meter, unless the
+/// user put the level meter in a side slot, which leaves the centre empty (a meter shown twice
+/// would be noise).
 struct RecorderSideSlots: Equatable {
     var left: RecorderSlotContent
     var right: RecorderSlotContent
@@ -51,15 +56,18 @@ struct RecorderSideSlots: Equatable {
         self.right = (right != .none && right == left) ? .none : right
     }
 
-    /// What each style showed before the slots existed, so an existing user sees no change:
-    /// Mini and Notch show the level meter on the right and nothing on the left. The pill is
-    /// new and shows the timer and the level.
+    /// Level meter in the centre, nothing on the left, the timer on the right, on every style
+    /// with sides. The dot has no sides.
     static func defaults(for style: RecorderPanelStyle) -> RecorderSideSlots {
         switch style {
-        case .mini, .notch: return RecorderSideSlots(left: .none, right: .level)
-        case .pill: return RecorderSideSlots(left: .timer, right: .level)
+        case .mini, .notch, .pill: return RecorderSideSlots(left: .none, right: .timer)
         case .dot: return RecorderSideSlots(left: .none, right: .none)
         }
+    }
+
+    /// What the centre shows: the level meter, unless a side slot shows it.
+    var center: RecorderSlotContent {
+        left == .level || right == .level ? .none : .level
     }
 
     static func storageKey(for style: RecorderPanelStyle) -> String {
@@ -103,10 +111,6 @@ struct RecorderSideSlots: Equatable {
         }
     }
 
-    /// Width of both slots side by side, with the gap between them when both are used.
-    var contentWidth: CGFloat {
-        left.width + right.width + (left != .none && right != .none ? RecorderBarMetrics.slotSpacing : 0)
-    }
 }
 
 /// Widths of the bars, from their controls and their slots. The window code sizes the transparent
@@ -114,39 +118,51 @@ struct RecorderSideSlots: Equatable {
 enum RecorderBarMetrics {
     static let slotSpacing: CGFloat = 10
 
-    // Mini: record button (21) with 10 leading, mode button (22) with 12 trailing, and a gutter
-    // of 8 each side of the slots.
-    static let miniChrome: CGFloat = 10 + 21 + 12 + 22 + 16
+    // The bars lay their items out as: record button, left slot, centre, right slot (then the
+    // mode button on Mini). Every present slot has `slotSpacing` to its neighbour on the side
+    // facing the record button or the end of the bar, and the centre has it on both sides.
+    private static func slotsWidth(_ slots: RecorderSideSlots) -> CGFloat {
+        (slots.left != .none ? slots.left.width + slotSpacing : 0)
+            + (slots.center != .none ? slots.center.width + slotSpacing * 2 : 0)
+            + (slots.right != .none ? slots.right.width + slotSpacing : 0)
+    }
+
+    // Mini: record button (21) with 10 leading, mode button (22) with 12 trailing.
+    static let miniChrome: CGFloat = 10 + 21 + 12 + 22
     static let miniCompactWidth: CGFloat = 184
     static let miniExpandedWidth: CGFloat = 300
 
-    // Pill: record button (21) with 10 leading and 12 trailing padding, 10 before the slots.
+    // Pill: record button (21) with 10 leading and 12 trailing padding.
     static let pillHeight: CGFloat = 34
     static let pillMinWidth: CGFloat = 56
 
     static func miniBarWidth(slots: RecorderSideSlots) -> CGFloat {
-        max(miniCompactWidth, miniChrome + slots.contentWidth)
+        max(miniCompactWidth, miniChrome + slotsWidth(slots))
     }
 
     static func miniExpandedBarWidth(slots: RecorderSideSlots) -> CGFloat {
-        max(miniExpandedWidth, miniChrome + slots.contentWidth)
+        max(miniExpandedWidth, miniChrome + slotsWidth(slots))
     }
 
     static func pillBarWidth(slots: RecorderSideSlots) -> CGFloat {
-        let slotsWidth = slots.contentWidth
-        return max(pillMinWidth, 10 + 21 + (slotsWidth > 0 ? 10 + slotsWidth : 0) + 12)
+        max(pillMinWidth, 10 + 21 + slotsWidth(slots) + 12)
     }
 
     // Notch: the pill hangs from the camera housing and grows to both sides by the same amount.
     // The left side holds the record button (21), 14, the mode button (20), then the left slot;
-    // the right side holds the right slot. Each has its edge padding.
+    // the right side holds the centre (level meter, next to the notch) and the right slot. Each
+    // has its edge padding.
     static let notchLeftControls: CGFloat = 21 + 14 + 20
     static let notchSlotSpacing: CGFloat = 14
 
     /// How far the notch pill reaches out on each side: at least `base`, more when a slot needs it.
     static func notchSideExpansion(base: CGFloat, edgePadding: CGFloat, slots: RecorderSideSlots) -> CGFloat {
         let left = edgePadding + notchLeftControls + (slots.left != .none ? notchSlotSpacing + slots.left.width : 0)
-        let right = edgePadding + slots.right.width
+        // The right half holds the centre (next to the notch, which is the camera housing and
+        // cannot carry anything) and the right slot, which sits at the outer edge.
+        let right = edgePadding
+            + (slots.center != .none ? notchSlotSpacing + slots.center.width : 0)
+            + (slots.right != .none ? slots.right.width + (slots.center != .none ? notchSlotSpacing : 0) : 0)
         return max(base, left, right)
     }
 }
@@ -203,31 +219,35 @@ enum RecorderPanelSizing {
 }
 
 /// The time shown by the timer slot and the dot's label. A value: the recorder owns one and the
-/// views read a copy.
+/// views read a copy. Times are seconds of system uptime, a monotonic clock, so a change of the
+/// system time (a clock correction, a time zone or daylight saving switch) cannot move the timer.
 struct RecordingClock: Equatable {
-    private(set) var startedAt: Date?
-    private(set) var endedAt: Date?
+    private(set) var startedAt: TimeInterval?
+    private(set) var endedAt: TimeInterval?
 
-    init(startedAt: Date? = nil, endedAt: Date? = nil) {
+    init(startedAt: TimeInterval? = nil, endedAt: TimeInterval? = nil) {
         self.startedAt = startedAt
         self.endedAt = endedAt
     }
 
-    mutating func start(at date: Date) {
-        startedAt = date
+    /// The monotonic time every caller passes in.
+    static var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
+
+    mutating func start(at time: TimeInterval) {
+        startedAt = time
         endedAt = nil
     }
 
     /// Freezes the time at the moment recording stopped, so the processing states keep showing
     /// the length of the take. Does nothing when no recording was started.
-    mutating func stop(at date: Date) {
+    mutating func stop(at time: TimeInterval) {
         guard startedAt != nil, endedAt == nil else { return }
-        endedAt = date
+        endedAt = time
     }
 
-    func elapsed(at now: Date) -> TimeInterval {
+    func elapsed(at time: TimeInterval) -> TimeInterval {
         guard let startedAt else { return 0 }
-        return max(0, (endedAt ?? now).timeIntervalSince(startedAt))
+        return max(0, (endedAt ?? time) - startedAt)
     }
 
     /// "0:07", "12:03", "1:02:03".
@@ -241,10 +261,8 @@ struct RecordingClock: Equatable {
     }
 
     /// A clock that counts up and starts over every `period` seconds, for the settings preview.
-    static func looping(period: TimeInterval, at now: Date) -> RecordingClock {
-        let seconds = now.timeIntervalSinceReferenceDate
-        let start = seconds - seconds.truncatingRemainder(dividingBy: period)
-        return RecordingClock(startedAt: Date(timeIntervalSinceReferenceDate: start))
+    static func looping(period: TimeInterval, at time: TimeInterval) -> RecordingClock {
+        RecordingClock(startedAt: time - time.truncatingRemainder(dividingBy: period))
     }
 }
 

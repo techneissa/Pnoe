@@ -37,7 +37,7 @@ struct RecorderStylePreview: View {
     var levelHistoryProvider: () -> LevelHistory = {
         SyntheticLevels.history(endingAt: Date().timeIntervalSinceReferenceDate)
     }
-    var clockProvider: () -> RecordingClock = { RecordingClock.looping(period: 90, at: Date()) }
+    var clockProvider: () -> RecordingClock = { RecordingClock.looping(period: 90, at: RecordingClock.now) }
 
     private let notchSize = CGSize(width: 150, height: 32)
 

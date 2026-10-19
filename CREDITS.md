@@ -14,7 +14,7 @@ Each feature taken from another project gets one line in this format:
 - [FluidVoice](https://github.com/altic-dev/FluidVoice), GPL-3.0: sending the transcript to the model as a JSON `{"transcript": …}` envelope.
 - [Handy](https://github.com/cjpais/Handy), MIT: the transcript envelope and restating the rule after the transcript.
 - [OpenWhispr](https://github.com/OpenWhispr/openwhispr), MIT: restating the rule after the transcript, and the worked example of an injected instruction that comes back unchanged.
-- [TypeWhisper](https://github.com/TypeWhisper/typewhisper-mac), GPL-3.0: sanitizing model wrappers before paste, the lesson to apply dictionary fixes before the model, and the idea of a live transcript preview in the recording indicator with theme, placement and visibility choices (Pnoe's indicator design and code are its own).
+- [TypeWhisper](https://github.com/TypeWhisper/typewhisper-mac), GPL-3.0: sanitizing model wrappers before paste, the lesson to apply dictionary fixes before the model, and the idea of a live transcript preview in the recording indicator with theme, placement and visibility choices, of the Pill and Dot indicator styles, and of configurable left and right side slots (concept only; Pnoe's indicator design and code are its own).
 - Ideas only, no code: [VoiceTypr](https://github.com/ideaplexa/voicetypr) (output guard classes, skip rule for short takes), [Whispering](https://github.com/EpicenterHQ/epicenter) (temperature 0), [Murmure](https://github.com/Kieirra/murmure) (output cap tied to input length).
 
 ## Not part of Pnoe

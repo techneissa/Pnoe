@@ -58,26 +58,15 @@ struct MiniRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
             : RecorderBarMetrics.miniExpandedBarWidth(slots: slots)
     }
 
-    private func slotView(_ side: RecorderSlotSide) -> some View {
+    private func slotView(_ content: RecorderSlotContent) -> some View {
         RecorderSlotView(
-            content: slots.content(on: side),
+            content: content,
             recordingState: recordingState,
             levelHistoryProvider: levelHistoryProvider,
             levelDisplay: levelDisplay,
             clockProvider: clockProvider,
             modeName: modeName
         )
-    }
-
-    /// The slots side by side. An empty slot takes no room, so a single slot sits in the middle.
-    @ViewBuilder
-    private var slotsView: some View {
-        if slots.contentWidth > 0 {
-            HStack(spacing: RecorderBarMetrics.slotSpacing) {
-                if slots.left != .none { slotView(.left) }
-                if slots.right != .none { slotView(.right) }
-            }
-        }
     }
 
     private var recordOrCloseButton: some View {
@@ -93,33 +82,40 @@ struct MiniRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
         }
     }
 
-    @ViewBuilder
+    /// Record button at the far left, then the left slot, the centre and the right slot, then
+    /// (Mini only) the mode button. Each slot sits at its own position: the left slot next to the
+    /// record button, the right slot at the other end, the centre in the space between them. An
+    /// empty slot takes no room.
     private var controlBar: some View {
-        if isPill {
-            HStack(spacing: 10) {
-                recordOrCloseButton
-                Spacer(minLength: 0)
-                slotsView
+        let spacing = RecorderBarMetrics.slotSpacing
+        let centerGap: CGFloat = slots.center != .none ? spacing : 0
+        return HStack(spacing: 0) {
+            recordOrCloseButton
+                .padding(.leading, 10)
+
+            if slots.left != .none {
+                slotView(slots.left).padding(.leading, spacing)
             }
-            .padding(.leading, 10)
-            .padding(.trailing, 12)
-            .frame(height: controlBarHeight)
-        } else {
-            HStack(spacing: 0) {
-                recordOrCloseButton
-                    .padding(.leading, 10)
 
-                Spacer(minLength: 0)
+            Spacer(minLength: centerGap)
 
-                slotsView
+            if slots.center != .none {
+                slotView(slots.center)
+            }
 
-                Spacer(minLength: 0)
+            Spacer(minLength: centerGap)
 
+            if slots.right != .none {
+                slotView(slots.right).padding(.trailing, spacing)
+            }
+
+            if !isPill {
                 modeButton
                     .padding(.trailing, 12)
             }
-            .frame(height: controlBarHeight)
         }
+        .padding(.trailing, isPill ? 12 : 0)
+        .frame(height: controlBarHeight)
     }
 
     /// The live line sits on the side of the bar that faces into the screen: under the bar at
@@ -347,9 +343,9 @@ struct NotchRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
 
     // MARK: - Main Row
 
-    private func slotView(_ side: RecorderSlotSide) -> some View {
+    private func slotView(_ content: RecorderSlotContent) -> some View {
         RecorderSlotView(
-            content: slots.content(on: side),
+            content: content,
             recordingState: recordingState,
             levelHistoryProvider: levelHistoryProvider,
             levelDisplay: levelDisplay,
@@ -373,7 +369,7 @@ struct NotchRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
                     )
                 }
                 modeButton
-                if slots.left != .none { slotView(.left) }
+                if slots.left != .none { slotView(slots.left) }
                 Spacer(minLength: 0)
             }
             .padding(.leading, sideEdgePadding)
@@ -386,8 +382,13 @@ struct NotchRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
             )
 
             HStack(spacing: 0) {
-                Spacer(minLength: 0)
-                if slots.right != .none { slotView(.right) }
+                // The centre of the bar is the camera housing, which cannot carry anything, so
+                // the centre item sits right beside it and the right slot at the outer edge.
+                if slots.center != .none {
+                    slotView(slots.center).padding(.leading, RecorderBarMetrics.notchSlotSpacing)
+                }
+                Spacer(minLength: slots.center != .none && slots.right != .none ? RecorderBarMetrics.notchSlotSpacing : 0)
+                if slots.right != .none { slotView(slots.right) }
             }
             .padding(.trailing, sideEdgePadding)
             .frame(width: sideExpansion)

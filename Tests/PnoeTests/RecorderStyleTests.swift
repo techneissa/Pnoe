@@ -63,16 +63,31 @@ final class RecorderStyleTests: XCTestCase {
 
     // MARK: - Side slots
 
-    func testDefaultsKeepTodaysLookForMiniAndNotch() {
-        for style in [RecorderPanelStyle.mini, .notch] {
+    func testEveryStyleWithSidesDefaultsToLevelInTheCentreAndTimerOnTheRight() {
+        for style in [RecorderPanelStyle.mini, .notch, .pill] {
             let slots = RecorderSideSlots.defaults(for: style)
             XCTAssertEqual(slots.left, .none, style.rawValue)
-            XCTAssertEqual(slots.right, .level, style.rawValue)
+            XCTAssertEqual(slots.center, .level, style.rawValue)
+            XCTAssertEqual(slots.right, .timer, style.rawValue)
         }
     }
 
-    func testPillDefaultsToTimerAndLevel() {
-        XCTAssertEqual(RecorderSideSlots.defaults(for: .pill), RecorderSideSlots(left: .timer, right: .level))
+    func testTheCentreShowsTheLevelUnlessASideShowsIt() {
+        XCTAssertEqual(RecorderSideSlots(left: .none, right: .none).center, .level)
+        XCTAssertEqual(RecorderSideSlots(left: .timer, right: .modeName).center, .level)
+        XCTAssertEqual(RecorderSideSlots(left: .level, right: .timer).center, .none)
+        XCTAssertEqual(RecorderSideSlots(left: .timer, right: .level).center, .none)
+    }
+
+    func testSlotsKeepTheirPositions() {
+        // Left stays the left slot and right the right one, whatever else is chosen.
+        let slots = RecorderSideSlots(left: .timer, right: .modeName)
+        XCTAssertEqual(slots.content(on: .left), .timer)
+        XCTAssertEqual(slots.content(on: .right), .modeName)
+        XCTAssertEqual(slots.center, .level)
+        XCTAssertEqual(slots.storedValue, "timer,modeName")
+        let parsed = RecorderSideSlots(storedValue: "timer,modeName", style: .pill)
+        XCTAssertEqual([parsed.left, parsed.center, parsed.right], [.timer, .level, .modeName])
     }
 
     func testEmptyStorageGivesTheDefaults() {
@@ -102,7 +117,7 @@ final class RecorderStyleTests: XCTestCase {
             RecorderSideSlots(left: .none, right: .timer))
         XCTAssertEqual(
             RecorderSideSlots(storedValue: "modeName,waveform", style: .mini),
-            RecorderSideSlots(left: .modeName, right: .level))
+            RecorderSideSlots(left: .modeName, right: .timer))
     }
 
     func testTheSameItemOnBothSidesKeepsTheLeftOne() {
@@ -149,36 +164,48 @@ final class RecorderStyleTests: XCTestCase {
 
     // MARK: - Bar and window sizes
 
-    func testDefaultMiniBarKeepsItsWidth() {
+    func testDefaultMiniBarWidth() {
         let slots = RecorderSideSlots.defaults(for: .mini)
-        XCTAssertEqual(RecorderBarMetrics.miniBarWidth(slots: slots), 184)
+        // 65 for the buttons, 94 for the centred level meter with its gaps, 46 for the timer.
+        let width = 10 + 21 + 12 + 22 + (RecorderLevelMetrics.meterWidth + 20) + (RecorderSlotContent.timer.width + 10)
+        XCTAssertEqual(RecorderBarMetrics.miniBarWidth(slots: slots), width)
         XCTAssertEqual(RecorderBarMetrics.miniExpandedBarWidth(slots: slots), 300)
     }
 
     func testMiniBarGrowsForWideSlots() {
-        let slots = RecorderSideSlots(left: .modeName, right: .level)
-        XCTAssertGreaterThan(RecorderBarMetrics.miniBarWidth(slots: slots), 184)
+        let narrow = RecorderSideSlots.defaults(for: .mini)
+        let wide = RecorderSideSlots(left: .modeName, right: .timer)
         XCTAssertEqual(
-            RecorderBarMetrics.miniBarWidth(slots: slots),
-            RecorderBarMetrics.miniChrome + 64 + 10 + RecorderLevelMetrics.meterWidth)
+            RecorderBarMetrics.miniBarWidth(slots: wide) - RecorderBarMetrics.miniBarWidth(slots: narrow),
+            RecorderSlotContent.modeName.width + 10)
+    }
+
+    func testMiniBarWithTheLevelOnASideHasNoCentre() {
+        let side = RecorderSideSlots(left: .none, right: .level)
+        XCTAssertEqual(
+            RecorderBarMetrics.miniBarWidth(slots: side),
+            max(184, 10 + 21 + 12 + 22 + RecorderLevelMetrics.meterWidth + 10))
     }
 
     func testPillBarFitsItsSlots() {
-        let none = RecorderSideSlots(left: .none, right: .none)
+        let level = RecorderSideSlots(left: .none, right: .level)
         let both = RecorderSideSlots.defaults(for: .pill)
-        XCTAssertLessThan(
-            RecorderBarMetrics.pillBarWidth(slots: none), RecorderBarMetrics.pillBarWidth(slots: both))
+        XCTAssertGreaterThan(
+            RecorderBarMetrics.pillBarWidth(slots: both), RecorderBarMetrics.pillBarWidth(slots: level))
         XCTAssertEqual(
             RecorderBarMetrics.pillBarWidth(slots: both),
-            10 + 21 + 10 + RecorderSlotContent.timer.width + 10 + RecorderLevelMetrics.meterWidth + 12)
+            10 + 21 + (RecorderLevelMetrics.meterWidth + 20) + (RecorderSlotContent.timer.width + 10) + 12)
     }
 
-    func testDefaultNotchReachIsUnchanged() {
+    func testDefaultNotchReach() {
         let slots = RecorderSideSlots.defaults(for: .notch)
-        XCTAssertEqual(RecorderBarMetrics.notchSideExpansion(base: 90, edgePadding: 16, slots: slots), 90)
-        XCTAssertEqual(RecorderBarMetrics.notchSideExpansion(base: 110, edgePadding: 20, slots: slots), 110)
+        // The level meter sits beside the notch and the timer at the outer edge.
+        let right = 16 + 14 + RecorderLevelMetrics.meterWidth + 14 + RecorderSlotContent.timer.width
+        XCTAssertEqual(RecorderBarMetrics.notchSideExpansion(base: 90, edgePadding: 16, slots: slots), right)
+        XCTAssertEqual(
+            RecorderBarMetrics.notchSideExpansion(base: 110, edgePadding: 20, slots: slots), right + 4)
         XCTAssertEqual(RecorderBarMetrics.notchSideExpansion(base: 230, edgePadding: 20, slots: slots), 230)
-        XCTAssertEqual(RecorderPanelSizing.notchMaxSideExpansion(compact: true, slots: slots), 100)
+        XCTAssertEqual(RecorderPanelSizing.notchMaxSideExpansion(compact: true, slots: slots), right)
         XCTAssertEqual(RecorderPanelSizing.notchMaxSideExpansion(compact: false, slots: slots), 240)
     }
 
@@ -191,14 +218,15 @@ final class RecorderStyleTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(RecorderPanelSizing.notchMaxSideExpansion(compact: true, slots: slots), needed)
     }
 
-    func testMiniHostSizeIsUnchangedForTheDefaults() {
+    func testMiniHostSizeForTheDefaults() {
         let slots = RecorderSideSlots.defaults(for: .mini)
         XCTAssertEqual(
             RecorderPanelSizing.miniHostSize(style: .mini, compact: false, assistantVisible: false, slots: slots),
             CGSize(width: 540, height: 430))
-        XCTAssertEqual(
-            RecorderPanelSizing.miniHostSize(style: .mini, compact: true, assistantVisible: false, slots: slots),
-            CGSize(width: 200, height: 48))
+        let compact = RecorderPanelSizing.miniHostSize(
+            style: .mini, compact: true, assistantVisible: false, slots: slots)
+        XCTAssertEqual(compact.width, RecorderBarMetrics.miniBarWidth(slots: slots) + 16)
+        XCTAssertEqual(compact.height, 48)
     }
 
     func testCompactPillWindowIsOnlyAsLargeAsItsBar() {
@@ -261,30 +289,39 @@ final class RecorderStyleTests: XCTestCase {
     // MARK: - Recording clock
 
     func testClockCountsFromStartAndFreezesOnStop() {
-        let start = Date(timeIntervalSinceReferenceDate: 1000)
         var clock = RecordingClock()
-        XCTAssertEqual(clock.elapsed(at: start), 0)
-        clock.start(at: start)
-        XCTAssertEqual(clock.elapsed(at: start.addingTimeInterval(7.4)), 7.4, accuracy: 0.001)
-        clock.stop(at: start.addingTimeInterval(12))
-        XCTAssertEqual(clock.elapsed(at: start.addingTimeInterval(500)), 12, accuracy: 0.001)
-        clock.stop(at: start.addingTimeInterval(20))
-        XCTAssertEqual(clock.elapsed(at: start.addingTimeInterval(500)), 12, accuracy: 0.001)
-        clock.start(at: start.addingTimeInterval(100))
-        XCTAssertEqual(clock.elapsed(at: start.addingTimeInterval(103)), 3, accuracy: 0.001)
+        XCTAssertEqual(clock.elapsed(at: 1000), 0)
+        clock.start(at: 1000)
+        XCTAssertEqual(clock.elapsed(at: 1007.4), 7.4, accuracy: 0.001)
+        clock.stop(at: 1012)
+        XCTAssertEqual(clock.elapsed(at: 1500), 12, accuracy: 0.001)
+        clock.stop(at: 1020)
+        XCTAssertEqual(clock.elapsed(at: 1500), 12, accuracy: 0.001)
+        clock.start(at: 1100)
+        XCTAssertEqual(clock.elapsed(at: 1103), 3, accuracy: 0.001)
     }
 
     func testStoppingAClockThatNeverStartedDoesNothing() {
         var clock = RecordingClock()
-        clock.stop(at: Date())
+        clock.stop(at: 50)
         XCTAssertEqual(clock, RecordingClock())
-        XCTAssertEqual(clock.elapsed(at: Date()), 0)
+        XCTAssertEqual(clock.elapsed(at: 60), 0)
     }
 
     func testClockNeverGoesNegative() {
-        let start = Date(timeIntervalSinceReferenceDate: 1000)
-        let clock = RecordingClock(startedAt: start)
-        XCTAssertEqual(clock.elapsed(at: start.addingTimeInterval(-5)), 0)
+        XCTAssertEqual(RecordingClock(startedAt: 1000).elapsed(at: 995), 0)
+    }
+
+    func testClockReadsTheMonotonicUptimeNotTheWallClock() {
+        // The recorder starts and stops with `RecordingClock.now`; it must be system uptime.
+        let before = ProcessInfo.processInfo.systemUptime
+        let now = RecordingClock.now
+        let after = ProcessInfo.processInfo.systemUptime
+        XCTAssertTrue((before...after).contains(now))
+        var clock = RecordingClock()
+        clock.start(at: RecordingClock.now)
+        // Even a far-away wall clock date cannot enter: only uptime values do.
+        XCTAssertLessThan(clock.elapsed(at: RecordingClock.now), 1)
     }
 
     func testClockFormat() {
@@ -300,13 +337,12 @@ final class RecorderStyleTests: XCTestCase {
     }
 
     func testLoopingClockRestartsEveryPeriod() {
-        let base = Date(timeIntervalSinceReferenceDate: 90 * 40)
-        let atStart = RecordingClock.looping(period: 90, at: base)
-        XCTAssertEqual(atStart.elapsed(at: base), 0, accuracy: 0.001)
-        let later = base.addingTimeInterval(30)
-        XCTAssertEqual(RecordingClock.looping(period: 90, at: later).elapsed(at: later), 30, accuracy: 0.001)
-        let wrapped = base.addingTimeInterval(95)
-        XCTAssertEqual(RecordingClock.looping(period: 90, at: wrapped).elapsed(at: wrapped), 5, accuracy: 0.001)
+        let base: TimeInterval = 90 * 40
+        XCTAssertEqual(RecordingClock.looping(period: 90, at: base).elapsed(at: base), 0, accuracy: 0.001)
+        XCTAssertEqual(
+            RecordingClock.looping(period: 90, at: base + 30).elapsed(at: base + 30), 30, accuracy: 0.001)
+        XCTAssertEqual(
+            RecordingClock.looping(period: 90, at: base + 95).elapsed(at: base + 95), 5, accuracy: 0.001)
     }
 
     // MARK: - Synthetic input for the preview

@@ -95,7 +95,7 @@ class Recorder: NSObject, ObservableObject {
             showRecordingDeviceNotification(for: deviceID, resolution: resolution)
             UserDefaults.standard.set(String(deviceID), forKey: "lastUsedMicrophoneDeviceID")
             startLevelSampling()
-            recordingClock.start(at: Date())
+            recordingClock.start(at: RecordingClock.now)
         } catch {
             logger.error(
                 "Failed to start recording deviceID=\(deviceID, privacy: .public) file=\(url.lastPathComponent, privacy: .public) error=\(error, privacy: .public)"
@@ -127,7 +127,7 @@ class Recorder: NSObject, ObservableObject {
         onAudioChunk = nil
 
         resetLevelSampling()
-        recordingClock.stop(at: Date())
+        recordingClock.stop(at: RecordingClock.now)
 
         audioRestorationTask?.cancel()
         audioRestorationTask = Task {

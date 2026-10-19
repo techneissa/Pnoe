@@ -12,8 +12,7 @@ final class RecorderStyleRenderTests: XCTestCase {
     private static let sampleText = RecorderStylePreviewConfiguration.sampleText
 
     /// 7 seconds into a take, frozen, so every render shows the same "0:07".
-    private static let clock = RecordingClock(
-        startedAt: Date(timeIntervalSinceReferenceDate: 100), endedAt: Date(timeIntervalSinceReferenceDate: 107))
+    private static let clock = RecordingClock(startedAt: 100, endedAt: 107)
 
     private struct ModeStub: View {
         @Environment(\.recorderPalette) private var palette
@@ -67,10 +66,10 @@ final class RecorderStyleRenderTests: XCTestCase {
         }
     }
 
-    private func miniView(slots: RecorderSideSlots) -> some View {
+    private func miniView(theme: RecorderTheme = .dark, slots: RecorderSideSlots = .defaults(for: .mini)) -> some View {
         backdrop(width: 360, height: 70) {
             MiniRecorderLayout(
-                recordingState: .recording, liveContent: nil, theme: .dark, transcriptSize: .medium,
+                recordingState: .recording, liveContent: nil, theme: theme, transcriptSize: .medium,
                 placement: .bottom, hasAssistantResponse: false, showsCloseButton: false,
                 levelHistoryProvider: { RecorderIndicatorPreviewTests.speechHistory },
                 levelDisplay: .bars, slots: slots, modeName: "Notes", clockProvider: { Self.clock },
@@ -81,10 +80,10 @@ final class RecorderStyleRenderTests: XCTestCase {
         }
     }
 
-    private func notchView(slots: RecorderSideSlots) -> some View {
-        backdrop(width: 520, height: 60) {
+    private func notchView(theme: RecorderTheme = .dark, slots: RecorderSideSlots = .defaults(for: .notch)) -> some View {
+        backdrop(width: 560, height: 60) {
             NotchRecorderLayout(
-                recordingState: .recording, liveContent: nil, theme: .dark, transcriptSize: .medium,
+                recordingState: .recording, liveContent: nil, theme: theme, transcriptSize: .medium,
                 isAlwaysVisible: false, hasAssistantResponse: false, showsCloseButton: false,
                 notchWidth: 180, notchHeight: 32,
                 levelHistoryProvider: { RecorderIndicatorPreviewTests.speechHistory },
@@ -136,6 +135,8 @@ final class RecorderStyleRenderTests: XCTestCase {
         for theme in RecorderTheme.allCases {
             written.append(try writePNG(pillView(theme: theme), name: "pill-\(theme.rawValue)", scale: 3))
             written.append(try writePNG(dotView(theme: theme), name: "dot-\(theme.rawValue)", scale: 3))
+            written.append(try writePNG(miniView(theme: theme), name: "mini-\(theme.rawValue)", scale: 3))
+            written.append(try writePNG(notchView(theme: theme), name: "notch-\(theme.rawValue)", scale: 3))
         }
         written.append(
             try writePNG(pillView(theme: .dark, transcript: Self.sampleText), name: "pill-dark-transcript", scale: 3))
@@ -145,12 +146,13 @@ final class RecorderStyleRenderTests: XCTestCase {
             try writePNG(pillView(theme: .light, transcript: Self.sampleText), name: "pill-light-transcript", scale: 3))
         written.append(try writePNG(dotView(theme: .dark, state: .transcribing), name: "dot-dark-processing", scale: 3))
         written.append(try writePNG(dotView(theme: .dark, state: .idle), name: "dot-dark-idle", scale: 3))
-        XCTAssertEqual(written.count, 11)
+        XCTAssertEqual(written.count, 17)
         try checkWritten(written)
     }
 
     func testRenderSideSlotVariants() throws {
         var written: [URL] = []
+        // The level meter in a side slot leaves the centre empty.
         written.append(
             try writePNG(
                 miniView(slots: RecorderSideSlots(left: .timer, right: .level)), name: "mini-slots-timer-level",
@@ -167,6 +169,13 @@ final class RecorderStyleRenderTests: XCTestCase {
             try writePNG(
                 pillView(theme: .dark, slots: RecorderSideSlots(left: .modeName, right: .timer)),
                 name: "pill-slots-mode-timer", scale: 3))
+        // Wider than its slots, so each slot shows at its own end of the bar.
+        written.append(
+            try writePNG(
+                pillView(
+                    theme: .dark, transcript: Self.sampleText,
+                    slots: RecorderSideSlots(left: .timer, right: .modeName)),
+                name: "pill-slots-timer-mode-wide", scale: 3))
         try checkWritten(written)
     }
 
