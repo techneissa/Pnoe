@@ -57,10 +57,12 @@ class PlaybackController: ObservableObject {
     private let pressKey: @MainActor () -> Void
 
     private var ownedPause: OwnedPause?
-    private var lastActivity: MediaApplications.Activity?
     private var monitorTask: Task<Void, Never>?
     private var recordingSessionID = UUID()
+    private var isQuitting = false
     private var terminationObserver: NSObjectProtocol?
+    /// How long the quit path waits for a fresh read of the audio processes before it gives up and presses nothing.
+    private let quitReadTimeout: TimeInterval = 0.2
 
     @Published var isPauseMediaEnabled: Bool = UserDefaults.standard.bool(forKey: "isPauseMediaEnabled") {
         didSet {
@@ -78,10 +80,12 @@ class PlaybackController: ObservableObject {
         self.readAudioProcesses = readAudioProcesses
         self.pressKey = pressKey
 
+        // Delivered on the posting thread (the main thread when the app terminates) and before it returns, so
+        // the quit path has run before the process exits.
         terminationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil,
-            queue: .main
+            queue: nil
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.restoreBeforeQuit() }
         }
@@ -122,7 +126,7 @@ class PlaybackController: ObservableObject {
     }
 
     private func canStartPause(sessionID: UUID) -> Bool {
-        !Task.isCancelled && isPauseMediaEnabled && sessionID == recordingSessionID
+        !Task.isCancelled && !isQuitting && isPauseMediaEnabled && sessionID == recordingSessionID
     }
 
     /// A known player is playing and no call is going on.
@@ -181,11 +185,8 @@ class PlaybackController: ObservableObject {
         monitorTask = nil
     }
 
-    /// One read of the audio processes, remembered for the quit path.
     private func currentActivity() async -> MediaApplications.Activity {
-        let activity = mediaApplications.activity(in: await readAudioProcesses())
-        lastActivity = activity
-        return activity
+        mediaApplications.activity(in: await readAudioProcesses())
     }
 
     /// Folds `activity` into the stored pause, which is read fresh here and never passed around, and says
@@ -242,15 +243,42 @@ class PlaybackController: ObservableObject {
         }
     }
 
-    /// Pnoe is quitting in the middle of a recording: put the media back the way it was, unless the last read
-    /// of the audio processes showed a call.
+    /// Pnoe is quitting in the middle of a recording: put the media back the way it was. The audio processes
+    /// are read once more, for at most `quitReadTimeout`, and nothing is pressed when the read fails, times out,
+    /// shows a call, or shows that someone else changed playback. A pause that has not started yet never will.
     private func restoreBeforeQuit() {
+        isQuitting = true
         monitorTask?.cancel()
         monitorTask = nil
-        guard ownedPause != nil else { return }
+        guard let pauseID = ownedPause?.id else { return }
+
+        let processes = readAudioProcessesBlocking(timeout: quitReadTimeout)
+        let activity = processes.map { mediaApplications.activity(in: $0) }
+        let assessment = activity.map { assess(pauseID, $0) }
         ownedPause = nil
-        guard lastActivity?.isCallActive != true else { return }
-        pressKey()
+
+        switch assessment {
+        case .unchanged, .pressStartedPlayer:
+            pressKey()
+        default:
+            break
+        }
+    }
+
+    /// One read of the audio processes from a synchronous caller, on a background task. `nil` on timeout.
+    private func readAudioProcessesBlocking(timeout: TimeInterval) -> [AudioProcess]? {
+        final class Box: @unchecked Sendable {
+            var processes: [AudioProcess]?
+        }
+        let box = Box()
+        let done = DispatchSemaphore(value: 0)
+        let read = readAudioProcesses
+        Task.detached {
+            let processes = await read()
+            box.processes = processes
+            done.signal()
+        }
+        return done.wait(timeout: .now() + timeout) == .success ? box.processes : nil
     }
 
     private static var now: TimeInterval {

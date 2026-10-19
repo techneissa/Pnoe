@@ -6,8 +6,11 @@ struct MediaApplications: Sendable {
     /// Bundle IDs of known media players. A process matches if its bundle ID is one of these or starts with one
     /// followed by a dot, which covers helper processes (`com.google.Chrome.helper`).
     let players: [String]
-    /// Bundle IDs of known calling apps, matched the same way.
+    /// Bundle IDs of dedicated calling apps, matched the same way. Any audio from them counts as a call.
     let callApps: [String]
+    /// Bundle IDs of messaging apps that also make calls. They play notification sounds all day, so they count
+    /// as a call only while they hold the microphone.
+    let messagingApps: [String]
 
     static let standard = MediaApplications(
         players: [
@@ -35,18 +38,20 @@ struct MediaApplications: Sendable {
             "us.zoom",
             "com.microsoft.teams",
             "com.microsoft.teams2",
-            "com.tinyspeck.slackmacgap",
             "com.hnc.Discord",
             "com.cisco.webexmeetingsapp",
             "com.webex",
             "Cisco-Systems.Spark",
             "com.skype.skype",
+            "com.citrixonline.GoToMeeting",
+            "com.bluejeansnet.Blue",
+        ],
+        messagingApps: [
+            "com.tinyspeck.slackmacgap",
             "net.whatsapp.WhatsApp",
             "org.whispersystems.signal-desktop",
             "ru.keepcoder.Telegram",
             "org.telegram.desktop",
-            "com.citrixonline.GoToMeeting",
-            "com.bluejeansnet.Blue",
             "com.viber.osx",
             "com.tencent.xinWeChat",
             "com.facebook.archon",
@@ -68,7 +73,10 @@ struct MediaApplications: Sendable {
         var activity = Activity()
         for process in processes {
             let isPlayer = matches(process.bundleID, players)
-            if matches(process.bundleID, callApps)
+            if matches(process.bundleID, messagingApps) {
+                // Notification sounds are not a call; holding the microphone is.
+                if process.isRunningInput { activity.isCallActive = true }
+            } else if matches(process.bundleID, callApps)
                 || (process.isRunningInput && process.isRunningOutput)
                 || (process.isRunningInput && isPlayer)
             {
