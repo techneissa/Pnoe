@@ -146,10 +146,9 @@ final class WorkflowPlaygroundModelTests: XCTestCase {
     }
 
     func testSaveFailureIsReportedNotThrown() async throws {
-        let blocker = directory.appendingPathComponent("blocker")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try Data().write(to: blocker)
-        let blocked = PlaygroundExampleStore(fileURL: blocker.appendingPathComponent("examples.jsonl"))
+        // A folder where the file should be: reading it fails, so nothing may be written.
+        let blocked = PlaygroundExampleStore(fileURL: directory.appendingPathComponent("examples.jsonl"))
+        try FileManager.default.createDirectory(at: blocked.fileURL, withIntermediateDirectories: true)
         let model = WorkflowPlaygroundModel(workflows: [cleaned], store: blocked) { text, _ in
             PlaygroundOutcome(output: text, duration: 0.1)
         }
@@ -157,6 +156,7 @@ final class WorkflowPlaygroundModelTests: XCTestCase {
         await model.run()
         model.saveExample()
         XCTAssertTrue(model.examples.isEmpty)
+        XCTAssertNotNil(model.loadError)
         XCTAssertTrue(model.notice?.hasPrefix("Could not save") == true)
     }
 
@@ -184,6 +184,58 @@ final class WorkflowPlaygroundModelTests: XCTestCase {
         let model = model()
         XCTAssertEqual(model.unreadableLines, 1)
         XCTAssertTrue(model.examples.isEmpty)
+    }
+
+    func testRejectedTextIsDiffedAgainstTheTakeTheModelGot() async throws {
+        let model = model { text, _ in
+            PlaygroundOutcome(
+                output: text, duration: 1, fallbackReason: "new_words",
+                rejectedText: "Open the file on Thursday and email Sam please.")
+        }
+        model.input = "um open the file on thursday and send it to Sam please"
+        await model.run()
+        let segments = try XCTUnwrap(model.rejectedDiff)
+        XCTAssertFalse(segments.contains { $0.word == "um" }, "fillers were already out when the model saw the take")
+        XCTAssertEqual(segments.filter { $0.kind == .added }.map(\.word), ["email"])
+        XCTAssertEqual(segments.filter { $0.kind == .missing }.map(\.word), ["send", "it", "to"])
+    }
+
+    func testNoRejectedDiffWithoutAFallbackOrOnAnotherWorkflow() async {
+        let model = model { text, _ in
+            PlaygroundOutcome(output: text, duration: 1, fallbackReason: "dropped", rejectedText: "something else")
+        }
+        model.input = "open the file on thursday please"
+        model.selectedWorkflowID = summary.id
+        await model.run()
+        XCTAssertNil(model.rejectedDiff)
+        model.selectedWorkflowID = cleaned.id
+        await model.run()
+        XCTAssertNotNil(model.rejectedDiff)
+
+        let passing = self.model()
+        passing.input = "open the file on thursday please"
+        await passing.run()
+        XCTAssertNil(passing.rejectedDiff)
+    }
+
+    func testEditingTheSampleAfterARunMarksTheResultStale() async {
+        let model = model()
+        model.input = "open the file"
+        await model.run()
+        XCTAssertFalse(model.resultIsStale)
+        model.input = "open the other file"
+        XCTAssertTrue(model.resultIsStale)
+    }
+
+    func testASkippedRunKeepsTheTranscriptAsTheResult() async {
+        let model = model { text, _ in
+            PlaygroundOutcome(output: text, duration: 0, skippedReason: "Too short.")
+        }
+        model.input = "ok"
+        await model.run()
+        XCTAssertEqual(model.finished?.outcome.skippedReason, "Too short.")
+        XCTAssertNil(model.fallbackSentence)
+        XCTAssertEqual(model.editedResult, "ok")
     }
 
     func testAStaleRunDoesNotOverwriteANewerOne() async throws {

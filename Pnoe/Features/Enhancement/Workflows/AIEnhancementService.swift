@@ -12,6 +12,8 @@ struct AIEnhancementResult: Sendable {
     let userMessage: String?
     /// Cleaned Text only: the `FallbackReason` code when the plain transcript was used instead of the model's text.
     var fallbackReason: String? = nil
+    /// Cleaned Text only: the model's text when a check rejected it.
+    var rejectedText: String? = nil
 }
 
 @MainActor
@@ -36,7 +38,7 @@ class AIEnhancementService: ObservableObject {
     }
     private let rateLimitInterval: TimeInterval = 1.0
     private var lastRequestTime: Date?
-    private let modelContext: ModelContext
+    let modelContext: ModelContext
 
     @Published var lastCapturedClipboard: String?
 
@@ -456,7 +458,8 @@ class AIEnhancementService: ObservableObject {
             promptName: promptName,
             systemMessage: result.systemPrompt,
             userMessage: text,
-            fallbackReason: result.fallbackReason
+            fallbackReason: result.fallbackReason,
+            rejectedText: result.rejectedText
         )
     }
 

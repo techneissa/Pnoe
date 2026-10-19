@@ -108,6 +108,33 @@ final class CleanedTextGuardTests: XCTestCase {
         XCTAssertTrue(result.text.contains("fix the login bug before the demo"))
     }
 
+    func testARejectedResultStillGetsTheCodeOnlyCleanup() async {
+        let dropped = await clean(modelSays: "Please fix the login bug before the demo.")
+        XCTAssertEqual(dropped.text, "Please open src/app/main.swift and fix the login bug before the demo.")
+
+        let crashed = await GuardedCleanup(runtime: FakeRuntime(throwing: .crashed), spec: spec)
+            .clean("um open the file on thursday and send it to Sam please")
+        XCTAssertEqual(crashed.text, "Open the file on Thursday and send it to Sam please.")
+        XCTAssertEqual(crashed.fallbackReason, FallbackReason.runtimeCrashed.rawValue)
+    }
+
+    func testTheCodeOnlyCleanupLeavesAnEndingAndACapitalAlone() async {
+        let result = await GuardedCleanup(runtime: FakeRuntime(throwing: .crashed), spec: spec)
+            .clean("Send the file to Sam on Friday, can you do that?")
+        XCTAssertEqual(result.text, "Send the file to Sam on Friday, can you do that?")
+    }
+
+    func testTheRejectedTextIsKeptOnlyWhenAGuardRefusedIt() async {
+        let refused = await clean(modelSays: "Please fix the login bug before the demo.")
+        XCTAssertEqual(refused.rejectedText, "Please fix the login bug before the demo.")
+
+        let used = await clean(modelSays: "Please open ⟦1⟧ and fix the login bug before the demo.")
+        XCTAssertNil(used.rejectedText)
+
+        let crashed = await GuardedCleanup(runtime: FakeRuntime(throwing: .crashed), spec: spec).clean(take)
+        XCTAssertNil(crashed.rejectedText)
+    }
+
     func testACutOffResultPastesTheRawText() async {
         let result = await clean(modelSays: "Please open ⟦1⟧ and", stop: .cap)
         XCTAssertEqual(result.fallbackReason, FallbackReason.truncated.rawValue)
@@ -149,7 +176,7 @@ final class CleanedTextGuardTests: XCTestCase {
         let cleanup = GuardedCleanup(runtime: FakeRuntime(throwing: .crashed), spec: spec)
         let result = await cleanup.clean(prepared.textForEnhancement)
         XCTAssertEqual(result.fallbackReason, FallbackReason.runtimeCrashed.rawValue)
-        XCTAssertEqual(prepared.finish(enhanced: result.text), "send it to alex@example.com please thanks")
+        XCTAssertEqual(prepared.finish(enhanced: result.text), "Send it to alex@example.com please thanks.")
     }
 
     func testSeveralSnippetsKeepTheirOwnExpansion() async {

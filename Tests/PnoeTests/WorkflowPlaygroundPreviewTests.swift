@@ -47,7 +47,7 @@ final class WorkflowPlaygroundPreviewTests: XCTestCase {
     }
 
     /// A model that has already run a sample (stub runner) and holds two saved examples in a temporary file.
-    private func sampleModel(fallbackReason: String?) async throws -> WorkflowPlaygroundModel {
+    private func sampleModel(fallbackReason: String?, rejected: String? = nil) async throws -> WorkflowPlaygroundModel {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("pnoe-playground-render-\(UUID().uuidString)")
         let store = PlaygroundExampleStore(fileURL: folder.appendingPathComponent("examples.jsonl"))
         let now = Date(timeIntervalSince1970: 1_800_000_000)
@@ -68,8 +68,9 @@ final class WorkflowPlaygroundPreviewTests: XCTestCase {
         let model = WorkflowPlaygroundModel(workflows: [cleaned, summary], store: store) { text, _ in
             PlaygroundOutcome(
                 output: fallbackReason == nil
-                    ? "Open the file on Thursday and send it to Sam, please." : text,
-                duration: 1.8, fallbackReason: fallbackReason)
+                    ? "Open the file on Thursday and send it to Sam, please."
+                    : "Open the file on Thursday and send it to Sam please.",
+                duration: 1.8, fallbackReason: fallbackReason, rejectedText: rejected)
         }
         model.input = "um open the file on thursday and send it to Sam please"
         await model.run()
@@ -84,10 +85,12 @@ final class WorkflowPlaygroundPreviewTests: XCTestCase {
     }
 
     func testRenderPlaygroundWhenTheChecksFellBack() async throws {
-        let model = try await sampleModel(fallbackReason: "dropped")
+        let model = try await sampleModel(
+            fallbackReason: "new_words", rejected: "Open the file on Thursday and email it to Sam, please, at your earliest.")
+        XCTAssertNotNil(model.rejectedDiff)
         XCTAssertNotNil(model.fallbackSentence)
         let view = WorkflowPlaygroundView(model: model, onDismiss: {})
-        try render(view, size: CGSize(width: 720, height: 760), name: "playground-fallback")
+        try render(view, size: CGSize(width: 720, height: 900), name: "playground-fallback")
     }
 
     func testRenderEmptyPlayground() throws {

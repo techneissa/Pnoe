@@ -1,3 +1,4 @@
+import FormatterCore
 import Foundation
 
 /// A workflow the Playground can run: just what the screen needs, so the screen and its tests hold no
@@ -21,6 +22,11 @@ struct PlaygroundOutcome: Equatable {
     let duration: TimeInterval
     /// Cleaned Text only: the `FallbackReason` code when the plain transcript was used instead of the model's text.
     var fallbackReason: String?
+    /// Cleaned Text only: the model's own text when a check rejected it.
+    var rejectedText: String?
+    /// Set when no model ran because dictation would not run it either (short take, snippet only, AI not set
+    /// up); `output` is then the transcript dictation would paste.
+    var skippedReason: String?
 }
 
 /// The state behind the Playground: type or paste a sample, run a workflow, see input and result side by side,
@@ -51,6 +57,8 @@ final class WorkflowPlaygroundModel: ObservableObject {
     @Published var editedResult = ""
     @Published private(set) var examples: [PlaygroundExample] = []
     @Published private(set) var unreadableLines = 0
+    /// Why the examples file could not be read, or nil. While it is set, nothing is written to the file.
+    @Published private(set) var loadError: String?
     /// A short line after a save, delete or export, or the reason one failed.
     @Published private(set) var notice: String?
 
@@ -78,6 +86,12 @@ final class WorkflowPlaygroundModel: ObservableObject {
         return nil
     }
 
+    /// True when the sample box no longer holds the text the result below is for.
+    var resultIsStale: Bool {
+        guard let finished else { return false }
+        return finished.input != trimmedInput
+    }
+
     /// True once the speaker has changed the result away from what the workflow wrote.
     var resultWasEdited: Bool {
         guard let finished else { return false }
@@ -88,6 +102,15 @@ final class WorkflowPlaygroundModel: ObservableObject {
     var fallbackSentence: String? {
         guard let finished, finished.workflow.isCleanedText, let code = finished.outcome.fallbackReason else { return nil }
         return PlaygroundFallbackText.sentence(forCode: code)
+    }
+
+    /// The model's rejected text against the take it was given, word by word, or nil when nothing was rejected.
+    var rejectedDiff: [WordDiff.Segment]? {
+        guard let finished, finished.workflow.isCleanedText, finished.outcome.fallbackReason != nil,
+            let rejected = finished.outcome.rejectedText, !rejected.isEmpty
+        else { return nil }
+        let given = FillerCleaner.clean(finished.input, context: .plain)
+        return WordDiff.segments(from: given, to: rejected)
     }
 
     /// The workflows whose saved pairs the eval harness scores are Cleaned Text only; saving from another
@@ -149,7 +172,7 @@ final class WorkflowPlaygroundModel: ObservableObject {
 
     func delete(_ example: PlaygroundExample) {
         do {
-            try store.delete(id: example.id)
+            try store.delete(example)
             notice = "Deleted."
         } catch {
             notice = "Could not delete: \(error.localizedDescription)"
@@ -167,9 +190,16 @@ final class WorkflowPlaygroundModel: ObservableObject {
     }
 
     func reload() {
-        let loaded = store.load()
-        examples = loaded.examples
-        unreadableLines = loaded.unreadableLines
+        do {
+            let loaded = try store.load()
+            examples = loaded.examples
+            unreadableLines = loaded.unreadableLines
+            loadError = nil
+        } catch {
+            examples = []
+            unreadableLines = 0
+            loadError = "Could not read the saved examples: \(error.localizedDescription) Nothing will be written until that is fixed."
+        }
     }
 
     private var trimmedInput: String { input.trimmingCharacters(in: .whitespacesAndNewlines) }

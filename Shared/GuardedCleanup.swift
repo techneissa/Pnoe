@@ -14,6 +14,9 @@ struct GuardedCleanup {
         let fallbackReason: String?
         /// The system turn that was sent, for the history record.
         let systemPrompt: String
+        /// The model's own text when a check rejected it, so the Playground can show what was refused.
+        /// Nil when the model gave no text (an error, a timeout) or its text was used.
+        var rejectedText: String? = nil
     }
 
     let runtime: any FormatterRuntime
@@ -43,11 +46,15 @@ struct GuardedCleanup {
     func clean(_ text: String, vocabulary: [String] = []) async -> Result {
         // Snippet placeholders travel through the formatter as protected terms and come back unchanged.
         let snippets = SnippetKeeper(text)
-        let result = await cleanProtected(snippets.text, vocabulary: vocabulary + snippets.terms)
+        let capture = CapturingRuntime(wrapping: runtime)
+        let result = await GuardedCleanup(runtime: capture, spec: spec)
+            .cleanProtected(snippets.text, vocabulary: vocabulary + snippets.terms)
+        let generated = await capture.lastText
         return Result(
             text: snippets.restore(result.text),
             fallbackReason: result.fallbackReason,
-            systemPrompt: result.systemPrompt)
+            systemPrompt: result.systemPrompt,
+            rejectedText: result.fallbackReason == nil ? nil : generated.map(snippets.restore))
     }
 
     private func cleanProtected(_ text: String, vocabulary: [String]) async -> Result {
@@ -56,7 +63,10 @@ struct GuardedCleanup {
         var configuration = FormatterPipeline.Configuration()
         configuration.timeBudget = { words in .milliseconds(Int(min(20_000, 6_000 + 40 * Double(words)))) }
         guard let pipeline = try? FormatterPipeline.bundled(runtime: runtime, configuration: configuration) else {
-            return Result(text: text, fallbackReason: FallbackReason.runtimeError.rawValue, systemPrompt: "")
+            // No pipeline to run: the same code-only cleanup the pipeline gives a rejected take.
+            return Result(
+                text: FallbackCleanup.clean(text, context: .plain),
+                fallbackReason: FallbackReason.runtimeError.rawValue, systemPrompt: "")
         }
         let prefix = pipeline.prefix
         // A failed prepare shows up again as a runtime error from `generate`, which the pipeline turns
@@ -68,6 +78,33 @@ struct GuardedCleanup {
             fallbackReason: outcome.reason?.rawValue,
             systemPrompt: prefix.messages.first?.content ?? "")
     }
+}
+
+/// Passes everything through to `base` and remembers the text of the last generation, so a rejected reply
+/// can be shown.
+actor CapturingRuntime: FormatterRuntime {
+    nonisolated let id: FormatterRuntimeID
+    private let base: any FormatterRuntime
+    private(set) var lastText: String?
+
+    init(wrapping base: any FormatterRuntime) {
+        self.base = base
+        id = base.id
+    }
+
+    func prepare(_ spec: RuntimeModelSpec, prefix: PromptPrefix) async throws {
+        try await base.prepare(spec, prefix: prefix)
+    }
+
+    func generate(_ request: GenerationRequest) async throws -> GenerationResult {
+        let result = try await base.generate(request)
+        lastText = result.text
+        return result
+    }
+
+    func cancel(_ requestID: UUID) async { await base.cancel(requestID) }
+
+    func unload() async { await base.unload() }
 }
 
 /// Snippet placeholders (`⟦snippet-1⟧`) use the same brackets as the formatter's markers, and the formatter

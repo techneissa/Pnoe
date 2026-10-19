@@ -17,7 +17,6 @@ struct WorkflowPlaygroundView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     sampleSection
-                    resultSection
                     examplesSection
                 }
                 .padding(20)
@@ -56,7 +55,7 @@ struct WorkflowPlaygroundView: View {
         .overlay(Divider().opacity(0.5), alignment: .bottom)
     }
 
-    // MARK: - Sample
+    // MARK: - Sample and result
 
     private var sampleSection: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -78,8 +77,17 @@ struct WorkflowPlaygroundView: View {
                 }
             }
 
-            textBox(text: $model.input, minHeight: 84, placeholder: "Type or paste a sample, or click here and dictate")
-                .accessibilityLabel("Sample text")
+            HStack(alignment: .top, spacing: 12) {
+                column(title: "Sample") {
+                    textBox(
+                        text: $model.input, minHeight: 110,
+                        placeholder: "Type or paste a sample, or click here and dictate")
+                        .accessibilityLabel("Sample text")
+                }
+                column(title: "Result") {
+                    resultBox
+                }
+            }
 
             HStack(spacing: 10) {
                 Button {
@@ -97,49 +105,63 @@ struct WorkflowPlaygroundView: View {
                     Button("Cancel", action: model.cancel)
                         .buttonStyle(.link)
                 }
+                if let finished = model.finished {
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock")
+                        Text(
+                            finished.outcome.skippedReason == nil
+                                ? "\(finished.workflow.name), \(Self.seconds(finished.outcome.duration))"
+                                : "\(finished.workflow.name), no model ran")
+                    }
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                }
                 Spacer()
             }
-            Text("To dictate a sample, click in the box and use your recording shortcut. Pnoe pastes the take into the box.")
+
+            Text("To dictate a sample, click in the sample box and use your recording shortcut. Pnoe pastes the take into the box.")
                 .font(.caption)
                 .foregroundColor(.secondary)
+
+            verdict
         }
     }
 
-    // MARK: - Result
-
     @ViewBuilder
-    private var resultSection: some View {
+    private var resultBox: some View {
         switch model.phase {
-        case .idle, .running:
-            EmptyView()
+        case .finished:
+            if isEditingResult {
+                textBox(text: $model.editedResult, minHeight: 110, placeholder: "")
+                    .accessibilityLabel("Result, editable")
+            } else {
+                readOnlyBox(model.editedResult, minHeight: 110)
+            }
+        case .running:
+            readOnlyBox("Running…", minHeight: 110, dimmed: true)
         case .failed(let message):
-            Label(message, systemImage: "exclamationmark.triangle")
-                .font(.callout)
-                .foregroundColor(.red)
-        case .finished(let finished):
+            readOnlyBox(message, minHeight: 110, color: .red)
+        case .idle:
+            readOnlyBox("The result appears here.", minHeight: 110, dimmed: true)
+        }
+    }
+
+    /// The line under the boxes: passed, fell back (with the refused text), skipped, or stale.
+    @ViewBuilder
+    private var verdict: some View {
+        if let finished = model.finished {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .top, spacing: 12) {
-                    column(title: "Input") {
-                        readOnlyBox(finished.input)
-                    }
-                    column(title: "Result") {
-                        if isEditingResult {
-                            textBox(text: $model.editedResult, minHeight: 84, placeholder: "")
-                                .accessibilityLabel("Result, editable")
-                        } else {
-                            readOnlyBox(model.editedResult)
-                        }
-                    }
+                if model.resultIsStale {
+                    Label("The sample changed since this run. Run again to see its result.", systemImage: "arrow.clockwise")
+                        .font(.callout)
+                        .foregroundColor(.secondary)
                 }
-
-                HStack(spacing: 6) {
-                    Image(systemName: "clock")
-                    Text("\(finished.workflow.name), \(Self.seconds(finished.outcome.duration))")
-                }
-                .font(.caption)
-                .foregroundColor(.secondary)
-
-                if let sentence = model.fallbackSentence {
+                if let skipped = finished.outcome.skippedReason {
+                    Label(skipped, systemImage: "forward.end")
+                        .font(.callout)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if let sentence = model.fallbackSentence {
                     Label(sentence, systemImage: "arrow.uturn.backward.circle")
                         .font(.callout)
                         .foregroundColor(.orange)
@@ -148,6 +170,10 @@ struct WorkflowPlaygroundView: View {
                     Label("The result passed Pnoe's checks.", systemImage: "checkmark.circle")
                         .font(.callout)
                         .foregroundColor(.secondary)
+                }
+
+                if let segments = model.rejectedDiff {
+                    rejectedSection(segments)
                 }
 
                 HStack(spacing: 10) {
@@ -165,7 +191,49 @@ struct WorkflowPlaygroundView: View {
                     Text(note).font(.caption).foregroundColor(.secondary)
                 }
             }
+        } else if case .failed = model.phase {
+            EmptyView()
         }
+    }
+
+    /// The model's refused text, greyed, with the words it added underlined in red and the words it dropped
+    /// struck through.
+    private func rejectedSection(_ segments: [WordDiff.Segment]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("What the model wrote")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+            Text(Self.attributed(segments))
+                .font(.system(size: 13))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor).opacity(0.6)))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.08)))
+            Text("Red underlined words are ones the model added; struck-through words are ones it left out.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    static func attributed(_ segments: [WordDiff.Segment]) -> AttributedString {
+        var result = AttributedString()
+        for (index, segment) in segments.enumerated() {
+            var piece = AttributedString((index == 0 ? "" : " ") + segment.word)
+            switch segment.kind {
+            case .kept:
+                piece.foregroundColor = .secondary
+            case .added:
+                piece.foregroundColor = .red
+                piece.underlineStyle = .single
+            case .missing:
+                piece.foregroundColor = .red
+                piece.strikethroughStyle = .single
+            }
+            result.append(piece)
+        }
+        return result
     }
 
     // MARK: - Saved examples
@@ -189,6 +257,12 @@ struct WorkflowPlaygroundView: View {
             if let notice = model.notice {
                 Text(notice).font(.caption).foregroundColor(.accentColor)
             }
+            if let loadError = model.loadError {
+                Label(loadError, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if model.unreadableLines > 0 {
                 Text("\(model.unreadableLines) unreadable \(model.unreadableLines == 1 ? "line is" : "lines are") left untouched in the file.")
                     .font(.caption)
@@ -202,7 +276,7 @@ struct WorkflowPlaygroundView: View {
                     .padding(.vertical, 6)
             } else {
                 VStack(spacing: 8) {
-                    ForEach(model.examples) { example in
+                    ForEach(model.examples, id: \.listID) { example in
                         exampleRow(example)
                     }
                 }
@@ -256,11 +330,12 @@ struct WorkflowPlaygroundView: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
-    private func readOnlyBox(_ text: String) -> some View {
+    private func readOnlyBox(_ text: String, minHeight: CGFloat, dimmed: Bool = false, color: Color? = nil) -> some View {
         Text(text)
             .font(.system(size: 13))
+            .foregroundColor(color ?? (dimmed ? .secondary : .primary))
             .textSelection(.enabled)
-            .frame(maxWidth: .infinity, minHeight: 84, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .topLeading)
             .padding(8)
             .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))

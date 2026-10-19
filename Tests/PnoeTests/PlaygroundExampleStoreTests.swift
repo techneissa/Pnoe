@@ -27,14 +27,14 @@ final class PlaygroundExampleStoreTests: XCTestCase {
         try String(contentsOf: store.fileURL, encoding: .utf8).split(separator: "\n").map(String.init)
     }
 
-    func testMissingFileLoadsAsEmpty() {
-        XCTAssertEqual(store.load(), PlaygroundExampleStore.Loaded(examples: [], unreadableLines: 0))
+    func testMissingFileLoadsAsEmpty() throws {
+        XCTAssertEqual(try store.load(), PlaygroundExampleStore.Loaded(examples: [], unreadableLines: 0))
     }
 
     func testAppendCreatesTheFolderAndKeepsOrder() throws {
         try store.append(example("mine-a"))
         try store.append(example("mine-b", raw: "second take here"))
-        let loaded = store.load()
+        let loaded = try store.load()
         XCTAssertEqual(loaded.examples.map(\.id), ["mine-a", "mine-b"])
         XCTAssertEqual(loaded.examples[1].raw, "second take here")
         XCTAssertEqual(try fileLines().count, 2)
@@ -43,7 +43,7 @@ final class PlaygroundExampleStoreTests: XCTestCase {
     func testAPairSavedAsIsIsNotEditedAndAnEditedOneIs() throws {
         try store.append(example("mine-a"))
         try store.append(example("mine-b", expected: "Open the file on Thursday, please."))
-        let loaded = store.load().examples
+        let loaded = try store.load().examples
         XCTAssertFalse(loaded[0].wasEdited)
         XCTAssertTrue(loaded[1].wasEdited)
         XCTAssertEqual(loaded[1].output, "Open the file on Thursday.")
@@ -61,7 +61,7 @@ final class PlaygroundExampleStoreTests: XCTestCase {
         XCTAssertEqual(json["kind"] as? String, "format")
         XCTAssertEqual(json["tags"] as? [String], ["personal", "workflow:cleanedText"])
         XCTAssertEqual(json["expected"] as? String, "- Call Sam\n- Send the file")
-        XCTAssertEqual(store.load().examples.first?.raw, "first call Sam\nsecond send the file")
+        XCTAssertEqual(try store.load().examples.first?.raw, "first call Sam\nsecond send the file")
     }
 
     func testTagNamesTheWorkflowTemplate() {
@@ -86,19 +86,23 @@ final class PlaygroundExampleStoreTests: XCTestCase {
     func testUpdateExpectedChangesOnlyThatPair() throws {
         try store.append(example("mine-a"))
         try store.append(example("mine-b"))
-        try store.updateExpected(id: "mine-b", to: "Open the file Thursday.")
-        let loaded = store.load().examples
+        try store.updateExpected(of: try XCTUnwrap(try store.load().examples.last), to: "Open the file Thursday.")
+        let loaded = try store.load().examples
         XCTAssertEqual(loaded[0].expected, "Open the file on Thursday.")
+        XCTAssertEqual(loaded.map(\.line), [0, 1])
         XCTAssertEqual(loaded[1].expected, "Open the file Thursday.")
         XCTAssertTrue(loaded[1].wasEdited)
     }
 
     func testUpdateExpectedRejectsEmptyTextAndUnknownIds() throws {
         try store.append(example("mine-a"))
-        XCTAssertThrowsError(try store.updateExpected(id: "mine-a", to: "")) {
+        let saved = try XCTUnwrap(try store.load().examples.first)
+        XCTAssertThrowsError(try store.updateExpected(of: saved, to: "")) {
             XCTAssertEqual($0 as? PlaygroundExampleStore.StoreError, .emptyText)
         }
-        XCTAssertThrowsError(try store.updateExpected(id: "nope", to: "x")) {
+        var ghost = saved
+        ghost.id = "nope"
+        XCTAssertThrowsError(try store.updateExpected(of: ghost, to: "x")) {
             XCTAssertEqual($0 as? PlaygroundExampleStore.StoreError, .notFound("nope"))
         }
     }
@@ -106,9 +110,10 @@ final class PlaygroundExampleStoreTests: XCTestCase {
     func testDeleteRemovesOnePair() throws {
         try store.append(example("mine-a"))
         try store.append(example("mine-b"))
-        try store.delete(id: "mine-a")
-        XCTAssertEqual(store.load().examples.map(\.id), ["mine-b"])
-        XCTAssertThrowsError(try store.delete(id: "mine-a")) {
+        let first = try XCTUnwrap(try store.load().examples.first)
+        try store.delete(first)
+        XCTAssertEqual(try store.load().examples.map(\.id), ["mine-b"])
+        XCTAssertThrowsError(try store.delete(first)) {
             XCTAssertEqual($0 as? PlaygroundExampleStore.StoreError, .notFound("mine-a"))
         }
     }
@@ -122,19 +127,73 @@ final class PlaygroundExampleStoreTests: XCTestCase {
             }(), encoding: .utf8)
         try ("not json\n" + good + "{\"id\":\"half\"}\n").write(to: store.fileURL, atomically: true, encoding: .utf8)
 
-        XCTAssertEqual(store.load().examples.map(\.id), ["mine-a"])
-        XCTAssertEqual(store.load().unreadableLines, 2)
+        XCTAssertEqual(try store.load().examples.map(\.id), ["mine-a"])
+        XCTAssertEqual(try store.load().unreadableLines, 2)
 
         try store.append(example("mine-b"))
-        try store.updateExpected(id: "mine-a", to: "Open it.")
+        try store.updateExpected(of: try XCTUnwrap(try store.load().examples.first), to: "Open it.")
         let lines = try fileLines()
         XCTAssertEqual(lines.count, 4)
         XCTAssertEqual(lines[0], "not json")
         XCTAssertEqual(lines[2], "{\"id\":\"half\"}")
-        XCTAssertEqual(store.load().unreadableLines, 2)
+        XCTAssertEqual(try store.load().unreadableLines, 2)
 
-        try store.delete(id: "mine-b")
+        try store.delete(try XCTUnwrap(try store.load().examples.last))
         XCTAssertEqual(try fileLines().filter { $0 == "not json" || $0 == "{\"id\":\"half\"}" }.count, 2)
+    }
+
+    func testALineWithANonUTF8ByteIsUnreadableAndKeptByteForByte() throws {
+        try store.append(example("mine-a"))
+        let bad = Data("{\"id\":\"bad".utf8) + Data([0xFF, 0xFE]) + Data("\"}\n".utf8)
+        let handle = try FileHandle(forWritingTo: store.fileURL)
+        handle.seekToEndOfFile()
+        handle.write(bad)
+        try handle.close()
+
+        let loaded = try store.load()
+        XCTAssertEqual(loaded.examples.map(\.id), ["mine-a"])
+        XCTAssertEqual(loaded.unreadableLines, 1)
+
+        try store.append(example("mine-b"))
+        try store.delete(try XCTUnwrap(try store.load().examples.first))
+        let bytes = try Data(contentsOf: store.fileURL)
+        XCTAssertTrue(bytes.range(of: Data([0xFF, 0xFE])) != nil, "the unreadable line stays as it was")
+        XCTAssertEqual(try store.load().examples.map(\.id), ["mine-b"])
+        XCTAssertEqual(try store.load().unreadableLines, 1)
+    }
+
+    func testAFileThatCannotBeReadIsNeverOverwritten() throws {
+        // A folder where the file should be: it exists, so it is not "missing", and reading it fails.
+        try FileManager.default.createDirectory(at: store.fileURL, withIntermediateDirectories: true)
+        XCTAssertThrowsError(try store.load())
+        XCTAssertThrowsError(try store.append(example("mine-a")))
+        var isDirectory: ObjCBool = false
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.fileURL.path, isDirectory: &isDirectory))
+        XCTAssertTrue(isDirectory.boolValue, "nothing was written over it")
+    }
+
+    func testDeleteRemovesOnlyTheChosenLineWhenAnIdIsRepeated() throws {
+        try store.append(example("mine-dup", raw: "first take of the sentence"))
+        try store.append(example("mine-dup", raw: "second take of the sentence"))
+        try store.append(example("mine-other"))
+        let loaded = try store.load().examples
+        XCTAssertEqual(loaded.map(\.id), ["mine-dup", "mine-dup", "mine-other"])
+        XCTAssertEqual(Set(loaded.map(\.listID)).count, 3)
+
+        try store.delete(loaded[1])
+        let after = try store.load().examples
+        XCTAssertEqual(after.first?.raw, "first take of the sentence")
+        XCTAssertEqual(after.map(\.id), ["mine-dup", "mine-other"])
+    }
+
+    func testAStaleLinePositionIsRefusedAndNothingIsDeleted() throws {
+        try store.append(example("mine-a"))
+        try store.append(example("mine-b"))
+        let second = try XCTUnwrap(try store.load().examples.last)
+        try store.delete(try XCTUnwrap(try store.load().examples.first))
+        // `second` now sits on line 0 but still says line 1.
+        XCTAssertThrowsError(try store.delete(second))
+        XCTAssertEqual(try store.load().examples.map(\.id), ["mine-b"])
     }
 
     func testExportWritesOnlyReadablePairs() throws {
@@ -147,7 +206,7 @@ final class PlaygroundExampleStoreTests: XCTestCase {
 
         let destination = directory.appendingPathComponent("export.jsonl")
         XCTAssertEqual(try store.export(to: destination), 2)
-        let exported = PlaygroundExampleStore(fileURL: destination).load()
+        let exported = try PlaygroundExampleStore(fileURL: destination).load()
         XCTAssertEqual(exported.examples.map(\.id), ["mine-a", "mine-b"])
         XCTAssertEqual(exported.unreadableLines, 0)
         XCTAssertTrue(try String(contentsOf: destination, encoding: .utf8).hasSuffix("\n"))
@@ -179,6 +238,7 @@ final class PlaygroundFallbackTextTests: XCTestCase {
         for reason in FallbackReason.allCases {
             let sentence = PlaygroundFallbackText.sentence(forCode: reason.rawValue)
             XCTAssertTrue(sentence.hasSuffix("."), reason.rawValue)
+            XCTAssertTrue(reason.isExpected || sentence.contains("transcript") || sentence.contains("no text"), reason.rawValue)
             XCTAssertFalse(sentence.contains("_"), reason.rawValue)
         }
         XCTAssertTrue(PlaygroundFallbackText.sentence(forCode: "dropped").contains("changed your words"))
@@ -186,6 +246,6 @@ final class PlaygroundFallbackTextTests: XCTestCase {
     }
 
     func testAnUnknownCodeStillGetsASentence() {
-        XCTAssertTrue(PlaygroundFallbackText.sentence(forCode: "brand_new").contains("plain transcript"))
+        XCTAssertTrue(PlaygroundFallbackText.sentence(forCode: "brand_new").contains("transcript"))
     }
 }

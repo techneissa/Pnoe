@@ -259,10 +259,21 @@ struct ModeView: View {
             }
             let runtime = ModeRuntimeResolver.currentEnhancementConfiguration(
                 mode: config, enhancementService: enhancementService, aiService: aiService)
-            do {
-                let result = try await enhancementService.enhance(text, configuration: runtime)
+            // The same preparation and the same call dictation uses, so this is what would be pasted.
+            let prepared = PreparedTranscript.make(
+                config.isTextFormattingEnabled ? ParagraphFormatter.format(text) : text, modelContext: enhancementService.modelContext, respondInRecorder: false)
+            guard enhancementService.runsEnhancement(for: prepared, configuration: runtime) else {
                 return PlaygroundOutcome(
-                    output: result.text, duration: result.duration, fallbackReason: result.fallbackReason)
+                    output: prepared.transcript, duration: 0,
+                    skippedReason: prepared.skipsEnhancement
+                        ? "The take is too short or only snippets, so dictation pastes it without the model."
+                        : "AI is not set up for this workflow, so dictation pastes the transcript.")
+            }
+            do {
+                let (result, finalText) = try await enhancementService.enhanceTranscript(prepared, configuration: runtime)
+                return PlaygroundOutcome(
+                    output: finalText, duration: result.duration, fallbackReason: result.fallbackReason,
+                    rejectedText: result.rejectedText)
             } catch {
                 throw PlaygroundRunError(message: EnhancementFailureFormatter.description(for: error))
             }
