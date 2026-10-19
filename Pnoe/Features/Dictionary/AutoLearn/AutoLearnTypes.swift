@@ -44,8 +44,12 @@ struct AutoLearnFieldSnapshot: Sendable {
 }
 
 struct DetectedCorrectionCandidate: Hashable, Sendable {
+    /// The edited words with a few words of context, as the AI reviewer sees them.
     let originalText: String
     let correctedText: String
+    /// Only the words that changed. These are what Auto Learn counts and saves.
+    let heardText: String
+    let correctedPairText: String
 }
 
 struct AutoLearnReviewCandidate: Sendable {

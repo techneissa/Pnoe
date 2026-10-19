@@ -78,6 +78,10 @@ final class AutoLearnAXTextReader {
     }
 
     private func isEditable(_ element: AXUIElement) -> Bool {
+        // Password fields are never read, not even to check whether they changed.
+        guard !AutoLearnFieldGuard.isSecure(
+            subrole: copyString(kAXSubroleAttribute as CFString, from: element)
+        ) else { return false }
         if let value = copyBool("AXEditable" as CFString, from: element) { return value }
         let role = copyString(kAXRoleAttribute as CFString, from: element) ?? ""
         return role == kAXTextFieldRole || role == kAXTextAreaRole || role == kAXComboBoxRole
