@@ -20,7 +20,7 @@ struct AudioSetupView: View {
             Section {
                 MicrophoneVisibilityRows(
                     rows: audioDeviceManager.microphoneVisibilityRows,
-                    allDevicesHidden: audioDeviceManager.allDevicesHidden
+                    allHiddenFallback: audioDeviceManager.allHiddenFallback
                 ) { row, hidden in
                     audioDeviceManager.setDevice(uid: row.uid, name: row.name, hidden: hidden)
                 }
@@ -280,7 +280,10 @@ struct AudioSetupView: View {
     }
 
     private var systemDefaultSourceTitle: String {
-        guard let name = audioDeviceManager.getSystemDefaultDeviceName() else {
+        // A hidden default is never used, so its name stays out of the row.
+        guard let defaultID = audioDeviceManager.getSystemDefaultDevice(),
+            let name = audioDeviceManager.visibleDevices.first(where: { $0.id == defaultID })?.name
+        else {
             return String(localized: "System Default")
         }
         return String(format: String(localized: "System Default (%@)"), name)

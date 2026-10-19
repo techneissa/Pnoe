@@ -141,4 +141,63 @@ final class RecordingDevicePolicyTests: XCTestCase {
         XCTAssertEqual(rows.map(\.isConnected), [true, true, false, false])
         XCTAssertEqual(rows.map(\.isHidden), [false, true, true, true])
     }
+
+    func testHiddenSavedDeviceIsNotSwappedForASameModelDeviceAndUnhidingRestoresIt() {
+        let saved = InputDeviceInfo(
+            id: 10, uid: "pair-a", name: "Studio Microphone", modelUID: "studio-model", isInternalMicrophone: false)
+        let twin = InputDeviceInfo(
+            id: 11, uid: "pair-b", name: "Studio Microphone", modelUID: "studio-model", isInternalMicrophone: false)
+        func policy(hidden: Set<String>, selected: AudioDeviceID?) -> RecordingDevicePolicy {
+            var p = self.policy(.custom, devices: [builtIn, saved, twin], hidden: hidden, customUID: "pair-a", selected: selected)
+            p.customModelUID = "studio-model"
+            return p
+        }
+
+        XCTAssertNil(policy(hidden: ["pair-a"], selected: nil).findAllowedDevice(uid: "pair-a", modelUID: "studio-model"),
+            "the saved device is connected but hidden: its twin must not stand in for it")
+        XCTAssertEqual(policy(hidden: ["pair-a"], selected: nil).preferredDeviceIDs(), [])
+        XCTAssertEqual(firstChoice(policy(hidden: ["pair-a"], selected: nil)), 1)
+
+        // The selection sits on a fallback while hidden; unhiding goes back to the saved device.
+        XCTAssertEqual(firstChoice(policy(hidden: [], selected: 1)), 10)
+        XCTAssertEqual(firstChoice(policy(hidden: [], selected: 11)), 10)
+    }
+
+    func testModelUIDStillStandsInForASavedDeviceThatIsNotConnected() {
+        let twin = InputDeviceInfo(
+            id: 11, uid: "pair-b", name: "Studio Microphone", modelUID: "studio-model", isInternalMicrophone: false)
+        XCTAssertEqual(
+            RecordingDevicePolicy.find(uid: "pair-a", modelUID: "studio-model", in: [builtIn, twin], hiddenUIDs: []), twin)
+        XCTAssertNil(
+            RecordingDevicePolicy.find(uid: "pair-a", modelUID: "studio-model", in: [builtIn, twin], hiddenUIDs: ["pair-b"]))
+    }
+
+    func testAllHiddenNoticeNamesWhatRecordingUses() {
+        let all: Set<String> = ["built-in-uid", "headset-uid"]
+        XCTAssertEqual(
+            policy(.systemDefault, devices: [builtIn, headset], hidden: all).allHiddenFallback, .builtInMicrophone)
+        XCTAssertEqual(
+            policy(.systemDefault, devices: [builtIn, headset], hidden: all, lidClosed: true).allHiddenFallback,
+            .input(name: "Wireless Headset"))
+        XCTAssertEqual(
+            policy(.systemDefault, devices: [headset], hidden: ["headset-uid"]).allHiddenFallback,
+            .input(name: "Wireless Headset"))
+        XCTAssertEqual(
+            policy(.systemDefault, devices: [builtIn], hidden: ["built-in-uid"], lidClosed: true).allHiddenFallback,
+            .unavailable)
+        XCTAssertNil(policy(.systemDefault, hidden: ["headset-uid"]).allHiddenFallback)
+    }
+
+    func testMalformedStoredHiddenDevicesReadAsEmpty() throws {
+        let suite = "PnoeHiddenDevicesMalformed-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        defaults.set("not a dictionary", forKey: "hiddenAudioDeviceNamesByUID")
+        XCTAssertEqual(defaults.hiddenAudioDeviceNamesByUID, [:])
+        defaults.set(["headset-uid", "usb-uid"], forKey: "hiddenAudioDeviceNamesByUID")
+        XCTAssertEqual(defaults.hiddenAudioDeviceNamesByUID, [:])
+        defaults.set(["headset-uid": 7], forKey: "hiddenAudioDeviceNamesByUID")
+        XCTAssertEqual(defaults.hiddenAudioDeviceNamesByUID, [:])
+    }
 }

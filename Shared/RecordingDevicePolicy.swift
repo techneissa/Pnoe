@@ -31,6 +31,15 @@ struct InputDeviceInfo: Equatable {
     let isInternalMicrophone: Bool
 }
 
+/// The device recording falls back to when every input is hidden.
+enum AllHiddenFallback: Equatable {
+    case builtInMicrophone
+    /// A Mac without a built-in microphone, or with the lid closed.
+    case input(name: String)
+    /// Only the built-in microphone is connected and the lid is closed.
+    case unavailable
+}
+
 /// One row of the audio settings device list.
 struct MicrophoneVisibilityRow: Equatable, Identifiable {
     let uid: String
@@ -74,14 +83,21 @@ struct RecordingDevicePolicy {
 
     /// Matches by UID, then by model UID, among the allowed devices.
     func findAllowedDevice(uid: String, modelUID: String?) -> InputDeviceInfo? {
-        Self.find(uid: uid, modelUID: modelUID, in: allowedDevices)
+        Self.find(uid: uid, modelUID: modelUID, in: devices, hiddenUIDs: hiddenUIDs)
     }
 
-    static func find(uid: String, modelUID: String?, in devices: [InputDeviceInfo]) -> InputDeviceInfo? {
-        if !uid.isEmpty, let found = devices.first(where: { $0.uid == uid }) {
-            return found
+    /// The model UID only stands in for a saved device that is not connected. A saved device that
+    /// is connected but hidden finds nothing, so a visible device of the same model never takes
+    /// its place and the saved choice comes back once it is shown again.
+    static func find(
+        uid: String, modelUID: String?, in devices: [InputDeviceInfo], hiddenUIDs: Set<String>
+    ) -> InputDeviceInfo? {
+        if !uid.isEmpty, let connected = devices.first(where: { $0.uid == uid }) {
+            return hiddenUIDs.contains(connected.uid) ? nil : connected
         }
-        if let modelUID, !modelUID.isEmpty, let found = devices.first(where: { $0.modelUID == modelUID }) {
+        if let modelUID, !modelUID.isEmpty,
+            let found = devices.first(where: { $0.modelUID == modelUID && !hiddenUIDs.contains($0.uid) })
+        {
             return found
         }
         return nil
@@ -114,6 +130,16 @@ struct RecordingDevicePolicy {
         let internalMicrophones = pool.filter(\.isInternalMicrophone).map(\.id)
         let otherInputs = pool.filter { !$0.isInternalMicrophone }.map(\.id)
         return isClamshellClosed ? otherInputs + internalMicrophones : internalMicrophones + otherInputs
+    }
+
+    /// What recording uses when every connected device is hidden, for the settings notice.
+    /// Nil when some device is allowed.
+    var allHiddenFallback: AllHiddenFallback? {
+        guard allDevicesHidden else { return nil }
+        let usable = fallbackDeviceIDs().compactMap { id in devices.first { $0.id == id } }
+            .first { !(isClamshellClosed && $0.isInternalMicrophone) }
+        guard let usable else { return .unavailable }
+        return usable.isInternalMicrophone ? .builtInMicrophone : .input(name: usable.name)
     }
 
     /// Settings list: every connected device, then the hidden ones that are not connected now,

@@ -43,6 +43,11 @@ class AudioDeviceManager: ObservableObject {
         availableDevices.first { $0.id == deviceID }.map { isDeviceHidden(uid: $0.uid) } ?? false
     }
 
+    /// What recording uses while every device is hidden; nil when some device is allowed.
+    var allHiddenFallback: AllHiddenFallback? {
+        recordingDevicePolicy().allHiddenFallback
+    }
+
     var microphoneVisibilityRows: [MicrophoneVisibilityRow] {
         RecordingDevicePolicy.visibilityRows(
             connected: inputDeviceInfos(), hiddenNamesByUID: hiddenDeviceNamesByUID)
@@ -582,16 +587,14 @@ class AudioDeviceManager: ObservableObject {
         return uid as String?
     }
 
-    /// Finds a connected device that is not hidden, by UID and then by model UID.
+    /// Finds a connected device that is not hidden, by UID and then by model UID. A saved device
+    /// that is connected but hidden finds nothing: see `RecordingDevicePolicy.find`.
     func findAvailableDevice(uid: String, modelUID: String?) -> (id: AudioDeviceID, uid: String, name: String)?
     {
-        guard let found = RecordingDevicePolicy.find(uid: uid, modelUID: modelUID, in: visibleInputDeviceInfos())
+        guard let found = RecordingDevicePolicy.find(
+            uid: uid, modelUID: modelUID, in: inputDeviceInfos(), hiddenUIDs: Set(hiddenDeviceNamesByUID.keys))
         else { return nil }
         return availableDevices.first { $0.id == found.id }
-    }
-
-    private func visibleInputDeviceInfos() -> [InputDeviceInfo] {
-        inputDeviceInfos().filter { !isDeviceHidden(uid: $0.uid) }
     }
 
     private func rebindPrioritizedDevice(savedUID: String, newUID: String, newModelUID: String?) {
