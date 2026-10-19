@@ -1,3 +1,4 @@
+import FormatterModels
 import SwiftUI
 
 struct ModeConfigEditorView: View {
@@ -112,10 +113,31 @@ struct ModeConfigEditorView: View {
 
         draft.ensurePromptSelection(firstPromptId: snapshot.firstPromptId)
 
+        if case .add = mode, draft.prefersLocalModel {
+            preselectInstalledOllamaModel()
+        }
+
         if let selectedModelName = draft.selectedTranscriptionModelName,
             let model = snapshot.transcriptionModel(named: selectedModelName)
         {
             draft.useCompatibleLanguage(for: model)
+        }
+    }
+
+    /// A template built for a local model starts on the smallest suitable Gemma or Qwen model Ollama has
+    /// already pulled. Nothing is downloaded or started; with none installed the provider stays as it was.
+    private func preselectInstalledOllamaModel() {
+        let startingProvider = draft.selectedAIProvider
+        let endpoint = URL(string: AIProvider.ollama.baseURL) ?? OllamaModelDiscovery.defaultEndpoint
+        Task { @MainActor in
+            guard
+                let choice = await TemplateProviderPreselection.choose(discovery: {
+                    await OllamaModelDiscovery(endpoint: endpoint).fetch()
+                })
+            else { return }
+            // Ollama only counts as a connected provider once the app has looked at it.
+            _ = await aiService.refreshOllamaAvailability()
+            draft.preselect(choice, startingProvider: startingProvider)
         }
     }
 

@@ -14,10 +14,6 @@ final class WorkflowPickerPreviewTests: XCTestCase {
             summary: "Fast transcription with no AI enhancement.",
             detail: "Use this when you want the quickest possible voice-to-text result."),
         WorkflowTemplateOption(
-            id: UUID(), title: "Enhancement", icon: "sparkles",
-            summary: "Clean up dictated text while preserving your meaning.",
-            detail: "Use this for everyday writing when you want grammar, flow, and light formatting improved."),
-        WorkflowTemplateOption(
             id: UUID(), title: "Email", icon: "envelope.fill",
             summary: "Turn a rough thought into a clean email.",
             detail: "Use this after selecting relevant text or opening the related window."),
@@ -29,7 +25,7 @@ final class WorkflowPickerPreviewTests: XCTestCase {
             id: UUID(), title: "Assistant", icon: "bubble.left.and.bubble.right.fill",
             summary: "Ask a question and keep the answer in the recorder.",
             detail: "Use this for answers, summaries, and follow-ups."),
-    ]
+    ] + LocalWorkflowTemplate.allCases.map(\.pickerOption)
 
     private var outputDirectory: URL {
         if let path = ProcessInfo.processInfo.environment["PNOE_WORKFLOW_PNG_DIR"], !path.isEmpty {
@@ -77,12 +73,12 @@ final class WorkflowPickerPreviewTests: XCTestCase {
 
     func testRenderTemplatePicker() throws {
         let picker = WorkflowTemplatePickerView(options: Self.options, onSelect: { _ in }, onDismiss: {})
-        try render(picker, size: CGSize(width: 400, height: 260), name: "template-picker")
-        try render(picker, size: CGSize(width: 400, height: 260), name: "template-picker-dark", dark: true)
+        try render(picker, size: CGSize(width: 400, height: 430), name: "template-picker")
+        try render(picker, size: CGSize(width: 400, height: 430), name: "template-picker-dark", dark: true)
     }
 
     func testRenderTemplateInfoPopover() throws {
-        let option = Self.options[2]
+        let option = Self.options[1]
         let view = VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Image(systemName: option.icon).frame(width: 28, height: 28)

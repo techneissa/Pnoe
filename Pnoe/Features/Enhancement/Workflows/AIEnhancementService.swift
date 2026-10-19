@@ -174,7 +174,12 @@ class AIEnhancementService: ObservableObject {
                 ""
             }
 
-        return [prompt.finalPromptText, customVocabularySection, contextSection]
+        let targetLanguageSection =
+            prompt.id == PromptTemplates.translationPromptId
+            ? "<TARGET_LANGUAGE>\(configuration.mode?.translationTargetLanguage ?? TranslationLanguages.defaultName)</TARGET_LANGUAGE>"
+            : ""
+
+        return [prompt.finalPromptText, targetLanguageSection, customVocabularySection, contextSection]
             .filter { !$0.isEmpty }
             .joined(separator: "\n\n")
     }
@@ -229,9 +234,12 @@ class AIEnhancementService: ObservableObject {
                     "OpenRouter completed requestedModel=\(modelName, privacy: .public) routedProvider=\(routedProvider, privacy: .public) routingAttempt=\(routingAttempt, privacy: .public) reasoningTokens=\(reasoningTokens, privacy: .public)"
                 )
             }
-            let filteredResult = AIEnhancementOutputFilter.filter(
+            var filteredResult = AIEnhancementOutputFilter.filter(
                 completion.text.trimmingCharacters(in: .whitespacesAndNewlines)
             )
+            if PromptTemplates.rewritingPromptIds.contains(prompt.id) {
+                filteredResult = RewriteOutputSanitizer.sanitize(filteredResult, input: text)
+            }
             guard provider == .ollama || provider == .localCLI || !filteredResult.isEmpty else {
                 throw EnhancementError.enhancementFailed
             }
@@ -369,6 +377,10 @@ class AIEnhancementService: ObservableObject {
         configuration: EnhancementRuntimeConfiguration,
         contextSnapshot: RecordingContextSnapshot? = nil
     ) async throws -> AIEnhancementResult {
+        if configuration.prompt?.id == PromptTemplates.cleanedTextPromptId {
+            return try await enhanceKeepingWords(text, configuration: configuration)
+        }
+
         let startTime = Date()
         let promptName = configuration.prompt?.title
 
@@ -398,6 +410,51 @@ class AIEnhancementService: ObservableObject {
             )
             throw error
         }
+    }
+
+    /// Cleaned Text: the model may only fix punctuation, capitals, fillers and spoken corrections. A result
+    /// that fails any of the formatter package's guards is replaced by the plain transcript.
+    private func enhanceKeepingWords(
+        _ text: String,
+        configuration: EnhancementRuntimeConfiguration
+    ) async throws -> AIEnhancementResult {
+        guard isConfigured(for: configuration), let provider = configuration.provider else {
+            throw EnhancementError.notConfigured
+        }
+        let startTime = Date()
+        let promptName = configuration.prompt?.title
+        let modelName = configuration.modelName ?? provider.defaultModel
+        let timeout = requestTimeout
+        let aiService = self.aiService
+        let cleanup = GuardedCleanup.make(
+            ollamaBaseURL: provider == .ollama ? provider.baseURL : nil,
+            modelName: modelName
+        ) { system, turns, deadline in
+            do {
+                let completion = try await aiService.performChatCompletion(
+                    provider: provider,
+                    modelName: modelName,
+                    messages: turns.map { ChatMessage(role: $0.role, content: $0.content) },
+                    systemPrompt: system,
+                    timeout: min(timeout, deadline)
+                )
+                return ChatCompletionRuntime.Completion(text: completion.text, finishReason: completion.finishReason)
+            } catch EnhancementError.outputTruncated {
+                return ChatCompletionRuntime.Completion(text: "", finishReason: "length")
+            }
+        }
+        let vocabulary = customVocabularyService.words(from: modelContext)
+        let result = await cleanup.clean(text, vocabulary: vocabulary)
+        if let reason = result.fallbackReason {
+            logger.info("Cleaned Text used the plain transcript, reason=\(reason, privacy: .public)")
+        }
+        return AIEnhancementResult(
+            text: result.text,
+            duration: Date().timeIntervalSince(startTime),
+            promptName: promptName,
+            systemMessage: result.systemPrompt,
+            userMessage: text
+        )
     }
 
     func captureScreenContext() async {

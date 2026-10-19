@@ -6,8 +6,34 @@ enum StarterModeKind: String, CaseIterable, Identifiable {
     case email
     case rewrite
     case assistant
+    case cleanedText
+    case checklist
+    case meetingNotes
+    case summary
+    case translation
+    case emailReply
 
     var id: String { rawValue }
+
+    /// The local-model template behind this kind, for the six added with local AI.
+    var local: LocalWorkflowTemplate? {
+        switch self {
+        case .cleanedText: .cleanedText
+        case .checklist: .checklist
+        case .meetingNotes: .meetingNotes
+        case .summary: .summary
+        case .translation: .translation
+        case .emailReply: .emailReply
+        case .clean, .enhance, .email, .rewrite, .assistant: nil
+        }
+    }
+
+    /// Templates built for a local model: the editor looks for an installed Ollama chat model and
+    /// preselects it, so they run on this Mac with no setup.
+    var prefersLocalModel: Bool { local != nil }
+
+    /// Translation asks which language to write.
+    var asksForTargetLanguage: Bool { local?.asksForTargetLanguage ?? false }
 }
 
 struct StarterModeTemplate: Identifiable {
@@ -44,6 +70,25 @@ struct StarterModeTemplate: Identifiable {
 }
 
 extension StarterModeTemplate {
+    /// A paste workflow with AI on, from one of the local-model templates. Its single sentence goes behind
+    /// the picker's (i); there is no longer guidance.
+    init(_ kind: StarterModeKind, _ local: LocalWorkflowTemplate) {
+        self.init(
+            kind: kind,
+            id: local.templateId,
+            name: local.title,
+            icon: .symbol(local.symbol),
+            description: local.summary,
+            guidance: "",
+            promptId: local.promptId,
+            outputMode: .paste,
+            usesAIEnhancement: true,
+            useSelectedTextContext: local.readsEmailContext,
+            useScreenCapture: local.readsEmailContext,
+            isDefault: false
+        )
+    }
+
     var pickerOption: WorkflowTemplateOption {
         WorkflowTemplateOption(
             id: id,
@@ -51,7 +96,7 @@ extension StarterModeTemplate {
             icon: icon.value,
             isEmoji: icon.kind == .emoji,
             summary: description,
-            detail: guidance
+            detail: guidance.isEmpty ? nil : guidance
         )
     }
 }
@@ -135,7 +180,19 @@ enum StarterModeCatalog {
             useScreenCapture: false,
             isDefault: false
         ),
+        StarterModeTemplate(.cleanedText, .cleanedText),
+        StarterModeTemplate(.checklist, .checklist),
+        StarterModeTemplate(.meetingNotes, .meetingNotes),
+        StarterModeTemplate(.summary, .summary),
+        StarterModeTemplate(.translation, .translation),
+        StarterModeTemplate(.emailReply, .emailReply),
     ]
+
+    /// The templates the New Workflow picker offers. Enhancement stays in the catalog for onboarding and
+    /// for workflows already created from it, but Cleaned Text replaces it in the picker.
+    static var pickerTemplates: [StarterModeTemplate] {
+        templates.filter { $0.kind != .enhance }
+    }
 
     static var ids: Set<UUID> {
         Set(templates.map(\.id))

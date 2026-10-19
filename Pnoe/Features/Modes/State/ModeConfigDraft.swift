@@ -19,11 +19,14 @@ struct ModeConfigDraft {
     var useScreenCapture: Bool
     var selectedAIProvider: String?
     var selectedAIModel: String?
+    var translationTargetLanguage: String?
     var outputMode: ModeOutputMode
     var autoSendKey: FinishAndSendKey
     var customCommand: String
     var isDefault: Bool
     var isTranscriptionFormattingExpanded: Bool
+    /// Set when the draft starts from a template built for a local model (not saved).
+    var prefersLocalModel = false
 
     private var sourceConfig: ModeConfig?
 
@@ -50,6 +53,7 @@ struct ModeConfigDraft {
             useScreenCapture = true
             selectedAIProvider = inheritedConfig?.selectedAIProvider
             selectedAIModel = inheritedConfig?.selectedAIModel
+            translationTargetLanguage = nil
             outputMode = .paste
             autoSendKey = .none
             customCommand = inheritedConfig?.customCommand?.command ?? ""
@@ -77,6 +81,7 @@ struct ModeConfigDraft {
             useScreenCapture = latestConfig.useScreenCapture
             selectedAIProvider = latestConfig.selectedAIProvider
             selectedAIModel = latestConfig.selectedAIModel
+            translationTargetLanguage = latestConfig.translationTargetLanguage
             outputMode = latestConfig.outputMode
             autoSendKey = latestConfig.autoSendKey
             customCommand = latestConfig.customCommand?.command ?? ""
@@ -101,7 +106,9 @@ struct ModeConfigDraft {
         }
         useSelectedTextContext = template.useSelectedTextContext
         useScreenCapture = template.useScreenCapture
-        useClipboardContext = template.kind == .email
+        useClipboardContext = template.kind == .email || template.kind == .emailReply
+        prefersLocalModel = template.kind.prefersLocalModel
+        translationTargetLanguage = template.kind.asksForTargetLanguage ? TranslationLanguages.defaultName : nil
         outputMode = template.outputMode
     }
 
@@ -132,6 +139,16 @@ struct ModeConfigDraft {
         }
 
         selectedAIModel = snapshot.selectedModel(for: provider)
+    }
+
+    /// Points a new AI workflow at an installed Ollama model. Skipped when the provider was changed since
+    /// `startingProvider` was read, so a slow lookup never overrides a choice the user already made.
+    mutating func preselect(_ choice: PreselectedProvider, startingProvider: String?) {
+        guard prefersLocalModel, isAIEnhancementEnabled,
+            TemplateProviderPreselection.shouldApply(currentProvider: selectedAIProvider, startingProvider: startingProvider)
+        else { return }
+        selectedAIProvider = choice.providerName
+        selectedAIModel = choice.modelName
     }
 
     mutating func inheritUsableTranscriptionModelSelection(from snapshot: ModeFormWarmupSnapshot) {
@@ -179,7 +196,7 @@ struct ModeConfigDraft {
 
         switch mode {
         case .add:
-            return ModeConfig(
+            var config = ModeConfig(
                 id: id,
                 name: name,
                 icon: icon,
@@ -203,6 +220,8 @@ struct ModeConfigDraft {
                 customCommand: savedCustomCommand,
                 isDefault: savedIsDefault
             )
+            config.translationTargetLanguage = translationTargetLanguage
+            return config
 
         case .edit(let config):
             var updatedConfig = sourceConfig ?? config
@@ -223,6 +242,7 @@ struct ModeConfigDraft {
             updatedConfig.useScreenCapture = useScreenCapture
             updatedConfig.selectedAIProvider = selectedAIProvider
             updatedConfig.selectedAIModel = selectedAIModel
+            updatedConfig.translationTargetLanguage = translationTargetLanguage
             updatedConfig.outputMode = outputMode
             updatedConfig.autoSendKey = savedAutoSendKey
             updatedConfig.customCommand = savedCustomCommand

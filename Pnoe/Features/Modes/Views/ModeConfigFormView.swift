@@ -418,6 +418,14 @@ struct ModeConfigFormView: View {
                 if let provider = configuredSelectedAIProvider {
                     aiModelPicker(for: provider)
                     promptPicker
+                    if draft.selectedPromptId == PromptTemplates.cleanedTextPromptId {
+                        Text("Uses Pnoe's built-in cleanup that keeps your words")
+                            .font(.callout)
+                            .foregroundColor(.secondary)
+                    }
+                    if draft.selectedPromptId == PromptTemplates.translationPromptId {
+                        translationLanguagePicker
+                    }
                     contextAwarenessRow
                 }
             }
@@ -525,7 +533,7 @@ struct ModeConfigFormView: View {
                 .labelsHidden()
             }
 
-            if let selectedPrompt {
+            if let selectedPrompt, selectedPrompt.id != PromptTemplates.cleanedTextPromptId {
                 Button {
                     openPromptEditor(.edit(selectedPrompt))
                 } label: {
@@ -543,6 +551,20 @@ struct ModeConfigFormView: View {
             }
         }
         .focusEffectDisabled()
+    }
+
+    private var translationLanguagePicker: some View {
+        Picker(
+            "Translate To",
+            selection: Binding(
+                get: { draft.translationTargetLanguage ?? TranslationLanguages.defaultName },
+                set: { draft.translationTargetLanguage = $0 }
+            )
+        ) {
+            ForEach(TranslationLanguages.names, id: \.self) { name in
+                Text(TranslationLanguages.displayName(for: name)).tag(name)
+            }
+        }
     }
 
     private var contextAwarenessRow: some View {

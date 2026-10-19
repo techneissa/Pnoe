@@ -15,6 +15,11 @@ class CustomVocabularyService {
         return "Important Vocabulary: \(wordsText)"
     }
 
+    /// The dictionary terms, for code that protects them from a model.
+    func words(from context: ModelContext) -> [String] {
+        getCustomVocabularyWords(from: context) ?? []
+    }
+
     private func getCustomVocabularyWords(from context: ModelContext) -> [String]? {
         let descriptor = FetchDescriptor<VocabularyWord>(sortBy: [SortDescriptor(\VocabularyWord.word)])
 
