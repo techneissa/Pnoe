@@ -122,7 +122,7 @@ extension WorkflowPlaygroundPreviewTests {
 
     private func popover(query: String) -> some View {
         PlaygroundModelPopoverContent(
-            choices: Self.popoverChoices, selectedID: Self.popoverChoices[3].id, initialQuery: query,
+            choices: Self.popoverChoices, selectedID: Self.popoverChoices[3].id, initialQuery: query, startsShown: true,
             onSelect: { _ in }, onClose: {}
         )
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))

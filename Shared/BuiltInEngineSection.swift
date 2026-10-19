@@ -105,11 +105,13 @@ struct BuiltInModelRowLabel: View {
                 if let quantization = row.quantization {
                     BuiltInQuantizationBadge(quantization: quantization)
                 }
-                if showsCheckmark, isSelected {
+                if showsCheckmark {
                     Spacer(minLength: 4)
-                    Image(systemName: "checkmark")
+                    // A quiet circle that becomes a check mark on the chosen row.
+                    Image(systemName: isSelected ? "checkmark" : "circle")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary.opacity(0.35))
+                        .motionSymbolReplace(value: isSelected)
                 }
             }
             HStack(spacing: 10) {
@@ -137,6 +139,7 @@ struct BuiltInModelPopoverContent: View {
     let rows: [BuiltInModelRow]
     let selectedID: String?
     var initialQuery = ""
+    var startsShown = false
     let onSelect: (BuiltInModelRow) -> Void
     let onClose: () -> Void
 
@@ -148,7 +151,8 @@ struct BuiltInModelPopoverContent: View {
             searchText: { [$0.name, $0.quantization ?? "", $0.sourceLabel].joined(separator: " ") },
             emptyText: rows.isEmpty ? "No models found" : nil,
             onSelect: onSelect,
-            onClose: onClose
+            onClose: onClose,
+            startsShown: startsShown
         ) { row, isSelected in
             BuiltInModelRowLabel(row: row, isSelected: isSelected, showsCheckmark: true)
         }
@@ -190,6 +194,7 @@ struct BuiltInModelPicker: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .motionHover(cornerRadius: 6, outset: 4)
         .popover(isPresented: $isOpen, arrowEdge: .bottom) {
             BuiltInModelPopoverContent(
                 rows: rows, selectedID: selection,
@@ -211,14 +216,25 @@ struct BuiltInDownloadRowState: Equatable {
     let state: FormatterModelDownloadState
 }
 
-/// When the download row is shown: nothing found on the Mac yet, or a download that is running, paused,
-/// failed or done and not listed yet.
+/// When the download row is shown: nothing found on the Mac yet, or a download that is running, paused, failed
+/// or finished (the row then says Downloaded and offers Remove, the only place that frees the 3 GB).
 enum BuiltInDownloadVisibility {
     static func isVisible(installedCount: Int, state: FormatterModelDownloadState) -> Bool {
         switch state {
         case .notInstalled: installedCount == 0
-        case .downloading, .paused, .verifying, .failed: true
-        case .ready: false
+        case .downloading, .paused, .verifying, .failed, .ready: true
+        }
+    }
+}
+
+extension FormatterModelDownloadState {
+    /// Where the download is, for the symbol effects: running while it downloads, waits or checks.
+    var motionPhase: MotionPhase {
+        switch self {
+        case .notInstalled: .idle
+        case .downloading, .paused, .verifying: .running
+        case .ready: .finished
+        case .failed: .failed
         }
     }
 }
@@ -262,15 +278,32 @@ struct BuiltInDownloadRow: View {
     let onDownload: () -> Void
     let onCancel: () -> Void
     let onRemove: () -> Void
+    @State private var justFinished = false
+
+    private var phase: MotionPhase { download.state.motionPhase }
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(download.name)
-                Text(statusText)
-                    .font(.callout)
-                    .foregroundStyle(isFailure ? Color.red : Color.secondary)
-                    .lineLimit(2)
+                HStack(spacing: 5) {
+                    Text(download.name)
+                    if phase == .finished {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .motionBounce(when: justFinished)
+                            .motionFade()
+                    }
+                }
+                HStack(spacing: 4) {
+                    if isFailure {
+                        Image(systemName: Motion.symbol(for: .failed, idle: ""))
+                            .motionJobSymbol(.failed)
+                    }
+                    Text(statusText)
+                        .lineLimit(2)
+                }
+                .font(.callout)
+                .foregroundStyle(isFailure ? Color.red : Color.secondary)
                 if let fraction {
                     ProgressView(value: fraction)
                         .progressViewStyle(.linear)
@@ -281,6 +314,12 @@ struct BuiltInDownloadRow: View {
             action
         }
         .focusEffectDisabled()
+        .motion(.reveal, value: phase)
+        .onChange(of: download.state) { old, new in
+            // The finish bounce plays when a download ends, not each time the editor opens on a finished one.
+            if old.motionPhase == .running, new == .ready { justFinished = true }
+            if new != .ready { justFinished = false }
+        }
     }
 
     private var isFailure: Bool {
@@ -312,16 +351,30 @@ struct BuiltInDownloadRow: View {
     private var action: some View {
         switch download.state {
         case .notInstalled:
-            Button("Download", action: onDownload)
+            jobButton("Download", action: onDownload)
         case .downloading, .paused:
-            Button("Cancel", action: onCancel)
+            jobButton("Cancel", action: onCancel)
         case .verifying:
             ProgressView().controlSize(.small)
         case .ready:
             Button("Remove", role: .destructive, action: onRemove)
+                .motionHover(cornerRadius: 6)
         case .failed:
-            Button("Try Again", action: onDownload)
+            jobButton("Retry", action: onDownload)
         }
+    }
+
+    /// The download button: its symbol is the job's (download, cancel while it runs, the error symbol after a
+    /// failure), pulsing while it runs and wiggling once when it fails.
+    private func jobButton(_ title: LocalizedStringKey, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Text(title)
+                Image(systemName: Motion.symbol(for: phase, idle: "arrow.down.circle", running: "xmark.circle"))
+                    .motionJobSymbol(phase)
+            }
+        }
+        .motionHover(cornerRadius: 6)
     }
 }
 

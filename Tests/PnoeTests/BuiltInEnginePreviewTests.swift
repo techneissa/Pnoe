@@ -58,7 +58,7 @@ final class BuiltInEnginePreviewTests: XCTestCase {
     private struct PopoverCard: View {
         let query: String
         var body: some View {
-            BuiltInModelPopoverContent(rows: BuiltInEnginePreviewTests.installed, selectedID: "a", initialQuery: query, onSelect: { _ in }, onClose: {})
+            BuiltInModelPopoverContent(rows: BuiltInEnginePreviewTests.installed, selectedID: "a", initialQuery: query, startsShown: true, onSelect: { _ in }, onClose: {})
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
                 .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.15)))
                 .padding(20)
@@ -121,6 +121,7 @@ final class BuiltInEnginePreviewTests: XCTestCase {
             ("builtin-downloading", FormatterModelDownloadState.downloading(fraction: 0.42)),
             ("builtin-paused", .paused),
             ("builtin-failed", .failed("Not enough free disk space. The download needs 4 GB free.")),
+            ("builtin-finished", .ready),
         ] {
             let view = Harness(providers: providers, rows: Array(Self.installed.prefix(1)), selection: "a", download: gemma(state))
             try render(view, size: NSSize(width: 560, height: 420), to: name)

@@ -24,12 +24,14 @@ struct SearchablePopoverContent<Item: Identifiable, Row: View>: View where Item.
     @ViewBuilder let row: (Item, _ isSelected: Bool) -> Row
     @State private var query: String
     @State private var highlighted: String?
+    @State private var isShown: Bool
     @FocusState private var searchFocused: Bool
 
     init(
         items: [Item], selectedID: String?, initialQuery: String = "",
         searchText: @escaping (Item) -> String, emptyText: LocalizedStringKey? = nil,
         onSelect: @escaping (Item) -> Void, onClose: @escaping () -> Void,
+        startsShown: Bool = false,
         @ViewBuilder row: @escaping (Item, _ isSelected: Bool) -> Row
     ) {
         self.items = items
@@ -40,6 +42,8 @@ struct SearchablePopoverContent<Item: Identifiable, Row: View>: View where Item.
         self.onClose = onClose
         self.row = row
         _query = State(initialValue: initialQuery)
+        // The popover fades in with a small move when it opens; an offscreen render starts shown.
+        _isShown = State(initialValue: startsShown)
     }
 
     private var matches: [Item] { items.filter { SearchWords.matches(searchText($0), query: query) } }
@@ -93,7 +97,7 @@ struct SearchablePopoverContent<Item: Identifiable, Row: View>: View where Item.
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .onHover { inside in if inside { highlighted = item.id } }
+                            .motionHover(cornerRadius: 6)
                         }
                     }
                     .padding(6)
@@ -102,7 +106,14 @@ struct SearchablePopoverContent<Item: Identifiable, Row: View>: View where Item.
             }
         }
         .frame(width: 400)
-        .onAppear { searchFocused = true }
+        .opacity(isShown ? 1 : 0)
+        .offset(y: isShown ? 0 : -4)
+        .motion(.panel, value: isShown)
+        .motion(.hover, value: current?.id)
+        .onAppear {
+            searchFocused = true
+            isShown = true
+        }
         .onKeyPress(.downArrow) { move(by: 1) }
         .onKeyPress(.upArrow) { move(by: -1) }
         .onExitCommand(perform: onClose)

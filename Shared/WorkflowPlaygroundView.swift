@@ -10,22 +10,22 @@ struct PlaygroundModelPopoverContent: View {
     let choices: [PlaygroundModelChoice]
     let selectedID: String?
     var initialQuery = ""
+    var startsShown = false
     let onSelect: (PlaygroundModelChoice) -> Void
     let onClose: () -> Void
 
     var body: some View {
         SearchablePopoverContent(
             items: choices, selectedID: selectedID, initialQuery: initialQuery,
-            searchText: { $0.label }, onSelect: onSelect, onClose: onClose
+            searchText: { $0.label }, onSelect: onSelect, onClose: onClose, startsShown: startsShown
         ) { choice, isSelected in
             HStack(spacing: 6) {
                 Text(choice.label).lineLimit(1).truncationMode(.middle)
                 Spacer(minLength: 4)
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
-                }
+                Image(systemName: isSelected ? "checkmark" : "circle")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary.opacity(0.35))
+                    .motionSymbolReplace(value: isSelected)
             }
         }
     }
@@ -179,6 +179,7 @@ struct WorkflowPlaygroundView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .motionHover(cornerRadius: 6, outset: 4)
             .fixedSize()
             .popover(isPresented: $isModelPopoverOpen, arrowEdge: .bottom) {
                 PlaygroundModelPopoverContent(

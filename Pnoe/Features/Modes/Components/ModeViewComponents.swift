@@ -469,7 +469,7 @@ struct ConfigurationRow: View {
 
                 if isHovering {
                     editModeButton
-                        .transition(.opacity)
+                        .motionFade()
                 }
             }
             .contentShape(Rectangle())
@@ -490,7 +490,7 @@ struct ConfigurationRow: View {
         }
         .opacity(config.isEnabled ? 1.0 : 0.70)
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.12)) {
+            Motion.animate(.hover) {
                 isHovering = hovering
             }
         }

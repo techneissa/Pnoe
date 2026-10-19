@@ -217,7 +217,25 @@ final class BuiltInSelectionTests: XCTestCase {
         XCTAssertFalse(Visibility.isVisible(installedCount: 2, state: .notInstalled))
         XCTAssertTrue(Visibility.isVisible(installedCount: 2, state: .downloading(fraction: 0.4)))
         XCTAssertTrue(Visibility.isVisible(installedCount: 2, state: .failed("no space")))
-        XCTAssertFalse(Visibility.isVisible(installedCount: 0, state: .ready))
+        // A finished download shows Downloaded and Remove.
+        XCTAssertTrue(Visibility.isVisible(installedCount: 0, state: .ready))
+    }
+}
+
+final class BuiltInDownloadMotionTests: XCTestCase {
+    func testTheDownloadFollowsItsPhasesForTheSymbolEffects() {
+        XCTAssertEqual(FormatterModelDownloadState.notInstalled.motionPhase, .idle)
+        for state in [FormatterModelDownloadState.downloading(fraction: 0.3), .paused, .verifying] {
+            XCTAssertEqual(state.motionPhase, .running, "\(state)")
+        }
+        XCTAssertEqual(FormatterModelDownloadState.ready.motionPhase, .finished)
+        XCTAssertEqual(FormatterModelDownloadState.failed("no space").motionPhase, .failed)
+        // Nothing plays at idle, a loop only while it runs, one pass for a finish or a failure.
+        XCTAssertEqual(Motion.symbolEffect(for: FormatterModelDownloadState.notInstalled.motionPhase, reduceMotion: false), .none)
+        XCTAssertEqual(Motion.symbolEffect(for: FormatterModelDownloadState.paused.motionPhase, reduceMotion: false), .pulse)
+        XCTAssertEqual(Motion.symbolEffect(for: FormatterModelDownloadState.ready.motionPhase, reduceMotion: false), .bounce)
+        XCTAssertEqual(Motion.symbolEffect(for: FormatterModelDownloadState.failed("x").motionPhase, reduceMotion: false), .wiggle)
+        XCTAssertEqual(Motion.symbol(for: .failed, idle: "arrow.down.circle", running: "xmark.circle"), "exclamationmark.triangle")
     }
 }
 
