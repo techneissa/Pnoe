@@ -5,8 +5,13 @@ final class WorkflowPlaygroundModelTests: XCTestCase {
     private var directory: URL!
     private var store: PlaygroundExampleStore!
 
-    private let cleaned = PlaygroundWorkflow(id: UUID(), name: "Cleaned Text", symbol: "text.badge.checkmark", template: .cleanedText)
-    private let summary = PlaygroundWorkflow(id: UUID(), name: "Summary", symbol: "text.alignleft", template: .summary)
+    private let gemma = PlaygroundModelChoice(provider: "Ollama", model: "gemma3:4b")
+    private let qwen = PlaygroundModelChoice(provider: "Ollama", model: "qwen3:4b")
+    private let claude = PlaygroundModelChoice(provider: "Anthropic", model: "claude-haiku-5-5")
+    private lazy var cleaned = PlaygroundWorkflow(
+        id: UUID(), name: "Cleaned Text", symbol: "text.badge.checkmark", template: .cleanedText, defaultChoice: gemma)
+    private lazy var summary = PlaygroundWorkflow(
+        id: UUID(), name: "Summary", symbol: "text.alignleft", template: .summary, defaultChoice: claude)
 
     override func setUpWithError() throws {
         directory = FileManager.default.temporaryDirectory.appendingPathComponent("pnoe-playground-model-\(UUID().uuidString)")
@@ -19,11 +24,12 @@ final class WorkflowPlaygroundModelTests: XCTestCase {
 
     private func model(
         workflows: [PlaygroundWorkflow]? = nil,
-        runner: @escaping WorkflowPlaygroundModel.Runner = { text, _ in
+        runner: @escaping WorkflowPlaygroundModel.Runner = { text, _, _ in
             PlaygroundOutcome(output: text.capitalized + ".", duration: 1.26)
         }
     ) -> WorkflowPlaygroundModel {
-        WorkflowPlaygroundModel(workflows: workflows ?? [cleaned, summary], store: store, runner: runner)
+        WorkflowPlaygroundModel(
+            workflows: workflows ?? [cleaned, summary], modelChoices: [gemma, qwen, claude], store: store, runner: runner)
     }
 
     func testStartsOnTheFirstWorkflowAndCannotRunWithoutText() {
@@ -60,7 +66,7 @@ final class WorkflowPlaygroundModelTests: XCTestCase {
 
     func testRunUsesTheSelectedWorkflow() async {
         var seen: [String] = []
-        let model = model { text, workflow in
+        let model = model { text, workflow, _ in
             seen.append(workflow.name)
             return PlaygroundOutcome(output: text, duration: 0.1)
         }
@@ -72,14 +78,14 @@ final class WorkflowPlaygroundModelTests: XCTestCase {
     }
 
     func testCleanedTextFallbackShowsTheReason() async {
-        let model = model { text, _ in PlaygroundOutcome(output: text, duration: 2, fallbackReason: "dropped") }
+        let model = model { text, _, _ in PlaygroundOutcome(output: text, duration: 2, fallbackReason: "dropped") }
         model.input = "send the file to Sam on Friday"
         await model.run()
-        XCTAssertEqual(model.fallbackSentence, PlaygroundFallbackText.sentence(forCode: "dropped"))
+        XCTAssertEqual(model.fallbackSentence, "The model changed your wording. Pnoe's own cleanup was used.")
     }
 
     func testAFallbackCodeOnAnotherWorkflowShowsNoReason() async {
-        let model = model { text, _ in PlaygroundOutcome(output: text, duration: 2, fallbackReason: "dropped") }
+        let model = model { text, _, _ in PlaygroundOutcome(output: text, duration: 2, fallbackReason: "dropped") }
         model.input = "send the file to Sam on Friday"
         model.selectedWorkflowID = summary.id
         await model.run()
@@ -89,7 +95,7 @@ final class WorkflowPlaygroundModelTests: XCTestCase {
 
     func testAFailedRunShowsTheMessage() async {
         struct Boom: LocalizedError { var errorDescription: String? { "No model is running." } }
-        let model = model { _, _ in throw Boom() }
+        let model = model { _, _, _ in throw Boom() }
         model.input = "hello there"
         await model.run()
         XCTAssertEqual(model.phase, .failed("No model is running."))
@@ -149,7 +155,7 @@ final class WorkflowPlaygroundModelTests: XCTestCase {
         // A folder where the file should be: reading it fails, so nothing may be written.
         let blocked = PlaygroundExampleStore(fileURL: directory.appendingPathComponent("examples.jsonl"))
         try FileManager.default.createDirectory(at: blocked.fileURL, withIntermediateDirectories: true)
-        let model = WorkflowPlaygroundModel(workflows: [cleaned], store: blocked) { text, _ in
+        let model = WorkflowPlaygroundModel(workflows: [cleaned], store: blocked) { text, _, _ in
             PlaygroundOutcome(output: text, duration: 0.1)
         }
         model.input = "open the file"
@@ -187,7 +193,7 @@ final class WorkflowPlaygroundModelTests: XCTestCase {
     }
 
     func testRejectedTextIsDiffedAgainstTheTakeTheModelGot() async throws {
-        let model = model { text, _ in
+        let model = model { text, _, _ in
             PlaygroundOutcome(
                 output: text, duration: 1, fallbackReason: "new_words",
                 rejectedText: "Open the file on Thursday and email Sam please.")
@@ -201,7 +207,7 @@ final class WorkflowPlaygroundModelTests: XCTestCase {
     }
 
     func testNoRejectedDiffWithoutAFallbackOrOnAnotherWorkflow() async {
-        let model = model { text, _ in
+        let model = model { text, _, _ in
             PlaygroundOutcome(output: text, duration: 1, fallbackReason: "dropped", rejectedText: "something else")
         }
         model.input = "open the file on thursday please"
@@ -228,7 +234,7 @@ final class WorkflowPlaygroundModelTests: XCTestCase {
     }
 
     func testASkippedRunKeepsTheTranscriptAsTheResult() async {
-        let model = model { text, _ in
+        let model = model { text, _, _ in
             PlaygroundOutcome(output: text, duration: 0, skippedReason: "Too short.")
         }
         model.input = "ok"
@@ -238,8 +244,77 @@ final class WorkflowPlaygroundModelTests: XCTestCase {
         XCTAssertEqual(model.editedResult, "ok")
     }
 
+    func testARunStartsOnTheWorkflowsOwnModelAndAPickedOneIsUsedForThatRunOnly() async {
+        var seen: [String?] = []
+        let model = model { text, _, choice in
+            seen.append(choice?.label)
+            return PlaygroundOutcome(output: text, duration: 1)
+        }
+        model.input = "open the file on thursday please"
+        XCTAssertEqual(model.selectedChoice, gemma)
+        await model.run()
+
+        model.pick(qwen)
+        XCTAssertEqual(model.selectedChoice, qwen)
+        await model.run()
+        XCTAssertEqual(model.finished?.choice, qwen)
+
+        XCTAssertEqual(seen, ["Ollama · gemma3:4b", "Ollama · qwen3:4b"])
+        // The workflow keeps its own provider and model.
+        XCTAssertEqual(model.selectedWorkflow?.defaultChoice, gemma)
+        XCTAssertEqual(model.workflows.first { $0.id == cleaned.id }, cleaned)
+    }
+
+    func testAPickedModelDoesNotCarryOverToAnotherWorkflow() {
+        let model = model()
+        model.pick(qwen)
+        XCTAssertEqual(model.selectedChoice, qwen)
+        model.selectedWorkflowID = summary.id
+        XCTAssertEqual(model.selectedChoice, claude)
+        model.selectedWorkflowID = cleaned.id
+        XCTAssertEqual(model.selectedChoice, gemma)
+    }
+
+    func testTheMenuListsTheWorkflowsOwnModelFirstEvenWhenItIsNotInTheList() {
+        let local = PlaygroundModelChoice(provider: "Ollama", model: "old-model:1b")
+        let own = PlaygroundWorkflow(id: UUID(), name: "Old", template: .cleanedText, defaultChoice: local)
+        let model = WorkflowPlaygroundModel(workflows: [own], modelChoices: [gemma, qwen], store: store) { text, _, _ in
+            PlaygroundOutcome(output: text, duration: 0)
+        }
+        XCTAssertEqual(model.menuChoices, [local, gemma, qwen])
+        XCTAssertEqual(model.selectedChoice, local)
+    }
+
+    func testAWorkflowWithNoUsableModelHasNoSelectionUntilOnePicks() {
+        let none = PlaygroundWorkflow(id: UUID(), name: "Bare", template: nil, defaultChoice: nil)
+        let model = WorkflowPlaygroundModel(workflows: [none], modelChoices: [gemma], store: store) { text, _, _ in
+            PlaygroundOutcome(output: text, duration: 0)
+        }
+        XCTAssertNil(model.selectedChoice)
+        model.pick(gemma)
+        XCTAssertEqual(model.selectedChoice, gemma)
+    }
+
+    func testASavedExampleKeepsTheModelItRanOn() async throws {
+        let model = model()
+        model.input = "open the file on thursday please"
+        model.pick(qwen)
+        await model.run()
+        model.saveExample()
+        XCTAssertEqual(model.examples.first?.model, "qwen3:4b")
+        XCTAssertEqual(try store.load().examples.first?.model, "qwen3:4b")
+    }
+
+    func testTheTimeLineNamesTheModelAndTheModelIsOnTheFinishedRun() async {
+        let model = model()
+        model.input = "open the file on thursday please"
+        await model.run()
+        XCTAssertEqual(model.finished?.choice?.modelName, "gemma3:4b")
+        XCTAssertEqual(PlaygroundModelChoice(provider: "Local CLI", model: nil).modelName, "Local CLI")
+    }
+
     func testAStaleRunDoesNotOverwriteANewerOne() async throws {
-        let model = model { text, _ in
+        let model = model { text, _, _ in
             if text == "slow one" { try await Task.sleep(nanoseconds: 300_000_000) }
             return PlaygroundOutcome(output: text.uppercased(), duration: 0.1)
         }
@@ -254,7 +329,7 @@ final class WorkflowPlaygroundModelTests: XCTestCase {
     }
 
     func testCancelReturnsToIdle() async throws {
-        let model = model { text, _ in
+        let model = model { text, _, _ in
             try await Task.sleep(nanoseconds: 2_000_000_000)
             return PlaygroundOutcome(output: text, duration: 2)
         }

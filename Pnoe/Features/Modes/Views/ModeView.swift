@@ -244,21 +244,41 @@ struct ModeView: View {
     /// enhancement call a dictation uses, with no pasted-in context and nothing pasted out.
     private func makePlaygroundModel() -> WorkflowPlaygroundModel {
         let configurations = modeManager.configurations
+        let enhancementService = enhancementService
+        let aiService = aiService
         let workflows: [PlaygroundWorkflow] = configurations.compactMap { config in
             guard config.isAIEnhancementEnabled else { return nil }
             let promptId = config.selectedPrompt.flatMap(UUID.init(uuidString:))
+            // The provider and model the workflow itself would use.
+            let own = ModeRuntimeResolver.currentEnhancementConfiguration(
+                mode: config, enhancementService: enhancementService, aiService: aiService)
             return PlaygroundWorkflow(
                 id: config.id, name: config.name,
-                template: LocalWorkflowTemplate.template(forPromptId: promptId))
+                template: LocalWorkflowTemplate.template(forPromptId: promptId),
+                defaultChoice: own.provider.map {
+                    PlaygroundModelChoice(provider: $0.rawValue, model: $0 == .localCLI ? nil : own.modelName)
+                })
         }
-        let enhancementService = enhancementService
-        let aiService = aiService
-        return WorkflowPlaygroundModel(workflows: workflows, store: .standard()) { text, workflow in
+        // The models the user can run now, from the lists the app already keeps.
+        let choices = PlaygroundModelOptions.choices(
+            from: aiService.connectedProviders.map { provider in
+                PlaygroundModelOptions.Provider(
+                    name: provider.rawValue,
+                    models: provider == .localCLI ? [] : aiService.availableModels(for: provider),
+                    usesDefaultModel: provider == .localCLI)
+            })
+        return WorkflowPlaygroundModel(workflows: workflows, modelChoices: choices, store: .standard()) {
+            text, workflow, choice in
             guard let config = modeManager.getConfiguration(with: workflow.id) else {
                 throw EnhancementError.notConfigured
             }
-            let runtime = ModeRuntimeResolver.currentEnhancementConfiguration(
+            var runtime = ModeRuntimeResolver.currentEnhancementConfiguration(
                 mode: config, enhancementService: enhancementService, aiService: aiService)
+            // A model picked in the Playground applies to this run only: a copy of the configuration goes
+            // through the same call, so the guards and the fallback are the same.
+            if let choice, let provider = AIProvider(rawValue: choice.provider), choice != workflow.defaultChoice {
+                runtime = runtime.overriding(provider: provider, modelName: choice.model)
+            }
             // The same preparation and the same call dictation uses, so this is what would be pasted.
             let prepared = PreparedTranscript.make(
                 config.isTextFormattingEnabled ? ParagraphFormatter.format(text) : text, modelContext: enhancementService.modelContext, respondInRecorder: false)

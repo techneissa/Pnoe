@@ -10,6 +10,8 @@ struct PlaygroundWorkflow: Identifiable, Equatable {
     var symbol: String?
     /// The Pnoe template the workflow's prompt comes from, or nil for a custom prompt.
     var template: LocalWorkflowTemplate?
+    /// The provider and model the workflow itself is set to, or nil when none is usable.
+    var defaultChoice: PlaygroundModelChoice?
 
     /// Cleaned Text is held to the speaker's words by the checks, so it is the one whose saved pairs the
     /// eval harness can score.
@@ -33,12 +35,15 @@ struct PlaygroundOutcome: Equatable {
 /// and save the pair as an example. The model call itself comes in as `runner`.
 @MainActor
 final class WorkflowPlaygroundModel: ObservableObject {
-    typealias Runner = @MainActor (_ text: String, _ workflow: PlaygroundWorkflow) async throws -> PlaygroundOutcome
+    /// `choice` is the provider and model picked for this run; the runner uses it for this run only.
+    typealias Runner = @MainActor (_ text: String, _ workflow: PlaygroundWorkflow, _ choice: PlaygroundModelChoice?) async throws -> PlaygroundOutcome
 
     struct Finished: Equatable {
         /// The text and workflow that were run, which a saved pair keeps even if the box changes afterwards.
         let input: String
         let workflow: PlaygroundWorkflow
+        /// The provider and model the run used.
+        let choice: PlaygroundModelChoice?
         let outcome: PlaygroundOutcome
     }
 
@@ -50,7 +55,13 @@ final class WorkflowPlaygroundModel: ObservableObject {
     }
 
     @Published var workflows: [PlaygroundWorkflow]
-    @Published var selectedWorkflowID: UUID?
+    @Published var selectedWorkflowID: UUID? {
+        // A model picked for one workflow does not carry over to another.
+        didSet { if oldValue != selectedWorkflowID { pickedChoiceID = nil } }
+    }
+    /// Every model the user can run now (the workflow's own is added in `menuChoices`).
+    @Published var modelChoices: [PlaygroundModelChoice]
+    @Published private var pickedChoiceID: String?
     @Published var input = ""
     @Published private(set) var phase: Phase = .idle
     /// The result as the speaker wants it to read; starts as the workflow's own output.
@@ -67,8 +78,12 @@ final class WorkflowPlaygroundModel: ObservableObject {
     private var runTask: Task<Void, Never>?
     private var runCounter = 0
 
-    init(workflows: [PlaygroundWorkflow], store: PlaygroundExampleStore, runner: @escaping Runner) {
+    init(
+        workflows: [PlaygroundWorkflow], modelChoices: [PlaygroundModelChoice] = [], store: PlaygroundExampleStore,
+        runner: @escaping Runner
+    ) {
         self.workflows = workflows
+        self.modelChoices = modelChoices
         self.store = store
         self.runner = runner
         selectedWorkflowID = workflows.first?.id
@@ -76,6 +91,20 @@ final class WorkflowPlaygroundModel: ObservableObject {
     }
 
     var selectedWorkflow: PlaygroundWorkflow? { workflows.first { $0.id == selectedWorkflowID } }
+
+    /// The rows of the model menu: the workflow's own provider and model first, then the rest.
+    var menuChoices: [PlaygroundModelChoice] {
+        PlaygroundModelOptions.merged(modelChoices, own: selectedWorkflow?.defaultChoice)
+    }
+
+    /// What the next run uses: the one picked here, else the workflow's own.
+    var selectedChoice: PlaygroundModelChoice? {
+        menuChoices.first { $0.id == pickedChoiceID } ?? selectedWorkflow?.defaultChoice
+    }
+
+    func pick(_ choice: PlaygroundModelChoice) {
+        pickedChoiceID = choice.id
+    }
 
     var canRun: Bool {
         selectedWorkflow != nil && !trimmedInput.isEmpty && phase != .running
@@ -101,7 +130,7 @@ final class WorkflowPlaygroundModel: ObservableObject {
     /// The sentence for a Cleaned Text run that pasted the plain transcript, or nil.
     var fallbackSentence: String? {
         guard let finished, finished.workflow.isCleanedText, let code = finished.outcome.fallbackReason else { return nil }
-        return PlaygroundFallbackText.sentence(forCode: code)
+        return PlaygroundFallbackText.fullSentence(forCode: code)
     }
 
     /// The model's rejected text against the take it was given, word by word, or nil when nothing was rejected.
@@ -128,15 +157,16 @@ final class WorkflowPlaygroundModel: ObservableObject {
     func run() async {
         guard let workflow = selectedWorkflow, !trimmedInput.isEmpty else { return }
         let text = trimmedInput
+        let choice = selectedChoice
         runCounter += 1
         let ticket = runCounter
         phase = .running
         notice = nil
         do {
-            let outcome = try await runner(text, workflow)
+            let outcome = try await runner(text, workflow, choice)
             guard ticket == runCounter else { return }
             editedResult = outcome.output
-            phase = .finished(Finished(input: text, workflow: workflow, outcome: outcome))
+            phase = .finished(Finished(input: text, workflow: workflow, choice: choice, outcome: outcome))
         } catch is CancellationError {
             guard ticket == runCounter else { return }
             phase = .idle
@@ -158,7 +188,8 @@ final class WorkflowPlaygroundModel: ObservableObject {
         guard let finished else { return }
         let example = PlaygroundExample.make(
             raw: finished.input, output: finished.outcome.output, expected: editedResult,
-            workflowName: finished.workflow.name, template: finished.workflow.template)
+            workflowName: finished.workflow.name, template: finished.workflow.template,
+            model: finished.choice?.modelName)
         do {
             try store.append(example)
             notice = example.wasEdited ? "Saved your edited result." : "Saved as it is."
