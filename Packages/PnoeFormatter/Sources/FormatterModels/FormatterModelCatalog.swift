@@ -12,6 +12,7 @@ public struct FormatterModelCatalog: Sendable {
         /// Overrides for the two folders; nil means the defaults under `homeDirectory`.
         public var huggingFaceHubDirectory: URL?
         public var lmStudioModelsDirectory: URL?
+        public var ollamaStoreDirectory: URL?
         public var userChosenPaths: [URL]
         public var urlSessionConfiguration: URLSessionConfiguration
 
@@ -22,6 +23,7 @@ public struct FormatterModelCatalog: Sendable {
             homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
             huggingFaceHubDirectory: URL? = nil,
             lmStudioModelsDirectory: URL? = nil,
+            ollamaStoreDirectory: URL? = nil,
             userChosenPaths: [URL] = [],
             urlSessionConfiguration: URLSessionConfiguration = .ephemeral
         ) {
@@ -31,6 +33,7 @@ public struct FormatterModelCatalog: Sendable {
             self.homeDirectory = homeDirectory
             self.huggingFaceHubDirectory = huggingFaceHubDirectory
             self.lmStudioModelsDirectory = lmStudioModelsDirectory
+            self.ollamaStoreDirectory = ollamaStoreDirectory
             self.userChosenPaths = userChosenPaths
             self.urlSessionConfiguration = urlSessionConfiguration
         }
@@ -42,7 +45,7 @@ public struct FormatterModelCatalog: Sendable {
         self.configuration = configuration
     }
 
-    /// Ollama models first, then Hugging Face, LM Studio and the user's own, each sorted by name. Entries with
+    /// Ollama models first, then Hugging Face, LM Studio, Ollama's model store and the user's own, each sorted by name. Entries with
     /// the same id (the same path chosen twice) appear once.
     public func installedModels() async -> [FormatterModelEntry] {
         let configuration = self.configuration
@@ -60,6 +63,16 @@ public struct FormatterModelCatalog: Sendable {
         return all.filter { seen.insert($0.id).inserted }
     }
 
+    /// The models a llama.cpp runtime can load, from disk only: GGUF files in the Hugging Face cache, LM Studio's
+    /// folder, Ollama's model store (Ollama need not run) and the files the user chose. Ollama's daemon is not
+    /// asked, so this never waits on the network.
+    public func installedGGUFModels() async -> [FormatterModelEntry] {
+        let configuration = self.configuration
+        let all = await Task.detached(priority: .utility) { Self.scanFiles(configuration) }.value
+        var seen = Set<String>()
+        return all.filter { $0.kind == .gguf && seen.insert($0.id).inserted }
+    }
+
     private static func scanFiles(_ configuration: Configuration) -> [FormatterModelEntry] {
         let hub = configuration.huggingFaceHubDirectory
             ?? HuggingFaceCacheScanner.hubDirectory(
@@ -68,12 +81,16 @@ public struct FormatterModelCatalog: Sendable {
             )
         let lmStudio = configuration.lmStudioModelsDirectory
             ?? LMStudioScanner.modelsDirectory(homeDirectory: configuration.homeDirectory)
+        let ollamaStore = configuration.ollamaStoreDirectory
+            ?? OllamaStoreScanner.storeDirectory(
+                environment: configuration.environment, homeDirectory: configuration.homeDirectory)
 
         func sorted(_ entries: [FormatterModelEntry]) -> [FormatterModelEntry] {
             entries.sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
         }
         return sorted(HuggingFaceCacheScanner(hubDirectory: hub).scan())
             + sorted(LMStudioScanner(modelsDirectory: lmStudio).scan())
+            + OllamaStoreScanner(storeDirectory: ollamaStore).scan()
             + sorted(UserChosenModelScanner(paths: configuration.userChosenPaths).scan())
     }
 }
