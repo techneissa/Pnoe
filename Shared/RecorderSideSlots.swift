@@ -19,7 +19,7 @@ enum RecorderSlotContent: String, CaseIterable, Identifiable {
         case .none: return String(localized: "Nothing")
         case .timer: return String(localized: "Timer")
         case .level: return String(localized: "Level meter")
-        case .modeName: return String(localized: "Mode name")
+        case .modeName: return String(localized: "Workflow name")
         }
     }
 
