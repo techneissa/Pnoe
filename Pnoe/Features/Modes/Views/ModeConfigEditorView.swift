@@ -17,11 +17,16 @@ struct ModeConfigEditorView: View {
     @State private var promptEditorID = UUID()
     @State private var didSaveConfiguration = false
 
-    init(mode: ConfigurationMode, modeManager: ModeManager, onDismiss: @escaping () -> Void) {
+    init(
+        mode: ConfigurationMode,
+        modeManager: ModeManager,
+        template: StarterModeTemplate? = nil,
+        onDismiss: @escaping () -> Void
+    ) {
         self.mode = mode
         self.modeManager = modeManager
         self.onDismiss = onDismiss
-        _draft = State(initialValue: ModeConfigDraft(mode: mode, modeManager: modeManager))
+        _draft = State(initialValue: ModeConfigDraft(mode: mode, modeManager: modeManager, template: template))
     }
 
     var body: some View {
@@ -96,6 +101,9 @@ struct ModeConfigEditorView: View {
         if case .add = mode {
             draft.applyAddModeDefaults(snapshot: snapshot)
             draft.inheritUsableTranscriptionModelSelection(from: snapshot)
+            if let promptId = draft.selectedPromptId, !snapshot.prompts.contains(where: { $0.id == promptId }) {
+                draft.selectedPromptId = nil
+            }
         } else if let selectedModelName = draft.selectedTranscriptionModelName,
             !snapshot.hasUsableTranscriptionModel(named: selectedModelName)
         {

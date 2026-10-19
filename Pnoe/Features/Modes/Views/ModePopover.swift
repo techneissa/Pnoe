@@ -16,7 +16,7 @@ struct ModePopover: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Select Mode")
+            Text("Select Workflow")
                 .font(.headline)
                 .foregroundColor(AppTheme.Text.primary)
                 .padding(.horizontal)
@@ -33,7 +33,7 @@ struct ModePopover: View {
                             Image(systemName: "sparkles")
                                 .foregroundColor(AppTheme.Text.secondary)
                                 .font(.system(size: 16))
-                            Text("No Modes Available")
+                            Text("No Workflows Available")
                                 .foregroundColor(AppTheme.Text.primary)
                                 .font(.system(size: 13))
                                 .lineLimit(1)

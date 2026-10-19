@@ -558,7 +558,7 @@ class ModeManager: ObservableObject {
         Task { @MainActor in
             NotificationManager.shared.showNotification(
                 title: String(
-                    format: String(localized: "Active mode switched to %@"),
+                    format: String(localized: "Active workflow switched to %@"),
                     config.name
                 ),
                 type: .info

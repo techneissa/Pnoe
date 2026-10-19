@@ -43,6 +43,19 @@ struct StarterModeTemplate: Identifiable {
     }
 }
 
+extension StarterModeTemplate {
+    var pickerOption: WorkflowTemplateOption {
+        WorkflowTemplateOption(
+            id: id,
+            title: name,
+            icon: icon.value,
+            isEmoji: icon.kind == .emoji,
+            summary: description,
+            detail: guidance
+        )
+    }
+}
+
 enum StarterModeCatalog {
     static let templates: [StarterModeTemplate] = [
         StarterModeTemplate(
