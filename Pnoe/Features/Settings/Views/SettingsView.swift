@@ -28,6 +28,10 @@ struct SettingsView: View {
     @AppStorage(RecorderDisplaySettingsKeys.display) private var recorderDisplay = RecorderDisplaySelection.active.storedValue
     @AppStorage(RecorderDisplaySettingsKeys.miniPlacement) private var recorderMiniPlacement = MiniRecorderPlacement.bottom.rawValue
     @AppStorage(RecorderDisplaySettingsKeys.visibility) private var recorderVisibility = RecorderVisibility.whileRecording.rawValue
+    @AppStorage(RecorderSideSlots.storageKey(for: .mini)) private var miniSlotsRaw = RecorderSideSlots.defaults(for: .mini).storedValue
+    @AppStorage(RecorderSideSlots.storageKey(for: .notch)) private var notchSlotsRaw = RecorderSideSlots.defaults(for: .notch).storedValue
+    @AppStorage(RecorderSideSlots.storageKey(for: .pill)) private var pillSlotsRaw = RecorderSideSlots.defaults(for: .pill).storedValue
+    @ObservedObject private var modeManager = ModeManager.shared
     @AppStorage(FinishAndSendSettings.key) private var finishAndSendKey = FinishAndSendKey.none.rawValue
     @State private var showResetOnboardingAlert = false
     @State private var showLanguageRestartAlert = false
@@ -44,6 +48,44 @@ struct SettingsView: View {
             names.append(stored)
         }
         return names
+    }
+
+    /// The side slots of the chosen style, from the stored value of that style.
+    private var recorderSlots: RecorderSideSlots {
+        let style = recorderUIManager.recorderPanelStyle
+        switch style {
+        case .mini: return RecorderSideSlots(storedValue: miniSlotsRaw, style: .mini)
+        case .notch: return RecorderSideSlots(storedValue: notchSlotsRaw, style: .notch)
+        case .pill: return RecorderSideSlots(storedValue: pillSlotsRaw, style: .pill)
+        case .dot: return RecorderSideSlots.defaults(for: .dot)
+        }
+    }
+
+    private func recorderSlotBinding(_ side: RecorderSlotSide) -> Binding<RecorderSlotContent> {
+        Binding(
+            get: { recorderSlots.content(on: side) },
+            set: { newValue in
+                let style = recorderUIManager.recorderPanelStyle
+                let updated = recorderSlots.setting(side, to: newValue).storedValue
+                switch style {
+                case .mini: miniSlotsRaw = updated
+                case .notch: notchSlotsRaw = updated
+                case .pill: pillSlotsRaw = updated
+                case .dot: break
+                }
+            })
+    }
+
+    private var recorderPreviewConfiguration: RecorderStylePreviewConfiguration {
+        RecorderStylePreviewConfiguration(
+            style: recorderUIManager.recorderPanelStyle,
+            theme: RecorderTheme(rawValue: recorderTheme) ?? .dark,
+            placement: MiniRecorderPlacement(rawValue: recorderMiniPlacement) ?? .bottom,
+            slots: recorderSlots,
+            levelDisplay: RecorderLevelDisplay(rawValue: recorderLevelDisplay) ?? .bars,
+            showsLiveText: showLiveTranscript,
+            transcriptSize: LiveTranscriptSize(rawValue: liveTranscriptSize) ?? .medium,
+            modeName: modeManager.currentEffectiveConfiguration?.name ?? String(localized: "None"))
     }
 
     var body: some View {
@@ -238,6 +280,11 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.menu)
 
+                // The real layouts with a made-up input level and sample text, inside this
+                // window. It follows every picker below at once.
+                RecorderStylePreview(configuration: recorderPreviewConfiguration)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+
                 Picker("Recorder Theme", selection: $recorderTheme) {
                     ForEach(RecorderTheme.allCases) { theme in
                         Text(theme.displayName).tag(theme.rawValue)
@@ -268,9 +315,36 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.menu)
 
-                Picker("Mini Position", selection: $recorderMiniPlacement) {
+                if recorderUIManager.recorderPanelStyle.hasSideSlots {
+                    Picker(selection: recorderSlotBinding(.left)) {
+                        ForEach(RecorderSlotContent.allCases) { content in
+                            Text(content.displayName).tag(content)
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text("Left Side")
+                            InfoTip(
+                                "What the recorder shows on its left and right side. The same item cannot be on both sides. The Pill has no mode button, so the mode name is the only way to see the mode there.")
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    Picker("Right Side", selection: recorderSlotBinding(.right)) {
+                        ForEach(RecorderSlotContent.allCases) { content in
+                            Text(content.displayName).tag(content)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+
+                Picker(selection: $recorderMiniPlacement) {
                     ForEach(MiniRecorderPlacement.allCases) { placement in
                         Text(placement.displayName).tag(placement.rawValue)
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("Position")
+                        InfoTip("Top or bottom of the screen for Mini, Pill and Dot. Notch always hangs from the top edge.")
                     }
                 }
                 .pickerStyle(.menu)
@@ -296,6 +370,12 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.menu)
                 .disabled(!showLiveTranscript)
+
+                if !recorderUIManager.recorderPanelStyle.showsLiveTranscript {
+                    Text("The Dot shows no live text. While the assistant is open it expands to the Pill, which does.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("General") {

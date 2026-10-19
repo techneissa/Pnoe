@@ -8,7 +8,13 @@ final class MiniRecorderPanel: NSPanel {
 
     private let logger = Logger(subsystem: "com.techneissa.pnoe", category: "MiniRecorderPanel")
 
-    init(contentRect: NSRect) {
+    /// Mini, Pill and Dot all use this panel.
+    let style: RecorderPanelStyle
+    private var isCompact = false
+    private var assistantVisible = false
+
+    init(style: RecorderPanelStyle, contentRect: NSRect) {
+        self.style = style
         super.init(
             contentRect: contentRect,
             styleMask: [.nonactivatingPanel],
@@ -35,14 +41,21 @@ final class MiniRecorderPanel: NSPanel {
     /// instead of placing it at the global origin.
     ///
     /// `compact` is the idle indicator that stays on screen between dictations: it is only as
-    /// large as the control bar, so the transparent host never covers other apps' content.
+    /// large as the bar, so the transparent host never covers other apps' content. The sizes
+    /// come from `RecorderPanelSizing`.
     static func calculateWindowMetrics(
+        style: RecorderPanelStyle = .mini,
         compact: Bool = false,
+        assistantVisible: Bool = false,
         settings: RecorderIndicatorSettings = .current
     ) -> NSRect? {
-        // Host stays large enough for assistant output; SwiftUI controls the visible mini width.
-        let width: CGFloat = compact ? 200 : 540
-        let height: CGFloat = compact ? 48 : 430
+        // The host stays large enough for assistant output (a dot stays small until the
+        // assistant opens); SwiftUI controls the visible width.
+        let size = RecorderPanelSizing.miniHostSize(
+            style: style, compact: compact, assistantVisible: assistantVisible,
+            slots: settings.slots(for: style == .dot ? .pill : style))
+        let width = size.width
+        let height = size.height
 
         guard let screen = RecorderScreenResolver.resolve(settings: settings) else { return nil }
 
@@ -66,7 +79,8 @@ final class MiniRecorderPanel: NSPanel {
 
     @discardableResult
     func show(compact: Bool = false) -> Bool {
-        guard let metrics = MiniRecorderPanel.calculateWindowMetrics(compact: compact) else {
+        isCompact = compact
+        guard let metrics = frameForCurrentState() else {
             logger.error("Mini panel show skipped: no screen available")
             return false
         }
@@ -75,9 +89,23 @@ final class MiniRecorderPanel: NSPanel {
         orderFrontRegardless()
 
         logger.notice(
-            "Mini panel frame=\(NSStringFromRect(self.frame), privacy: .public) screens=\(NSScreen.screens.count, privacy: .public) onActiveSpace=\(self.isOnActiveSpace, privacy: .public)"
+            "Mini panel style=\(self.style.rawValue, privacy: .public) frame=\(NSStringFromRect(self.frame), privacy: .public) screens=\(NSScreen.screens.count, privacy: .public) onActiveSpace=\(self.isOnActiveSpace, privacy: .public)"
         )
         return true
+    }
+
+    /// The dot's window is small until the assistant panel opens and grows with it. The other
+    /// styles keep one size, so this only moves a panel that is on screen.
+    func assistantVisibilityChanged(_ visible: Bool) {
+        guard visible != assistantVisible else { return }
+        assistantVisible = visible
+        guard style == .dot, isVisible, let metrics = frameForCurrentState() else { return }
+        setFrame(metrics, display: true)
+    }
+
+    private func frameForCurrentState() -> NSRect? {
+        MiniRecorderPanel.calculateWindowMetrics(
+            style: style, compact: isCompact, assistantVisible: assistantVisible)
     }
 
     deinit {
