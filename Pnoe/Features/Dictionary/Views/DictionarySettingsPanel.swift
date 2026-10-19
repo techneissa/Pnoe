@@ -56,6 +56,11 @@ struct DictionarySettingsPanel: View {
                                 )
                             }
                         }
+                        .onChange(of: usesAIReview) { _, _ in
+                            Task {
+                                await AutoLearnService.shared.reviewScheduleDidChange()
+                            }
+                        }
 
                         // Corrections queued before the count existed still need these controls.
                         if usesAIReview || pendingCorrectionCount > 0 {

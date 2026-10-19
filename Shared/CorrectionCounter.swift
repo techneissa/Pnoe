@@ -16,11 +16,32 @@ struct CorrectionCounter: Codable, Equatable, Sendable {
         static let standard = Limits()
     }
 
+    /// Far above any threshold. A stored count beyond it is clamped, so a damaged file cannot
+    /// overflow the counter.
+    static let maximumCount = 1_000_000
+
     struct Pair: Codable, Equatable, Sendable {
         var heard: String
         var corrected: String
         var count: Int
         var lastSeen: Date
+
+        init(heard: String, corrected: String, count: Int, lastSeen: Date) {
+            self.heard = heard
+            self.corrected = corrected
+            self.count = min(max(count, 0), CorrectionCounter.maximumCount)
+            self.lastSeen = lastSeen
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.init(
+                heard: try container.decode(String.self, forKey: .heard),
+                corrected: try container.decode(String.self, forKey: .corrected),
+                count: try container.decode(Int.self, forKey: .count),
+                lastSeen: try container.decode(Date.self, forKey: .lastSeen)
+            )
+        }
     }
 
     private(set) var pairs: [String: Pair] = [:]
@@ -42,7 +63,7 @@ struct CorrectionCounter: Codable, Equatable, Sendable {
             lastSeen: now
         )
         pair.heard = Self.trimmed(heard)
-        pair.count += 1
+        pair.count = pair.count < Self.maximumCount ? pair.count + 1 : Self.maximumCount
         pair.lastSeen = now
         pairs[key] = pair
         enforceCap(limits.maximumPairs)

@@ -94,6 +94,45 @@ final class CorrectionCounterTests: XCTestCase {
     }
 }
 
+final class CorrectionCounterOverflowTests: XCTestCase {
+    private func decode(count: String) throws -> CorrectionCounter {
+        let json = """
+        {"pairs":{"k":{"heard":"pnoy","corrected":"Pnoe","count":\(count),"lastSeen":0}}}
+        """
+        return try JSONDecoder().decode(CorrectionCounter.self, from: Data(json.utf8))
+    }
+
+    func testHugeStoredCountIsClampedOnDecode() throws {
+        for huge in ["9223372036854775807", "-5", "1000001"] {
+            let counter = try decode(count: huge)
+            let count = try XCTUnwrap(counter.pairs.values.first?.count)
+            XCTAssertTrue((0...CorrectionCounter.maximumCount).contains(count), huge)
+        }
+    }
+
+    func testIncrementSaturatesAtTheMaximum() throws {
+        let realKey = CorrectionCounter.key(heard: "pnoy", corrected: "Pnoe")
+        let json = """
+        {"pairs":{"\(realKey)":{"heard":"pnoy","corrected":"Pnoe","count":9223372036854775807,"lastSeen":\(Date().timeIntervalSinceReferenceDate)}}}
+        """
+        var counter = try JSONDecoder().decode(CorrectionCounter.self, from: Data(json.utf8))
+        XCTAssertEqual(counter.record(heard: "pnoy", corrected: "Pnoe"), CorrectionCounter.maximumCount)
+        XCTAssertEqual(counter.record(heard: "pnoy", corrected: "Pnoe"), CorrectionCounter.maximumCount)
+    }
+}
+
+final class AutoLearnReviewTriggerTests: XCTestCase {
+    func testAutomaticRunsNeedTheToggle() {
+        XCTAssertFalse(AutoLearnReviewTrigger.automatic.isAllowed(usesAIReview: false))
+        XCTAssertTrue(AutoLearnReviewTrigger.automatic.isAllowed(usesAIReview: true))
+    }
+
+    func testExplicitReviewWorksWithTheToggleOff() {
+        XCTAssertTrue(AutoLearnReviewTrigger.explicit.isAllowed(usesAIReview: false))
+        XCTAssertTrue(AutoLearnReviewTrigger.explicit.isAllowed(usesAIReview: true))
+    }
+}
+
 final class CorrectionCountStoreTests: XCTestCase {
     private var directory: URL!
     private var fileURL: URL { directory.appendingPathComponent("counts.json") }
@@ -166,6 +205,25 @@ final class CorrectionNoiseFilterTests: XCTestCase {
         XCTAssertTrue(learnable("open a i", "OpenAI"))
         XCTAssertTrue(learnable("cafe", "café"))
         XCTAssertTrue(learnable("it is", "it's is"))
+        XCTAssertTrue(learnable("U.S.A", "USA"))
+    }
+
+    func testKeepsAbbreviationsAndSymbolsInsideAWord() {
+        XCTAssertTrue(learnable("st. jon", "St. John"))
+        XCTAssertTrue(learnable("dr. who", "Dr. Who"))
+        XCTAssertTrue(learnable("mr. smith", "Mr. Smyth"))
+        XCTAssertTrue(learnable("j. smith", "J. Smythe"))
+        XCTAssertTrue(learnable("c++", "c#"))
+        XCTAssertTrue(learnable("50 percent", "50%"))
+        XCTAssertTrue(learnable("at name", "@name"))
+    }
+
+    func testStillIgnoresSentenceEndsAndEdgePunctuation() {
+        XCTAssertFalse(learnable("it. then", "done"))
+        XCTAssertFalse(learnable("hello", "hello!"))
+        XCTAssertFalse(learnable("Hello", "hello"))
+        XCTAssertFalse(learnable("hello", "\"hello\""))
+        XCTAssertFalse(learnable("c++", "C++"))
     }
 
     func testIgnoresCaseOnlyChanges() {
@@ -176,7 +234,6 @@ final class CorrectionNoiseFilterTests: XCTestCase {
     func testIgnoresPunctuationOnlyChanges() {
         XCTAssertFalse(learnable("hello", "hello,"))
         XCTAssertFalse(learnable("well well", "well, well"))
-        XCTAssertFalse(learnable("U.S.A", "USA"))
     }
 
     func testIgnoresPairsLongerThanAFewWords() {

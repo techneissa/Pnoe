@@ -84,7 +84,7 @@ actor AutoLearnService {
         guard AutoLearnSettings.isEnabled else { return }
         guard reviewTask == nil else { return }
         await cancelReviewTask()
-        await schedulePendingReview()
+        await schedulePendingReview(trigger: .explicit)
     }
 
     func preparePendingReviewForApproval() async {
@@ -485,9 +485,10 @@ actor AutoLearnService {
         }
     }
 
-    private func schedulePendingReview() async {
+    private func schedulePendingReview(trigger: AutoLearnReviewTrigger = .automatic) async {
         guard reviewTask == nil,
             AutoLearnSettings.isEnabled,
+            trigger.isAllowed(usesAIReview: AutoLearnSettings.usesAIReview),
             replacementStore != nil,
             reviewer != nil
         else {

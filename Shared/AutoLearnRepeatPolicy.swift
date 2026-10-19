@@ -66,37 +66,61 @@ enum CorrectionNoiseFilter {
         text.split(whereSeparator: \.isWhitespace).count
     }
 
-    /// True when a sentence ending and a space are followed by more text: "Fix this. Then that."
-    /// "U.S.A" and "e.g." do not count, because no space follows the full stop.
+    /// Words that end in a full stop without ending a sentence: "St. John", "Dr. Who".
+    private static let abbreviations: Set<String> = [
+        "st", "mr", "mrs", "ms", "dr", "jr", "sr", "vs", "etc", "e.g", "i.e", "no",
+    ]
+
+    /// Sentence punctuation, quotes, brackets and dashes. Only these are ignored, and only at the
+    /// edge of a word; a symbol that is part of the word ("c#", "50%", "@name") is kept.
+    private static let edgePunctuation = CharacterSet(charactersIn: ".,!?;:…。\"'“”‘’()[]{}«»-–—")
+
+    /// True when a sentence ending is followed by more text: "Fix this. Then that." A full stop
+    /// after an abbreviation or an initial ("St.", "J.", "U.S.") does not end a sentence.
     private static func isMultiSentence(_ text: String) -> Bool {
-        var afterTerminator = false
-        var afterSpace = false
-        for character in text {
-            if ".!?…。".contains(character) {
-                afterTerminator = true
-                afterSpace = false
-            } else if character.isWhitespace {
-                afterSpace = afterTerminator
-            } else if character.isLetter || character.isNumber {
-                if afterTerminator && afterSpace { return true }
-                afterTerminator = false
-            }
+        let tokens = text.split(whereSeparator: \.isWhitespace).map(String.init)
+        for (index, token) in tokens.enumerated().dropLast() {
+            guard tokens[(index + 1)...].contains(where: { $0.contains(where: { $0.isLetter || $0.isNumber }) })
+            else { continue }
+            if endsSentence(token) { return true }
         }
         return false
     }
 
-    /// The text without case or punctuation and with single spaces, so "Hello,  world." equals
-    /// "hello world" but "open a i" stays different from "OpenAI".
+    private static func endsSentence(_ token: String) -> Bool {
+        let trimmed = token.trimmingCharacters(in: CharacterSet(charactersIn: "\"'“”‘’)]}»"))
+        guard let last = trimmed.last, ".!?…。".contains(last) else { return false }
+        guard last == "." else { return true }
+        let word = String(trimmed.dropLast()).lowercased()
+        if abbreviations.contains(word) { return false }
+        // Initials such as "J." or "U.S.": every dot-separated part is one letter.
+        let parts = word.split(separator: ".", omittingEmptySubsequences: false)
+        return !(!word.isEmpty && parts.allSatisfy { $0.count == 1 && $0.first!.isLetter })
+    }
+
+    /// The text without case or edge punctuation and with single spaces, so "Hello,  world."
+    /// equals "hello world", "open a i" stays different from "OpenAI" and "c++" from "c#".
     private static func letters(_ text: String) -> String {
-        let kept = text.unicodeScalars.filter {
-            !CharacterSet.punctuationCharacters.contains($0)
-                && !CharacterSet.symbols.contains($0)
-        }
-        return String(String.UnicodeScalarView(kept))
-            .split(whereSeparator: \.isWhitespace)
+        text.split(whereSeparator: \.isWhitespace)
+            .map { $0.trimmingCharacters(in: edgePunctuation) }
+            .filter { !$0.isEmpty }
             .joined(separator: " ")
             .precomposedStringWithCanonicalMapping
             .lowercased()
+    }
+}
+
+/// Which review runs may start on their own. Corrections queued before the repeat count existed
+/// wait for the user when "Review with AI" is off.
+enum AutoLearnReviewTrigger {
+    case automatic
+    case explicit
+
+    func isAllowed(usesAIReview: Bool) -> Bool {
+        switch self {
+        case .automatic: usesAIReview
+        case .explicit: true
+        }
     }
 }
 

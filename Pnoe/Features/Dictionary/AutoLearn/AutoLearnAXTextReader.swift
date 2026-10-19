@@ -88,6 +88,10 @@ final class AutoLearnAXTextReader {
     }
 
     func textValue(from element: AXUIElement) -> AutoLearnAXTextValue? {
+        // Every read path ends here, so a password field is refused for capture and final read.
+        guard !AutoLearnFieldGuard.isSecure(
+            subrole: copyString(kAXSubroleAttribute as CFString, from: element)
+        ) else { return nil }
         let attributes = attributeNames(of: element)
         let parameterizedAttributes = parameterizedAttributeNames(of: element)
 
