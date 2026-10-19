@@ -114,7 +114,7 @@ final class CleanedTextGuardTests: XCTestCase {
 
         let crashed = await GuardedCleanup(runtime: FakeRuntime(throwing: .crashed), spec: spec)
             .clean("um open the file on thursday and send it to Sam please")
-        XCTAssertEqual(crashed.text, "Open the file on Thursday and send it to Sam please.")
+        XCTAssertEqual(crashed.text, "Open the file on thursday and send it to Sam please.")
         XCTAssertEqual(crashed.fallbackReason, FallbackReason.runtimeCrashed.rawValue)
     }
 

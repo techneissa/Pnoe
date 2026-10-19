@@ -3,6 +3,7 @@ import SwiftData
 
 /// A transcript after word replacements and snippet matching, ready for the model: what dictation and the
 /// Workflows Playground both start from.
+@MainActor
 struct PreparedTranscript {
     let snippets: SnippetPreparedText
     /// The text with snippet triggers as placeholders. This is what the model sees when the result is pasted.

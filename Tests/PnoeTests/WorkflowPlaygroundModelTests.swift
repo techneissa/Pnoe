@@ -109,7 +109,7 @@ final class WorkflowPlaygroundModelTests: XCTestCase {
         XCTAssertEqual(saved.workflowTag, "workflow:cleanedText")
         XCTAssertEqual(saved.workflow, "Cleaned Text")
         XCTAssertEqual(model.notice, "Saved as it is.")
-        XCTAssertEqual(store.load().examples.count, 1)
+        XCTAssertEqual(try store.load().examples.count, 1)
     }
 
     func testSaveEditedKeepsTheEditAndRemembersTheOutput() async throws {
@@ -171,7 +171,7 @@ final class WorkflowPlaygroundModelTests: XCTestCase {
         let destination = directory.appendingPathComponent("out.jsonl")
         model.export(to: destination)
         XCTAssertEqual(model.notice, "Exported 2 pairs.")
-        XCTAssertEqual(PlaygroundExampleStore(fileURL: destination).load().examples.count, 2)
+        XCTAssertEqual(try PlaygroundExampleStore(fileURL: destination).load().examples.count, 2)
 
         model.delete(model.examples[0])
         XCTAssertEqual(model.examples.count, 1)
