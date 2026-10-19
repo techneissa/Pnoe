@@ -24,6 +24,14 @@
 		E1FA00072FA7000000000001 /* VoiceInkRefineXPCProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00052FA7000000000001 /* VoiceInkRefineXPCProtocol.swift */; };
 		E1FA00A12FA7000000000001 /* TextFieldPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00A02FA7000000000001 /* TextFieldPolicy.swift */; };
 		E1FA00A22FA7000000000001 /* TextFieldPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00A02FA7000000000001 /* TextFieldPolicy.swift */; };
+		E1FA00C02FA7000000000001 /* SoundCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B02FA7000000000001 /* SoundCatalog.swift */; };
+		E1FA00D02FA7000000000001 /* SoundCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B02FA7000000000001 /* SoundCatalog.swift */; };
+		E1FA00C12FA7000000000001 /* SoundPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B12FA7000000000001 /* SoundPlayer.swift */; };
+		E1FA00D12FA7000000000001 /* SoundPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B12FA7000000000001 /* SoundPlayer.swift */; };
+		E1FA00C22FA7000000000001 /* SoundSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B22FA7000000000001 /* SoundSettings.swift */; };
+		E1FA00D22FA7000000000001 /* SoundSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B22FA7000000000001 /* SoundSettings.swift */; };
+		E1FA00C32FA7000000000001 /* SoundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B32FA7000000000001 /* SoundManager.swift */; };
+		E1FA00D32FA7000000000001 /* SoundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B32FA7000000000001 /* SoundManager.swift */; };
 		E1FA00082FA7000000000001 /* VoiceInkRefineXPC.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = E1FA00012FA7000000000001 /* VoiceInkRefineXPC.xpc */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		E1FA00132FA7000000000001 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = E1F900102FA6000000000001 /* MLXLLM */; };
 		E1FA00142FA7000000000001 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = E1F900112FA6000000000001 /* MLXLMCommon */; };
@@ -86,6 +94,10 @@
 		E1FA00012FA7000000000001 /* VoiceInkRefineXPC.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = VoiceInkRefineXPC.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
 		E1FA00052FA7000000000001 /* VoiceInkRefineXPCProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceInkRefineXPCProtocol.swift; sourceTree = "<group>"; };
 		E1FA00A02FA7000000000001 /* TextFieldPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextFieldPolicy.swift; sourceTree = "<group>"; };
+		E1FA00B02FA7000000000001 /* SoundCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundCatalog.swift; sourceTree = "<group>"; };
+		E1FA00B12FA7000000000001 /* SoundPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundPlayer.swift; sourceTree = "<group>"; };
+		E1FA00B22FA7000000000001 /* SoundSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundSettings.swift; sourceTree = "<group>"; };
+		E1FA00B32FA7000000000001 /* SoundManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -230,6 +242,10 @@
 			children = (
 				E1FA00052FA7000000000001 /* VoiceInkRefineXPCProtocol.swift */,
 				E1FA00A02FA7000000000001 /* TextFieldPolicy.swift */,
+				E1FA00B02FA7000000000001 /* SoundCatalog.swift */,
+				E1FA00B12FA7000000000001 /* SoundPlayer.swift */,
+				E1FA00B22FA7000000000001 /* SoundSettings.swift */,
+				E1FA00B32FA7000000000001 /* SoundManager.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -446,6 +462,10 @@
 			files = (
 				E1FA00062FA7000000000001 /* VoiceInkRefineXPCProtocol.swift in Sources */,
 				E1FA00A12FA7000000000001 /* TextFieldPolicy.swift in Sources */,
+				E1FA00C02FA7000000000001 /* SoundCatalog.swift in Sources */,
+				E1FA00C12FA7000000000001 /* SoundPlayer.swift in Sources */,
+				E1FA00C22FA7000000000001 /* SoundSettings.swift in Sources */,
+				E1FA00C32FA7000000000001 /* SoundManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -454,6 +474,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				E1FA00A22FA7000000000001 /* TextFieldPolicy.swift in Sources */,
+				E1FA00D02FA7000000000001 /* SoundCatalog.swift in Sources */,
+				E1FA00D12FA7000000000001 /* SoundPlayer.swift in Sources */,
+				E1FA00D22FA7000000000001 /* SoundSettings.swift in Sources */,
+				E1FA00D32FA7000000000001 /* SoundManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
