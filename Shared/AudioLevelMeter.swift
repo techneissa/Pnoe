@@ -27,14 +27,21 @@ struct AudioLevelMeasurement: Sendable, Equatable {
 ///
 /// The process list (`AudioOutputProcesses`) reports a process as playing for as long as it keeps its stream
 /// open, and players keep it open after a pause, with silence in it. Only the samples tell playing from lingering.
-/// Reading them needs a CoreAudio process tap, which needs the System Audio Recording permission, so this is
-/// optional and off by default.
+/// Reading them needs a CoreAudio process tap, which needs the System Audio Recording permission, so it is
+/// used only when the user turns on pausing media.
 protocol AudioLevelMeasuring: Sendable {
     /// Listens to the mix of `processes`, and to Pnoe's own audio separately when `includingOwnProcess` is set,
     /// for at most `window` seconds (`ListeningPlan` says when it may stop sooner). Never throws: any failure
     /// is `.unavailable`.
     func measure(processes: [AudioProcess], includingOwnProcess: Bool, window: TimeInterval) async
         -> AudioLevelMeasurement
+
+    /// Whether the System Audio Recording permission is granted. Never shows a prompt.
+    func hasPermission() async -> Bool
+
+    /// Asks for the permission if it has not been decided, and says whether it is granted and a tap can be made.
+    /// Called when the user turns pausing on.
+    func requestPermission() async -> Bool
 }
 
 /// When a listening session may stop before its window ends.

@@ -1,0 +1,30 @@
+import AppKit
+import SwiftUI
+
+/// The "Pause Media While Recording" switch with its help text, and the note that appears when macOS has not
+/// granted the System Audio Recording permission and the switch turned itself off. Lives apart from the audio
+/// settings screen so it can be rendered on its own.
+struct PauseMediaSettingRows: View {
+    @ObservedObject var playbackController: PlaybackController
+
+    var body: some View {
+        Toggle("Pause Media While Recording", isOn: $playbackController.isPauseMediaEnabled)
+
+        Text("Does not start music you just paused. Needs the System Audio Recording permission.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+        if playbackController.needsPermission {
+            HStack {
+                Text("Pausing media needs the System Audio Recording permission, so it was turned off.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Open System Settings") {
+                    NSWorkspace.shared.open(PlaybackController.permissionSettingsURL)
+                }
+                .controlSize(.small)
+            }
+        }
+    }
+}

@@ -7,7 +7,7 @@ import os
 ///
 /// A tap listens without changing what the user hears (`muteBehavior` is `.unmuted`), for the players and for
 /// Pnoe's own start sound alike. The first tap makes macOS ask for the System Audio Recording permission, which is
-/// why `PlaybackController` uses this only when the user turned the level check on. Each tap lives for one listening
+/// why `PlaybackController` asks for it when the user turns pausing media on. Each tap lives for one listening
 /// session and is private to Pnoe: no other app sees it.
 ///
 /// The tap, the private aggregate device that carries it and the IO callback follow Apple's "Capturing system audio
@@ -21,6 +21,56 @@ final class ProcessTapLevelMeter: AudioLevelMeasuring {
     /// A measurement is running on `queue`. One that never returns (a CoreAudio call blocked on the permission
     /// prompt) keeps this set, so later calls answer `.unavailable` at once instead of queueing behind it.
     private let isMeasuring = OSAllocatedUnfairLock(initialState: false)
+
+    /// Without a prompt. `TCCAccessPreflight` is the only way to ask the System Audio Recording permission without
+    /// creating a tap, which can deliver silence instead of failing when the permission is missing. It is a private
+    /// symbol, looked up at run time; when it is not there, the answer is "not granted".
+    func hasPermission() async -> Bool {
+        Self.tcc.preflight?(Self.tccService, nil) == 0
+    }
+
+    /// Shows the macOS prompt when the permission is undecided, then makes and destroys one tap on the whole system
+    /// mix to prove that taps work.
+    func requestPermission() async -> Bool {
+        guard let preflight = Self.tcc.preflight, let request = Self.tcc.request else { return false }
+        if preflight(Self.tccService, nil) != 0 {
+            let granted = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                request(Self.tccService, nil) { continuation.resume(returning: $0) }
+            }
+            guard granted else { return false }
+        }
+        return await withCheckedContinuation { continuation in
+            queue.async {
+                let description = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
+                description.name = "Pnoe permission check"
+                description.uuid = UUID()
+                description.isPrivate = true
+                description.muteBehavior = .unmuted
+                var tapID = AudioObjectID(kAudioObjectUnknown)
+                let created = AudioHardwareCreateProcessTap(description, &tapID) == noErr
+                if created { AudioHardwareDestroyProcessTap(tapID) }
+                continuation.resume(returning: created)
+            }
+        }
+    }
+
+    private static let tccService = "kTCCServiceAudioCapture" as CFString
+    private static let tcc: (
+        preflight: (@convention(c) (CFString, CFDictionary?) -> Int)?,
+        request: (@convention(c) (CFString, CFDictionary?, @escaping @convention(block) (Bool) -> Void) -> Void)?
+    ) = {
+        guard let handle = dlopen("/System/Library/PrivateFrameworks/TCC.framework/Versions/A/TCC", RTLD_NOW) else {
+            return (nil, nil)
+        }
+        let preflight = dlsym(handle, "TCCAccessPreflight").map {
+            unsafeBitCast($0, to: (@convention(c) (CFString, CFDictionary?) -> Int).self)
+        }
+        let request = dlsym(handle, "TCCAccessRequest").map {
+            unsafeBitCast(
+                $0, to: (@convention(c) (CFString, CFDictionary?, @escaping @convention(block) (Bool) -> Void) -> Void).self)
+        }
+        return (preflight, request)
+    }()
 
     func measure(processes: [AudioProcess], includingOwnProcess: Bool, window: TimeInterval) async
         -> AudioLevelMeasurement
