@@ -250,10 +250,42 @@ struct WordDiffGuardCurrencyTests {
         #expect(check("the dollars figure is 500 this year", "The figure is $500 this year.") == .inventedCurrency)
     }
 
-    @Test func otherCurrencySymbolsAreInventedEvenAfterDollars() {
+    @Test func aSymbolForAnotherCurrencyThanSpokenIsInvented() {
         #expect(check("the total of 12,500 dollars is high", "The total of €12,500 is high.") == .inventedCurrency)
-        #expect(check("the total of 12,500 euros is high", "The total of €12,500 is high.") == .inventedCurrency)
-        #expect(check("the total of 12,500 pounds is high", "The total of £12,500 is high.") == .inventedCurrency)
+        #expect(check("the total of 12,500 euros is high", "The total of $12,500 is high.") == .inventedCurrency)
+        #expect(check("the total of 12,500 pounds is high", "The total of €12,500 is high.") == .inventedCurrency)
+        #expect(check("the total of 12,500 euros is high", "The total of £12,500 is high.") == .inventedCurrency)
+    }
+
+    @Test func eachSpokenCurrencyMayBecomeItsOwnSymbol() {
+        #expect(check("the total of 12,500 euros is high", "The total of €12,500 is high.") == nil)
+        #expect(check("the total of 12,500 pounds is high", "The total of £12,500 is high.") == nil)
+        #expect(check("the total of 12,500 yen is high", "The total of ¥12,500 is high.") == nil)
+    }
+
+    // The input carries a currency symbol, and that must not excuse a different one (review round 2).
+    @Test func aWrittenSymbolDoesNotExcuseAnotherCurrency() {
+        #expect(check("the total of $12,500 is high", "the total of £12,500 is high") == .inventedCurrency)
+        #expect(check("the total of $12,500 is high", "the total of €12,500 is high") == .inventedCurrency)
+        #expect(check("the total of $12,500 is high", "the total of $12,500 is high") == nil)
+    }
+
+    @Test func aWrittenSymbolDoesNotExcuseASymbolOnAnotherAmount() {
+        let input = "the fee is $40 and the tip is 3 pounds"
+        #expect(check(input, "the fee is $40 and the tip is $3") == .inventedCurrency)
+        #expect(check(input, "the fee is $40 and the tip is £3") == nil)
+        #expect(check("the fee is $40 and the tip is 3", "the fee is $40 and the tip is $3") == .inventedCurrency)
+    }
+
+    @Test func currencySymbolsBeyondTheCommonFourAreRecognised() {
+        #expect(check("the fee is 40 items", "the fee is ₹40 items") == .inventedCurrency)
+        #expect(check("the fee is 40 items", "the fee is ₩40 items") == .inventedCurrency)
+        #expect(check("the fee is ₹40 items", "the fee is ₹40 items") == nil)
+    }
+
+    @Test func aSymbolBehindTheAmountIsJudgedToo() {
+        #expect(check("the fee is 40 euros", "the fee is 40€") == nil)
+        #expect(check("the fee is 40 items", "the fee is 40€ items") == .inventedCurrency)
     }
 
     @Test func aBareSymbolWithNoNumberIsInvented() {

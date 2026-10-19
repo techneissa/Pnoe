@@ -52,7 +52,7 @@ struct RunnerTests {
         let summary = RunSummary(run: "r", backend: "ollama", model: "m", results: results)
         #expect(summary.cases == 3)
         #expect(summary.fallback.byReason["timeout"] == 1)
-        // p1 is "john at gmail dot com": too short for the model, skipped and not counted as a fallback.
+        // p1 is "john at example dot com": too short for the model, skipped and not counted as a fallback.
         #expect(summary.fallback.skipped == 1)
         #expect(summary.fallback.considered == 2)
         #expect(summary.byContext["agent"]?.cases == 2)

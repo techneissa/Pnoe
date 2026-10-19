@@ -3785,7 +3785,7 @@
 },
 {
 "case": "p1",
-"output": "John at gmail.com",
+"output": "John at example.com",
 "label": "bad",
 "category": "dropped or reworded content",
 "runs": [
@@ -3795,7 +3795,7 @@
 },
 {
 "case": "p1",
-"output": "john@ gmail.com",
+"output": "john@ example.com",
 "label": "bad",
 "category": "dropped or reworded content",
 "runs": [
@@ -3813,7 +3813,7 @@
 },
 {
 "case": "p1",
-"output": "john@gmail.com",
+"output": "john@example.com",
 "label": "good",
 "category": null,
 "runs": [

@@ -865,11 +865,11 @@
   {
    "id": "p1",
    "context": "plain",
-   "raw": "john at gmail dot com",
-   "expected": "john@gmail.com",
+   "raw": "john at example dot com",
+   "expected": "john@example.com",
    "must_contain": [
     [
-     "john@gmail.com"
+     "john@example.com"
     ]
    ],
    "must_not": [

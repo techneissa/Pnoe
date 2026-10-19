@@ -952,7 +952,7 @@ def build_all():
 R1_PROTECTED = {
     "a1": ["source/auth/login.ts"], "a2": ["AIEnhancementService.swift", "makeRequest", "performRequest"],
     "a5": ["parseTranscript", "utils/text.py"], "a6": ["feature/settings"], "a8": ["test_user.py"],
-    "a9": ["Views/Settings"], "e6": ["tom@example.com"], "p1": ["john@gmail.com"],
+    "a9": ["Views/Settings"], "e6": ["tom@example.com"], "p1": ["john@example.com"],
     "n5": ["40,000", "60,000", "100,000"],
 }
 R1_KIND = {"p9": "inject", "p10": "inject", "a10": "inject", "c2": "question"}

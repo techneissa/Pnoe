@@ -95,8 +95,8 @@ struct TestSetTests {
     }
 
     @Test func everythingIsSynthetic() throws {
-        // Addresses use reserved or round 1 example domains only, and no real-looking paths or numbers appear.
-        let allowed: Set<String> = ["example.com", "example.org", "gmail.com"]
+        // Addresses use reserved domains only, and no real-looking paths or numbers appear.
+        let allowed: Set<String> = ["example.com", "example.org"]
         let email = try Regex(#"[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})"#)
         for testCase in cases {
             for text in [testCase.raw, testCase.expected] {
