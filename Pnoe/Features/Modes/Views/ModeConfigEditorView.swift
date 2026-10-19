@@ -100,7 +100,12 @@ struct ModeConfigEditorView: View {
         let snapshot = modeWarmupStore.snapshot
 
         if case .add = mode {
-            draft.applyAddModeDefaults(snapshot: snapshot)
+            let inheritsBuiltIn = draft.selectedAIProvider == AIProvider.builtIn.rawValue
+            draft.applyAddModeDefaults(
+                snapshot: snapshot,
+                builtInModelInstalled: inheritsBuiltIn
+                    && BuiltInModels.isInstalled(
+                        modelID: draft.selectedAIModel, chosenFiles: BuiltInEngine.storedChosenFiles()))
             draft.inheritUsableTranscriptionModelSelection(from: snapshot)
             if let promptId = draft.selectedPromptId, !snapshot.prompts.contains(where: { $0.id == promptId }) {
                 draft.selectedPromptId = nil

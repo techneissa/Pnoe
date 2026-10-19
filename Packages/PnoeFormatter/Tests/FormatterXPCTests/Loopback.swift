@@ -102,6 +102,7 @@ actor ScriptedRuntime: FormatterRuntime {
     /// For each request: the key of the prefix that was current when it ran.
     var generatedUnder: [UUID: String] = [:]
     var generateDelay: Duration = .zero
+    var unloadDelay: Duration = .zero
     private var gate: CheckedContinuation<Void, Never>?
     private var holdGenerate = false
     private var started: CheckedContinuation<Void, Never>?
@@ -112,6 +113,7 @@ actor ScriptedRuntime: FormatterRuntime {
 
     func release() { gate?.resume(); gate = nil }
     func clearRequests() { requests = []; cancelled = [] }
+    func setUnloadDelay(_ delay: Duration) { unloadDelay = delay }
     func setGenerateDelay(_ delay: Duration) { generateDelay = delay }
     func setPrepareDelay(_ delay: Duration) { prepareDelay = delay }
     func setReply(_ result: GenerationResult) { reply = result }
@@ -146,5 +148,8 @@ actor ScriptedRuntime: FormatterRuntime {
         gate = nil
     }
 
-    func unload() async { unloadCount += 1 }
+    func unload() async {
+        unloadCount += 1
+        if unloadDelay > .zero { try? await Task.sleep(for: unloadDelay) }
+    }
 }

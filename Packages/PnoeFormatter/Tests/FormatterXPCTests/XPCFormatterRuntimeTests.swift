@@ -463,4 +463,117 @@ struct XPCFormatterRuntimeReviewTests {
         }
         #expect(ContinuousClock.now - started < .milliseconds(400))
     }
+
+    // Round 5
+
+    @Test func aCrashWhileLoadingAnotherModelIsChargedToThatModelNotToTheFirst() async throws {
+        var configuration = XPCFormatterRuntime.Configuration()
+        configuration.crashLimit = 1
+        let service = ScriptedRuntime()
+        let loopback = Loopback(runtime: service)
+        let client = loopback.client(configuration)
+        let modelB = RuntimeModelSpec(
+            identifier: "model-b", modelURL: URL(fileURLWithPath: "/models/model-b.gguf"), contextLength: 4096)
+
+        try await client.prepare(Self.spec, prefix: Self.prefixA)
+        await service.setPrepareDelay(.milliseconds(500))
+        let loadingB = Task { try await client.prepare(modelB, prefix: Self.prefixA) }
+        try await Task.sleep(for: .milliseconds(100))
+        loopback.killService()
+        await #expect(throws: FormatterRuntimeError.crashed) { try await loadingB.value }
+
+        await service.setPrepareDelay(.zero)
+        await #expect(throws: FormatterRuntimeError.crashed) { try await client.prepare(modelB, prefix: Self.prefixA) }
+        // The first model is clean: it loads again.
+        try await client.prepare(Self.spec, prefix: Self.prefixA)
+        #expect(try await client.generate(Self.request(prefix: Self.prefixA)).text == "ok")
+    }
+
+    @Test func aConnectionThatIsInterruptedWhileTheServiceIsStillShuttingDownIsNotACrash() async throws {
+        var configuration = XPCFormatterRuntime.Configuration()
+        configuration.crashLimit = 1
+        let service = ScriptedRuntime()
+        await service.setUnloadDelay(.milliseconds(400))
+        let loopback = Loopback(runtime: service)
+        let client = loopback.client(configuration)
+        try await client.prepare(Self.spec, prefix: Self.prefixA)
+
+        let unloading = Task { await client.unload() }
+        try await Task.sleep(for: .milliseconds(80))
+        // A take arrives in the middle of the unload and reaches the service that is exiting.
+        loopback.rejectNextConnections(1)
+        try await client.prepare(Self.spec, prefix: Self.prefixA)
+        await unloading.value
+        #expect(try await client.generate(Self.request(prefix: Self.prefixA)).text == "ok")
+        // With a limit of one, a counted crash would block this.
+        try await client.prepare(Self.spec, prefix: Self.prefixB)
+    }
+
+    @Test func aServiceThatNeverAnswersTheLoadIsDroppedAndTheNextTakeStartsAFreshLoad() async throws {
+        var configuration = XPCFormatterRuntime.Configuration()
+        configuration.loadTimeout = .milliseconds(300)
+        configuration.maxPrepareWait = .seconds(5)
+        configuration.crashLimit = 1
+        let flaky = FlakyListener(stallFirstPrepares: 1)
+        let client = XPCFormatterRuntime(endpoint: .listener(flaky.listener.endpoint), configuration: configuration)
+
+        let started = ContinuousClock.now
+        await #expect(throws: FormatterRuntimeError.failed("the model did not load in time")) {
+            try await client.prepare(Self.spec, prefix: Self.prefixA)
+        }
+        #expect(ContinuousClock.now - started < .seconds(3))
+        // Not stuck on "loading": a take now is notReady, and the next prepare is a new load that works.
+        await #expect(throws: FormatterRuntimeError.notReady) { try await client.generate(Self.request(prefix: Self.prefixA)) }
+        try await client.prepare(Self.spec, prefix: Self.prefixA)
+        #expect(try await client.generate(Self.request(prefix: Self.prefixA)).text == "fresh")
+        #expect(flaky.prepareCount == 2)
+    }
+}
+
+/// A service whose first prepares never get an answer; later ones work.
+final class FlakyService: NSObject, FormatterXPCProtocol, @unchecked Sendable {
+    private let lock = NSLock()
+    private var stalls: Int
+    private(set) var prepares = 0
+
+    init(stallFirstPrepares: Int) { stalls = stallFirstPrepares }
+
+    func prepare(_ request: NSData, withReply reply: @escaping (NSError?) -> Void) {
+        lock.lock()
+        prepares += 1
+        let stall = stalls > 0
+        if stall { stalls -= 1 }
+        lock.unlock()
+        if !stall { reply(nil) }
+    }
+
+    func generate(_ request: NSData, withReply reply: @escaping (NSData?, NSError?) -> Void) {
+        let response = XPCGenerateResponse(text: "fresh", stopReason: .eos, promptTokens: 1, generatedTokens: 1)
+        reply((try? JSONEncoder().encode(response)) as NSData?, nil)
+    }
+
+    func cancel(_ requestID: String) {}
+    func shutdown(withReply reply: @escaping () -> Void) { reply() }
+}
+
+final class FlakyListener: NSObject, NSXPCListenerDelegate, @unchecked Sendable {
+    let listener = NSXPCListener.anonymous()
+    private let service: FlakyService
+    private nonisolated(unsafe) static var alive: [FlakyListener] = []
+    var prepareCount: Int { service.prepares }
+
+    init(stallFirstPrepares: Int) {
+        service = FlakyService(stallFirstPrepares: stallFirstPrepares)
+        super.init()
+        listener.delegate = self
+        listener.resume()
+        Self.alive.append(self)
+    }
+
+    func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
+        connection.exportedInterface = NSXPCInterface(with: FormatterXPCProtocol.self)
+        connection.exportedObject = service
+        connection.resume()
+        return true
+    }
 }

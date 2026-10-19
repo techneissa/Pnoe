@@ -170,6 +170,12 @@ struct BuiltInModelPicker: View {
                 Group {
                     if let selectedRow {
                         BuiltInModelRowLabel(row: selectedRow)
+                    } else if isLoading {
+                        // The folders are still being read: nothing to say about the stored model yet.
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small).scaleEffect(0.7)
+                            Text("Looking for models…").foregroundStyle(.secondary)
+                        }
                     } else if selection != nil {
                         Text("Model not found").foregroundStyle(.orange)
                     } else {

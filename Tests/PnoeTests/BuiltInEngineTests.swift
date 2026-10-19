@@ -452,6 +452,43 @@ final class BuiltInDefaultsTests: XCTestCase {
             "an inherited provider that is not on offer falls back as before")
     }
 
+    func testABuiltInWorkflowIsInheritedOnlyWithItsInstalledModelOtherwiseTheNormalPick() {
+        let offered = ["Gemini", "Built-in"]
+        // The active workflow is Built-in and its model is on the Mac: the new one inherits both.
+        XCTAssertEqual(
+            TemplateProviderPreselection.defaultProvider(
+                inherited: "Built-in", available: offered, builtIn: "Built-in", builtInModelInstalled: true),
+            "Built-in")
+        // Its model is gone, or nothing is installed: no Built-in without a model, the normal pick instead.
+        XCTAssertEqual(
+            TemplateProviderPreselection.defaultProvider(
+                inherited: "Built-in", available: offered, builtIn: "Built-in", builtInModelInstalled: false),
+            "Gemini")
+        XCTAssertNil(
+            TemplateProviderPreselection.defaultProvider(
+                inherited: "Built-in", available: ["Built-in"], builtIn: "Built-in"))
+        // Another inherited provider is not affected by the flag.
+        XCTAssertEqual(
+            TemplateProviderPreselection.defaultProvider(inherited: "Gemini", available: offered, builtIn: "Built-in"), "Gemini")
+    }
+
+    func testTheInheritedModelCountsAsInstalledOnlyWhileItsFileIsThere() async throws {
+        let mac = try FakeMac()
+        try mac.addHuggingFaceModel()
+        let entries = await BuiltInModels.installed(chosenFiles: [], artifact: mac.artifact, catalog: mac.configuration)
+        let id = try XCTUnwrap(entries.first?.id)
+        XCTAssertTrue(BuiltInModels.isInstalled(modelID: id, chosenFiles: [], artifact: mac.artifact, catalog: mac.configuration))
+        XCTAssertFalse(BuiltInModels.isInstalled(modelID: "hf:gone/x.gguf", chosenFiles: [], artifact: mac.artifact, catalog: mac.configuration))
+        XCTAssertFalse(BuiltInModels.isInstalled(modelID: nil, chosenFiles: [], artifact: mac.artifact, catalog: mac.configuration))
+        XCTAssertFalse(BuiltInModels.isInstalled(modelID: "", chosenFiles: [], artifact: mac.artifact, catalog: mac.configuration))
+        // A chosen file is installed while the file exists.
+        let chosen = try mac.write("mine/custom-Q5_K_M.gguf")
+        let chosenID = "file:" + chosen.standardizedFileURL.path
+        XCTAssertTrue(BuiltInModels.isInstalled(modelID: chosenID, chosenFiles: [chosen], artifact: mac.artifact, catalog: mac.configuration))
+        try FileManager.default.removeItem(at: chosen)
+        XCTAssertFalse(BuiltInModels.isInstalled(modelID: chosenID, chosenFiles: [chosen], artifact: mac.artifact, catalog: mac.configuration))
+    }
+
     func testTheModelIsFreedOnlyWhenNoWorkflowUsesBuiltIn() {
         typealias Workflow = BuiltInUsage.Workflow
         XCTAssertTrue(BuiltInUsage.isUsed(by: [Workflow(isAIEnabled: true, providerName: "Built-in")]))

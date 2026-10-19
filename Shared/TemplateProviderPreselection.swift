@@ -33,10 +33,15 @@ enum TemplateProviderPreselection {
     }
 
     /// The provider a new workflow's editor starts on: the one it already has, when that is on offer; else the
-    /// first connected provider, as before Built-in existed. Built-in is on offer to everyone, so it is never the
-    /// fallback: with no model installed it would be a provider that cannot run.
-    static func defaultProvider(inherited: String?, available: [String], builtIn: String) -> String? {
-        if let inherited, available.contains(inherited) { return inherited }
+    /// first connected provider, as before Built-in existed. Built-in is on offer to everyone, so it is only
+    /// inherited when the model it already has is installed (`builtInModelInstalled`), and is never the fallback:
+    /// with no model installed it would be a provider that cannot run.
+    static func defaultProvider(
+        inherited: String?, available: [String], builtIn: String, builtInModelInstalled: Bool = false
+    ) -> String? {
+        if let inherited, available.contains(inherited), inherited != builtIn || builtInModelInstalled {
+            return inherited
+        }
         return available.first { $0 != builtIn }
     }
 

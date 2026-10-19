@@ -41,6 +41,9 @@ public actor XPCFormatterRuntime: FormatterRuntime {
         public var shutdownWait: Duration = .seconds(3)
         /// An interruption this soon after an unload is the old service still exiting, not a crash.
         public var shutdownGrace: Duration = .seconds(1)
+        /// How long the service gets to load a model. A service that never answers is dropped after this, and
+        /// the next take starts a fresh load.
+        public var loadTimeout: Duration = .seconds(120)
 
         public init() {}
     }
@@ -162,6 +165,8 @@ public actor XPCFormatterRuntime: FormatterRuntime {
         loading = nil
         prepared = nil
         guard let connection else { return }
+        // The service is exiting from here on: a connection that reaches it now is not a crash.
+        lastShutdown = .now
         self.connection = nil
         connectionToken = UUID()
         let wait = configuration.shutdownWait
@@ -186,16 +191,37 @@ public actor XPCFormatterRuntime: FormatterRuntime {
         var attempts = 0
         while true {
             attempts += 1
-            let connection = ensureConnection(model: key.model)
+            let connection = ensureConnection()
+            // A crash from here on is charged to the model being loaded, not to the one the connection was
+            // opened for.
+            connectionModel = key.model
             let token = connectionToken
             do {
                 let payload = try JSONEncoder().encode(XPCPrepareRequest(spec: key.spec, prefix: key.prefix))
-                _ = try await Self.call(SendableConnection(connection)) { proxy, reply in
-                    proxy.prepare(payload as NSData) { error in
-                        if let error { reply.resolve(.failure(error)) } else { reply.resolve(.success(Data())) }
+                let box = SendableConnection(connection)
+                let timeout = configuration.loadTimeout
+                _ = try await withThrowingTaskGroup(of: Data.self) { group in
+                    group.addTask {
+                        try await Self.call(box) { proxy, reply in
+                            proxy.prepare(payload as NSData) { error in
+                                if let error { reply.resolve(.failure(error)) } else { reply.resolve(.success(Data())) }
+                            }
+                        }
                     }
+                    group.addTask {
+                        try await Task.sleep(for: timeout)
+                        throw LoadTimedOut()
+                    }
+                    defer { group.cancelAll() }
+                    return try await group.next() ?? Data()
                 }
                 break
+            } catch is LoadTimedOut {
+                // The service never answered. Drop it (it exits when its connection closes) and let the next
+                // take start a fresh load; this is not counted as a crash.
+                dropConnection(token: token)
+                if loading?.id == id { loading = nil }
+                throw FormatterRuntimeError.failed("the model did not load in time")
             } catch {
                 let mapped = (error as? FormatterRuntimeError) ?? runtimeError(fromXPC: error)
                 if mapped == .crashed {
@@ -218,7 +244,7 @@ public actor XPCFormatterRuntime: FormatterRuntime {
 
     // MARK: Connection
 
-    private func ensureConnection(model: String) -> NSXPCConnection {
+    private func ensureConnection() -> NSXPCConnection {
         if let connection { return connection }
         let created = endpoint.makeConnection()
         created.remoteObjectInterface = NSXPCInterface(with: FormatterXPCProtocol.self)
@@ -232,7 +258,6 @@ public actor XPCFormatterRuntime: FormatterRuntime {
         created.resume()
         connection = created
         connectionToken = token
-        connectionModel = model
         return created
     }
 
@@ -252,6 +277,18 @@ public actor XPCFormatterRuntime: FormatterRuntime {
         let recent = (crashes[model] ?? []).filter { now - $0 < configuration.crashWindow } + [now]
         crashes[model] = recent
         logger.error("Formatter service ended unexpectedly (\(recent.count, privacy: .public) in the window)")
+    }
+
+    private struct LoadTimedOut: Error {}
+
+    /// Closes the connection without counting a crash.
+    private func dropConnection(token: UUID) {
+        guard connectionToken == token, let dead = connection else { return }
+        connection = nil
+        connectionToken = UUID()
+        prepared = nil
+        dead.invalidate()
+        cancelIdleTimer()
     }
 
     private var shutDownRecently: Bool {

@@ -68,9 +68,17 @@ public struct FormatterModelCatalog: Sendable {
     /// asked, so this never waits on the network.
     public func installedGGUFModels() async -> [FormatterModelEntry] {
         let configuration = self.configuration
-        let all = await Task.detached(priority: .utility) { Self.scanFiles(configuration) }.value
+        return await Task.detached(priority: .utility) { Self.ggufModels(configuration) }.value
+    }
+
+    /// `installedGGUFModels()` on the calling thread, for a caller that must know now (it reads a few folders).
+    public func installedGGUFModelsNow() -> [FormatterModelEntry] {
+        Self.ggufModels(configuration)
+    }
+
+    private static func ggufModels(_ configuration: Configuration) -> [FormatterModelEntry] {
         var seen = Set<String>()
-        return all.filter { $0.kind == .gguf && seen.insert($0.id).inserted }
+        return scanFiles(configuration).filter { $0.kind == .gguf && seen.insert($0.id).inserted }
     }
 
     private static func scanFiles(_ configuration: Configuration) -> [FormatterModelEntry] {

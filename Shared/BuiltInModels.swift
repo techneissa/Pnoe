@@ -39,6 +39,21 @@ enum BuiltInModels {
         return entries
     }
 
+    /// Whether the model with this id is on the Mac now. Reads the model folders on the calling thread, for the
+    /// moment a new workflow decides whether it can inherit Built-in.
+    static func isInstalled(
+        modelID: String?,
+        chosenFiles: [URL],
+        artifact: FormatterModelArtifact = .gemma4E2B(),
+        catalog: FormatterModelCatalog.Configuration = .init()
+    ) -> Bool {
+        guard let modelID, !modelID.isEmpty else { return false }
+        if modelID == downloadedID(for: artifact) { return artifact.installedModelFileURL != nil }
+        var configuration = catalog
+        configuration.userChosenPaths = chosenFiles
+        return FormatterModelCatalog(configuration: configuration).installedGGUFModelsNow().contains { $0.id == modelID }
+    }
+
     /// The runtime spec for a stored model id, or nil when that model is gone (a file deleted, a drive unplugged).
     static func spec(
         forID id: String,
