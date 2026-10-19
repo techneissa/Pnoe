@@ -2,40 +2,76 @@ import XCTest
 
 /// Stands in for the WhisperKit package: records what the engine asks of it.
 private final class FakeRunner: WhisperKitRunner, @unchecked Sendable {
+    enum Mode { case instant, slow, blocksUntilCancelled }
+
     private let lock = NSLock()
     private(set) var loadedFolders: [URL] = []
     private(set) var tokenizerBases: [URL] = []
     private(set) var requests: [(audio: URL, language: String?, prompt: String?)] = []
     private(set) var unloadCount = 0
+    private(set) var takesRunning = 0
+    private(set) var maxTakesRunning = 0
+    private(set) var takesRunningAtUnload: [Int] = []
+    private(set) var cancelledTakes = 0
     var reply = "  hello world \n"
     var failLoad = false
+    var loadDelay: Duration = .zero
+    var mode: Mode = .instant
 
     func load(modelFolder: URL, tokenizerBase: URL) async throws {
         lock.withLock {
             loadedFolders.append(modelFolder)
             tokenizerBases.append(tokenizerBase)
         }
+        if loadDelay > .zero { try await Task.sleep(for: loadDelay) }
         if failLoad { throw CocoaError(.fileReadCorruptFile) }
     }
 
     func transcribe(audioURL: URL, language: String?, prompt: String?) async throws -> String {
-        lock.withLock { requests.append((audioURL, language, prompt)) }
+        lock.withLock {
+            requests.append((audioURL, language, prompt))
+            takesRunning += 1
+            maxTakesRunning = max(maxTakesRunning, takesRunning)
+        }
+        defer { lock.withLock { takesRunning -= 1 } }
+        switch mode {
+        case .instant:
+            break
+        case .slow:
+            try await Task.sleep(for: .milliseconds(40))
+        case .blocksUntilCancelled:
+            do {
+                try await Task.sleep(for: .seconds(60))
+            } catch {
+                lock.withLock { cancelledTakes += 1 }
+                throw error
+            }
+        }
         return reply
     }
 
     func unload() async {
-        lock.withLock { unloadCount += 1 }
+        lock.withLock {
+            unloadCount += 1
+            takesRunningAtUnload.append(takesRunning)
+        }
     }
+
+    var startedTakes: Int { lock.withLock { requests.count } }
 }
 
 private final class RunnerBox: @unchecked Sendable {
     private let lock = NSLock()
     private(set) var made: [FakeRunner] = []
     var failLoad = false
+    var loadDelay: Duration = .zero
+    var mode: FakeRunner.Mode = .instant
 
     func make() -> FakeRunner {
         let runner = FakeRunner()
         runner.failLoad = failLoad
+        runner.loadDelay = loadDelay
+        runner.mode = mode
         lock.withLock { made.append(runner) }
         return runner
     }
@@ -62,7 +98,7 @@ final class WhisperKitEngineTests: XCTestCase {
         let small = WhisperKitModelSpec(
             name: spec.name, displayName: spec.displayName, description: spec.description,
             variant: spec.variant, modelBytes: 16, tokenizerRepository: spec.tokenizerRepository,
-            tokenizerRevision: spec.tokenizerRevision, tokenizerBytes: spec.tokenizerBytes,
+            tokenizerRevision: spec.tokenizerRevision, tokenizerBytes: 3,
             isMultilingual: spec.isMultilingual, speed: spec.speed, accuracy: spec.accuracy,
             ramUsage: spec.ramUsage)
         let folder = storage.modelFolder(for: small)
@@ -73,7 +109,9 @@ final class WhisperKitEngineTests: XCTestCase {
         try Data(count: 16).write(to: folder.appendingPathComponent("AudioEncoder.mlmodelc/w.bin"))
         let tokenizer = storage.tokenizerFolder(for: small)
         try FileManager.default.createDirectory(at: tokenizer, withIntermediateDirectories: true)
-        try Data("{}".utf8).write(to: tokenizer.appendingPathComponent("tokenizer.json"))
+        for name in WhisperKitCatalog.tokenizerFiles {
+            try Data(count: 1).write(to: tokenizer.appendingPathComponent(name))
+        }
         try storage.markInstalled(small)
         return small
     }
@@ -208,5 +246,177 @@ final class WhisperKitEngineTests: XCTestCase {
         XCTAssertEqual(requests[0].prompt, "Pnoe, Argmax")
         XCTAssertNil(requests[1].language)
         XCTAssertNil(requests[1].prompt)
+    }
+
+    // MARK: Concurrency
+
+    /// Waits until `condition` holds, so a test does not depend on scheduling.
+    private func waitUntil(_ message: String = "condition", _ condition: () -> Bool) async throws {
+        for _ in 0..<400 where !condition() { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertTrue(condition(), message)
+    }
+
+    func testAPreloadAndTheFirstTakeShareOneLoad() async throws {
+        let spec = try installed(WhisperKitCatalog.small)
+        let box = RunnerBox()
+        box.loadDelay = .milliseconds(80)
+        let engine = makeEngine(box)
+
+        async let preload: Void = engine.load(spec)
+        async let take = engine.transcribe(audioURL: audio, spec: spec, language: nil, prompt: nil)
+        _ = try await (preload, take)
+
+        XCTAssertEqual(box.made.count, 1)
+        XCTAssertEqual(box.made[0].loadedFolders.count, 1)
+        XCTAssertEqual(box.made[0].requests.count, 1)
+    }
+
+    func testManyConcurrentLoadsLoadOnce() async throws {
+        let spec = try installed(WhisperKitCatalog.small)
+        let box = RunnerBox()
+        box.loadDelay = .milliseconds(50)
+        let engine = makeEngine(box)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for _ in 0..<6 { group.addTask { try await engine.load(spec) } }
+            try await group.waitForAll()
+        }
+
+        XCTAssertEqual(box.made.count, 1)
+        XCTAssertEqual(box.made[0].loadedFolders.count, 1)
+    }
+
+    func testTakesRunOneAtATimeInTheOrderAsked() async throws {
+        let spec = try installed(WhisperKitCatalog.small)
+        let box = RunnerBox()
+        box.mode = .slow
+        let engine = makeEngine(box)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for index in 0..<4 {
+                group.addTask {
+                    _ = try await engine.transcribe(
+                        audioURL: URL(fileURLWithPath: "/tmp/take-\(index).wav"), spec: spec, language: nil,
+                        prompt: nil)
+                }
+                // Queue them in a known order.
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            try await group.waitForAll()
+        }
+
+        XCTAssertEqual(box.made.count, 1)
+        XCTAssertEqual(box.made[0].maxTakesRunning, 1)
+        XCTAssertEqual(box.made[0].requests.count, 4)
+    }
+
+    func testUnloadWaitsForTheRunningTakeThenReleasesTheModel() async throws {
+        let spec = try installed(WhisperKitCatalog.small)
+        let box = RunnerBox()
+        box.mode = .blocksUntilCancelled
+        let engine = makeEngine(box)
+
+        let take = Task { try await engine.transcribe(audioURL: audio, spec: spec, language: nil, prompt: nil) }
+        try await waitUntil("take started") { box.made.first?.startedTakes == 1 }
+
+        await engine.unload()
+
+        do {
+            _ = try await take.value
+            XCTFail("the take should have been cancelled")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
+        let runner = box.made[0]
+        XCTAssertEqual(runner.unloadCount, 1)
+        XCTAssertEqual(runner.takesRunningAtUnload, [0], "released while a take was still running")
+        XCTAssertEqual(runner.cancelledTakes, 1)
+    }
+
+    func testTheEngineWorksAfterAnUnloadDuringATake() async throws {
+        let spec = try installed(WhisperKitCatalog.small)
+        let box = RunnerBox()
+        box.mode = .blocksUntilCancelled
+        let engine = makeEngine(box)
+
+        let take = Task { try await engine.transcribe(audioURL: audio, spec: spec, language: nil, prompt: nil) }
+        try await waitUntil("take started") { box.made.first?.startedTakes == 1 }
+        await engine.unload()
+        _ = await take.result
+
+        box.mode = .instant
+        let text = try await engine.transcribe(audioURL: audio, spec: spec, language: nil, prompt: nil)
+        XCTAssertEqual(text, "hello world")
+        XCTAssertEqual(box.made.count, 2)
+    }
+
+    // MARK: Cancel
+
+    func testCancellingARunningTakeStopsItAndFreesTheEngine() async throws {
+        let spec = try installed(WhisperKitCatalog.small)
+        let box = RunnerBox()
+        box.mode = .blocksUntilCancelled
+        let engine = makeEngine(box)
+
+        let take = Task { try await engine.transcribe(audioURL: audio, spec: spec, language: nil, prompt: nil) }
+        try await waitUntil("take started") { box.made.first?.startedTakes == 1 }
+        take.cancel()
+
+        do {
+            _ = try await take.value
+            XCTFail("expected cancellation")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
+        XCTAssertEqual(box.made[0].cancelledTakes, 1)
+
+        // The engine is free again: the next take runs.
+        box.made[0].mode = .instant
+        let text = try await engine.transcribe(audioURL: audio, spec: spec, language: nil, prompt: nil)
+        XCTAssertEqual(text, "hello world")
+    }
+
+    func testCancellingAQueuedTakeLeavesTheRunningOneAlone() async throws {
+        let spec = try installed(WhisperKitCatalog.small)
+        let box = RunnerBox()
+        box.mode = .blocksUntilCancelled
+        let engine = makeEngine(box)
+
+        let first = Task { try await engine.transcribe(audioURL: audio, spec: spec, language: nil, prompt: nil) }
+        try await waitUntil("first started") { box.made.first?.startedTakes == 1 }
+        let queued = Task { try await engine.transcribe(audioURL: audio, spec: spec, language: nil, prompt: nil) }
+        try await Task.sleep(for: .milliseconds(30))
+        queued.cancel()
+
+        do {
+            _ = try await queued.value
+            XCTFail("expected cancellation")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
+        XCTAssertEqual(box.made[0].startedTakes, 1, "the queued take must never reach WhisperKit")
+        XCTAssertEqual(box.made[0].cancelledTakes, 0, "the running take must not be cancelled")
+
+        first.cancel()
+        _ = await first.result
+    }
+
+    func testATaskCancelledBeforeItStartsNeverReachesWhisperKit() async throws {
+        let spec = try installed(WhisperKitCatalog.small)
+        let box = RunnerBox()
+        let engine = makeEngine(box)
+
+        let cancelledUpFront = Task { () -> Bool in
+            withUnsafeCurrentTask { $0?.cancel() }
+            do {
+                _ = try await engine.transcribe(audioURL: audio, spec: spec, language: nil, prompt: nil)
+                return false
+            } catch {
+                return error is CancellationError
+            }
+        }
+        let threwCancellation = await cancelledUpFront.value
+        XCTAssertTrue(threwCancellation)
+        XCTAssertTrue(box.made.isEmpty)
     }
 }

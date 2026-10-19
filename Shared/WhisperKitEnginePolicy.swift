@@ -64,8 +64,10 @@ enum WhisperKitEnginePolicy {
 /// Reads the power state through IOKit's power-source API, which needs no permission.
 enum PowerSourceReader {
     static func current() -> PowerSource {
+        // Create rule: the snapshot is owned by the caller. Get rule: the type string belongs to the
+        // snapshot, so it is read unretained and only while `info` is alive.
         guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
-            let providing = IOPSGetProvidingPowerSourceType(info)?.takeRetainedValue() as String?
+            let providing = IOPSGetProvidingPowerSourceType(info)?.takeUnretainedValue() as String?
         else {
             return .mains
         }

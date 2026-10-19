@@ -86,16 +86,24 @@ final class WhisperKitCatalogTests: XCTestCase {
         }
         let payload = bytes ?? spec.modelBytes
         try Data(count: Int(payload)).write(to: folder.appendingPathComponent("AudioEncoder.mlmodelc/weight.bin"))
-        let tokenizer = storage.tokenizerFolder(for: spec)
-        try FileManager.default.createDirectory(at: tokenizer, withIntermediateDirectories: true)
-        try Data("{}".utf8).write(to: tokenizer.appendingPathComponent("tokenizer.json"))
+        try writeTokenizer(spec)
+    }
+
+    /// The three tokenizer files, together `tokenizerBytes` long.
+    private func writeTokenizer(_ spec: WhisperKitModelSpec, skipping skipped: String? = nil) throws {
+        let folder = storage.tokenizerFolder(for: spec)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let sizes = [1, 1, Int(spec.tokenizerBytes) - 2]
+        for (name, size) in zip(WhisperKitCatalog.tokenizerFiles, sizes) where name != skipped {
+            try Data(count: size).write(to: folder.appendingPathComponent(name))
+        }
     }
 
     private func smallSpec(modelBytes: Int64) -> WhisperKitModelSpec {
         WhisperKitModelSpec(
             name: "whisperkit-test", displayName: "Test", description: "", variant: "openai_whisper-test",
             modelBytes: modelBytes, tokenizerRepository: "openai/whisper-test", tokenizerRevision: "x",
-            tokenizerBytes: 2, isMultilingual: true, speed: 0.5, accuracy: 0.5, ramUsage: 0.1)
+            tokenizerBytes: 10, isMultilingual: true, speed: 0.5, accuracy: 0.5, ramUsage: 0.1)
     }
 
     func testNothingIsInstalledBeforeADownload() {
@@ -121,6 +129,41 @@ final class WhisperKitCatalogTests: XCTestCase {
         XCTAssertTrue(storage.isInstalled(spec))
     }
 
+    func testAModelWithoutAllTokenizerFilesIsNotMarkedInstalled() throws {
+        for missing in WhisperKitCatalog.tokenizerFiles {
+            let spec = smallSpec(modelBytes: 1_000)
+            try install(spec)
+            try FileManager.default.removeItem(at: storage.tokenizerFolder(for: spec))
+            try writeTokenizer(spec, skipping: missing)
+
+            XCTAssertThrowsError(try storage.markInstalled(spec), "missing \(missing)")
+            XCTAssertFalse(storage.isInstalled(spec), "missing \(missing)")
+            try FileManager.default.removeItem(at: storage.modelFolder(for: spec))
+            try FileManager.default.removeItem(at: storage.tokenizerFolder(for: spec))
+        }
+    }
+
+    func testATokenizerOfTheWrongSizeIsNotMarkedInstalled() throws {
+        let spec = smallSpec(modelBytes: 1_000)
+        try install(spec)
+        try Data(count: 3).write(
+            to: storage.tokenizerFolder(for: spec).appendingPathComponent("tokenizer.json"))
+
+        XCTAssertThrowsError(try storage.markInstalled(spec))
+        XCTAssertFalse(storage.isInstalled(spec))
+    }
+
+    func testRemovingOneTokenizerFileUninstallsTheModel() throws {
+        let spec = smallSpec(modelBytes: 1_000)
+        try install(spec)
+        try storage.markInstalled(spec)
+        XCTAssertTrue(storage.isInstalled(spec))
+
+        try FileManager.default.removeItem(
+            at: storage.tokenizerFolder(for: spec).appendingPathComponent("tokenizer_config.json"))
+        XCTAssertFalse(storage.isInstalled(spec))
+    }
+
     func testInstalledNeedsTheTokenizerAndEveryComponent() throws {
         let spec = smallSpec(modelBytes: 1_000)
         try install(spec)
@@ -144,7 +187,7 @@ final class WhisperKitCatalogTests: XCTestCase {
         let other = WhisperKitModelSpec(
             name: "whisperkit-other", displayName: "Other", description: "", variant: "openai_whisper-other",
             modelBytes: 1_000, tokenizerRepository: "openai/whisper-other", tokenizerRevision: "x",
-            tokenizerBytes: 2, isMultilingual: true, speed: 0.5, accuracy: 0.5, ramUsage: 0.1)
+            tokenizerBytes: 10, isMultilingual: true, speed: 0.5, accuracy: 0.5, ramUsage: 0.1)
         try install(first)
         try install(other)
         try storage.markInstalled(first)
@@ -169,7 +212,7 @@ final class WhisperKitCatalogTests: XCTestCase {
         let sibling = WhisperKitModelSpec(
             name: "whisperkit-test-b", displayName: "B", description: "", variant: "openai_whisper-test_b",
             modelBytes: 1_000, tokenizerRepository: first.tokenizerRepository, tokenizerRevision: "x",
-            tokenizerBytes: 2, isMultilingual: true, speed: 0.5, accuracy: 0.5, ramUsage: 0.1)
+            tokenizerBytes: 10, isMultilingual: true, speed: 0.5, accuracy: 0.5, ramUsage: 0.1)
         try install(first)
         try install(sibling)
         try storage.markInstalled(first)

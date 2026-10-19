@@ -2,7 +2,10 @@ import Foundation
 import WhisperKit
 
 /// Runs a Core ML Whisper model through the WhisperKit package.
-final class WhisperKitRunnerImpl: WhisperKitRunner, @unchecked Sendable {
+///
+/// An actor owns the `WhisperKit` object, so a load, a take and an unload never touch it from two
+/// threads. A take keeps its own reference, so an unload during a take cannot free it underneath.
+actor WhisperKitRunnerImpl: WhisperKitRunner {
     private var kit: WhisperKit?
 
     func load(modelFolder: URL, tokenizerBase: URL) async throws {
@@ -23,6 +26,7 @@ final class WhisperKitRunnerImpl: WhisperKitRunner, @unchecked Sendable {
 
     func transcribe(audioURL: URL, language: String?, prompt: String?) async throws -> String {
         guard let kit else { throw PnoeEngineError.modelLoadFailed }
+        try Task.checkCancellation()
 
         let languageCode = language.flatMap { Constants.languageCodes.contains($0) ? $0 : nil }
         var options = DecodingOptions(
@@ -38,12 +42,15 @@ final class WhisperKitRunnerImpl: WhisperKitRunner, @unchecked Sendable {
             if !tokens.isEmpty { options.promptTokens = tokens }
         }
 
+        // WhisperKit checks for task cancellation between windows and decoding steps.
         let results = try await kit.transcribe(audioPath: audioURL.path, decodeOptions: options)
+        try Task.checkCancellation()
         return results.map(\.text).joined(separator: " ")
     }
 
     func unload() async {
-        await kit?.unloadModels()
+        let old = kit
         kit = nil
+        await old?.unloadModels()
     }
 }

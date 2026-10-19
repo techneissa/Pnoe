@@ -143,8 +143,19 @@ struct WhisperKitStorage: Sendable {
         let hasComponents = WhisperKitCatalog.requiredComponents.allSatisfy {
             fileManager.fileExists(atPath: folder.appendingPathComponent($0).path)
         }
-        let tokenizer = tokenizerFolder(for: spec).appendingPathComponent("tokenizer.json")
-        return hasComponents && fileManager.fileExists(atPath: tokenizer.path)
+        let hasTokenizer = WhisperKitCatalog.tokenizerFiles.allSatisfy {
+            fileManager.fileExists(atPath: tokenizerFolder(for: spec).appendingPathComponent($0).path)
+        }
+        return hasComponents && hasTokenizer
+    }
+
+    /// Bytes of the three tokenizer files in the model's tokenizer folder; a missing file counts as 0.
+    func tokenizerBytesOnDisk(_ spec: WhisperKitModelSpec) -> Int64 {
+        WhisperKitCatalog.tokenizerFiles.reduce(into: Int64(0)) { total, name in
+            let url = tokenizerFolder(for: spec).appendingPathComponent(name)
+            let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            if values?.isRegularFile == true { total += Int64(values?.fileSize ?? 0) }
+        }
     }
 
     /// Bytes of the model's own files on disk, ignoring hidden bookkeeping files.
@@ -167,9 +178,10 @@ struct WhisperKitStorage: Sendable {
         return total
     }
 
-    /// Records a finished download. Fails when the files on disk do not add up to the catalog size.
+    /// Records a finished download. Fails when the model files or the tokenizer files on disk do not
+    /// add up to the catalog sizes, so a model without its tokenizer is never marked installed.
     func markInstalled(_ spec: WhisperKitModelSpec) throws {
-        guard modelBytesOnDisk(spec) == spec.modelBytes else {
+        guard modelBytesOnDisk(spec) == spec.modelBytes, tokenizerBytesOnDisk(spec) == spec.tokenizerBytes else {
             throw CocoaError(.fileReadCorruptFile)
         }
         try String(spec.modelBytes).write(to: completionMarker(for: spec), atomically: true, encoding: .utf8)

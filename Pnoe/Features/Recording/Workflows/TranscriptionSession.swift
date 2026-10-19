@@ -22,6 +22,7 @@ final class FileTranscriptionSession: TranscriptionSession {
     private let service: TranscriptionService
     private var model: (any TranscriptionModel)?
     private var context: TranscriptionRequestContext = .currentDefaults
+    private var transcribeTask: Task<String, Error>?
 
     init(service: TranscriptionService) {
         self.service = service
@@ -37,11 +38,22 @@ final class FileTranscriptionSession: TranscriptionSession {
         guard let model = model else {
             throw PnoeEngineError.transcriptionFailed
         }
-        return try await service.transcribe(audioURL: audioURL, model: model, context: context)
+        let service = service
+        let context = context
+        let task = Task { try await service.transcribe(audioURL: audioURL, model: model, context: context) }
+        transcribeTask = task
+        defer { transcribeTask = nil }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
+    /// Cancels a running transcription. Services that check for cancellation (WhisperKit, cloud
+    /// requests) stop early; the others finish and the pipeline discards the result.
     func cancel() {
-        // No-op for file-based transcription
+        transcribeTask?.cancel()
     }
 }
 
