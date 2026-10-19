@@ -138,6 +138,15 @@ final class ResumableFileDownloaderTests: XCTestCase {
         XCTAssertTrue(StubDownloadServer.receivedRequests.isEmpty)
     }
 
+    func testFileSizeSeesAFileRewrittenAfterTheFirstRead() throws {
+        try content.write(to: partialURL)
+        XCTAssertEqual(ResumableFileDownloader.fileSize(at: partialURL), Int64(content.count))
+        try Data(repeating: 7, count: 10).write(to: partialURL)
+        XCTAssertEqual(ResumableFileDownloader.fileSize(at: partialURL), 10)
+        try FileManager.default.removeItem(at: partialURL)
+        XCTAssertEqual(ResumableFileDownloader.fileSize(at: partialURL), 0)
+    }
+
     func testSHA256MatchesCryptoKit() async throws {
         try content.write(to: partialURL)
         let expected = SHA256.hash(data: content).map { String(format: "%02x", $0) }.joined()

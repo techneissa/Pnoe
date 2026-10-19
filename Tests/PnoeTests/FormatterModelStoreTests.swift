@@ -221,6 +221,108 @@ final class FormatterModelStoreTests: XCTestCase {
         XCTAssertEqual(store.state, .notInstalled)
         XCTAssertTrue(FileManager.default.fileExists(atPath: artifact.partialFileURL.path))
     }
+
+    func testStartAfterDeleteWaitsForTheOldRunAndTheOldRunLeavesTheNewOneAlone() async throws {
+        let artifact = artifact()
+        let gate = Gate()
+        let downloader = SlowFirstDownloader(content: content, hash: artifact.expectedSHA256, gate: gate)
+        let store = FormatterModelStore(
+            artifact: artifact,
+            downloader: downloader,
+            availableCapacity: { _ in .max },
+            waitForNetwork: {}
+        )
+        let states = record(store)
+
+        store.start()
+        for _ in 0..<200 where downloader.callCount < 1 { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(downloader.callCount, 1)
+
+        // The first run is cancelled but takes its time to unwind.
+        store.delete()
+        store.start()
+        XCTAssertEqual(store.state, .downloading(fraction: 0))
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(downloader.callCount, 1, "the new run must wait for the old one to finish unwinding")
+
+        await gate.open()
+        try await finish(store)
+
+        XCTAssertEqual(store.state, .ready)
+        XCTAssertEqual(downloader.callCount, 2)
+        XCTAssertEqual(downloader.maximumConcurrentCalls, 1)
+        // After the second start the old run's exit must not have reset the state.
+        let recorded = states.values
+        let restartIndex = try XCTUnwrap(recorded.lastIndex(of: .downloading(fraction: 0)))
+        XCTAssertFalse(recorded[restartIndex...].contains(.notInstalled))
+        XCTAssertEqual(try Data(contentsOf: artifact.modelFileURL), content)
+    }
+}
+
+/// Lets a test hold a task until it opens the gate.
+private actor Gate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        if isOpen { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func open() {
+        isOpen = true
+        waiters.forEach { $0.resume() }
+        waiters = []
+    }
+}
+
+/// The first call hangs until cancelled, then unwinds only when the gate opens. The second call writes the file.
+private final class SlowFirstDownloader: FormatterModelFileDownloading, @unchecked Sendable {
+    private let lock = NSLock()
+    private var calls = 0
+    private var active = 0
+    private var maximumActive = 0
+    private let content: Data
+    private let hash: String
+    private let gate: Gate
+
+    init(content: Data, hash: String, gate: Gate) {
+        self.content = content
+        self.hash = hash
+        self.gate = gate
+    }
+
+    var callCount: Int { lock.withLock { calls } }
+    var maximumConcurrentCalls: Int { lock.withLock { maximumActive } }
+
+    func download(
+        from sourceURL: URL,
+        to partialURL: URL,
+        expectedByteCount: Int64,
+        progress: @escaping @Sendable (Double) -> Void
+    ) async throws {
+        let call = lock.withLock { () -> Int in
+            calls += 1
+            active += 1
+            maximumActive = max(maximumActive, active)
+            return calls
+        }
+        defer { lock.withLock { active -= 1 } }
+
+        if call == 1 {
+            do {
+                try Data(repeating: 1, count: 100).write(to: partialURL)
+                try await Task.sleep(for: .seconds(60))
+            } catch {
+                await gate.wait()
+                throw error
+            }
+        } else {
+            try content.write(to: partialURL)
+        }
+    }
+
+    func sha256(of fileURL: URL) async throws -> String { hash }
 }
 
 /// Writes some bytes, then waits until it is cancelled.

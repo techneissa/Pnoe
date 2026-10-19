@@ -199,6 +199,52 @@ struct ModelFolderScannerTests {
         #expect(entries[2].quantization == "Q5_K_M")
     }
 
+    @Test("malformed shard names are skipped and never crash the scan")
+    func malformedShardNames() throws {
+        let root = try TemporaryDirectory()
+        try root.file("pub/repo-GGUF/x-00001-of-00000.gguf", bytes: 5)
+        try root.file("pub/repo-GGUF/x-00005-of-00003.gguf", bytes: 5)
+        try root.file("pub/repo-GGUF/x-00000-of-00003.gguf", bytes: 5)
+        try root.file("pub/repo-GGUF/x-00001-of-99999.gguf", bytes: 5)
+        try root.file("pub/repo-GGUF/x-99999-of-99999.gguf", bytes: 5)
+        try root.file("pub/repo-GGUF/x-1-of-3.gguf", bytes: 5)
+        try root.file("pub/repo-GGUF/-00001-of-00001.gguf", bytes: 5)
+        try root.file("pub/repo-GGUF/.gguf", bytes: 5)
+        try root.file("pub/repo-GGUF/good-Q4_K_M.gguf", bytes: 7)
+
+        let entries = LMStudioScanner(modelsDirectory: root.url).scan()
+        // x-1-of-3 has no five-digit shard suffix, so it is an ordinary file name; a one-of-one shard is a real
+        // split model whose name is only the suffix; the impossible shard numbers are gone.
+        #expect(entries.map(\.displayName).sorted() == ["-00001-of-00001", "good-Q4_K_M", "x-1-of-3"])
+    }
+
+    @Test("shard parsing accepts only real numbers")
+    func shardParsing() {
+        #expect(ModelNameRules.ggufShard(fileName: "m-00002-of-00004.gguf")?.index == 2)
+        #expect(ModelNameRules.ggufShard(fileName: "m-00001-of-00000.gguf") == nil)
+        #expect(ModelNameRules.ggufShard(fileName: "m-00000-of-00004.gguf") == nil)
+        #expect(ModelNameRules.ggufShard(fileName: "m-00005-of-00004.gguf") == nil)
+        #expect(ModelNameRules.ggufShard(fileName: "m-00001-of-01000.gguf") == nil)
+        #expect(ModelNameRules.hasShardSuffix(fileName: "m-00001-of-00000.gguf"))
+        #expect(!ModelNameRules.hasShardSuffix(fileName: "m-Q4_K_M.gguf"))
+    }
+
+    @Test("odd file and folder names, empty files and broken configs do not crash the scan")
+    func oddNames() throws {
+        let root = try TemporaryDirectory()
+        try root.file("pub/repo-GGUF/\u{202E}weird \u{1F4A5}.gguf", bytes: 0)
+        try root.file("pub/repo-GGUF/spaces in name Q8_0.GGUF", bytes: 3)
+        try root.file("mlx-community/broken-4bit/config.json", contents: "{not json")
+        try root.file("mlx-community/broken-4bit/model.safetensors", bytes: 4)
+        try root.file("mlx-community/emptycfg-4bit/config.json", contents: "")
+        try root.file("mlx-community/emptycfg-4bit/model.safetensors", bytes: 4)
+        try root.file("mlx-community/oddbits/config.json", contents: #"{"quantization":{"bits":"four"}}"#)
+        try root.file("mlx-community/oddbits/model.safetensors", bytes: 4)
+        let entries = LMStudioScanner(modelsDirectory: root.url).scan()
+        #expect(entries.contains { $0.displayName == "spaces in name Q8_0" && $0.quantization == "Q8_0" })
+        #expect(entries.filter { $0.kind == .mlx }.count == 3)
+    }
+
     // MARK: Names
 
     @Test("quantization from file names")

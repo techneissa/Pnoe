@@ -77,6 +77,11 @@ final class FormatterModelStore: ObservableObject {
     private let availableCapacity: @Sendable (URL) -> Int64
     private let waitForNetwork: @Sendable () async -> Void
     private var task: Task<Void, Never>?
+    /// Which run owns `task` and `state`. A run that is no longer current (it was cancelled or deleted while
+    /// unwinding) changes neither.
+    private var currentRun: UUID?
+    /// The run `delete()` cancelled; the next run waits for it to finish before it touches the folder.
+    private var unwindingTask: Task<Void, Never>?
     private let logger = Logger(subsystem: "com.techneissa.pnoe", category: "FormatterModelStore")
 
     init(
@@ -113,10 +118,18 @@ final class FormatterModelStore: ObservableObject {
     /// Starts or resumes the download. Does nothing while one runs or the model is ready.
     func start() {
         guard task == nil, state != .ready else { return }
+        let run = UUID()
+        let previous = unwindingTask
+        currentRun = run
         state = .downloading(fraction: 0)
         task = Task { [weak self] in
-            await self?.run()
-            self?.task = nil
+            await previous?.value
+            guard let self, self.currentRun == run else { return }
+            await self.run(run)
+            if self.currentRun == run {
+                self.currentRun = nil
+                self.task = nil
+            }
         }
     }
 
@@ -128,7 +141,9 @@ final class FormatterModelStore: ObservableObject {
     /// Removes the folder (model, partial file and marker). The owner turns the feature off in `onModelDeleted`.
     func delete() {
         task?.cancel()
+        if let task { unwindingTask = task }
         task = nil
+        currentRun = nil
         artifact.removeInstalledFiles()
         state = .notInstalled
         onModelDeleted?()
@@ -136,7 +151,7 @@ final class FormatterModelStore: ObservableObject {
 
     // MARK: Download
 
-    private func run() async {
+    private func run(_ run: UUID) async {
         let artifact = artifact
         do {
             try FileManager.default.createDirectory(at: artifact.modelDirectory, withIntermediateDirectories: true)
@@ -149,32 +164,32 @@ final class FormatterModelStore: ObservableObject {
                         to: artifact.partialFileURL,
                         expectedByteCount: artifact.expectedFileSize,
                         progress: { [weak self] fraction in
-                            Task { @MainActor [weak self] in self?.updateProgress(fraction) }
+                            Task { @MainActor [weak self] in self?.updateProgress(fraction, run: run) }
                         }
                     )
                     break
                 } catch where Self.isConnectionLoss(error) && !Task.isCancelled {
                     logger.notice("Formatter model download paused: \(error.localizedDescription, privacy: .public)")
-                    state = .paused
+                    set(.paused, run)
                     await waitForNetwork()
                     try Task.checkCancellation()
-                    state = .downloading(fraction: progressFraction())
+                    set(.downloading(fraction: progressFraction()), run)
                 }
             }
             try Task.checkCancellation()
 
-            state = .verifying
+            set(.verifying, run)
             try await verifyAndInstall()
-            state = .ready
+            set(.ready, run)
             logger.notice("Formatter model installed")
         } catch is CancellationError {
             logger.notice("Formatter model download cancelled")
-            state = .notInstalled
+            set(.notInstalled, run)
         } catch let error as URLError where error.code == .cancelled {
-            state = .notInstalled
+            set(.notInstalled, run)
         } catch {
             logger.error("Formatter model download failed: \(error.localizedDescription, privacy: .public)")
-            state = .failed(error.localizedDescription)
+            set(.failed(error.localizedDescription), run)
         }
     }
 
@@ -222,8 +237,14 @@ final class FormatterModelStore: ObservableObject {
         }
     }
 
-    private func updateProgress(_ fraction: Double) {
-        guard fraction.isFinite, (0...1).contains(fraction) else { return }
+    /// Sets the state only if `run` is still the current run.
+    private func set(_ newState: FormatterModelDownloadState, _ run: UUID) {
+        guard currentRun == run else { return }
+        state = newState
+    }
+
+    private func updateProgress(_ fraction: Double, run: UUID) {
+        guard currentRun == run, fraction.isFinite, (0...1).contains(fraction) else { return }
         switch state {
         case .downloading(let current):
             // Progress only moves forward, except the reset to 0 after a restart from byte 0.

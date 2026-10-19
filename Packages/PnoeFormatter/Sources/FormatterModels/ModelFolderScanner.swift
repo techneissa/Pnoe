@@ -39,7 +39,10 @@ struct ModelFolderScanner {
             var size: Int64? = Self.size(of: file.url)
             guard size != nil else { continue }
 
-            if let shard = ModelNameRules.ggufShard(fileName: name) {
+            let shard = ModelNameRules.ggufShard(fileName: name)
+            // A shard-looking name with impossible numbers is not a model; the folder is not ours to guess about.
+            if shard == nil, ModelNameRules.hasShardSuffix(fileName: name) { continue }
+            if let shard {
                 // Offer a split model once, at its first shard, with the sizes of all shards added up.
                 guard shard.index == 1 else { continue }
                 size = shardTotal(firstShard: file.url, count: shard.count) ?? size
@@ -50,8 +53,7 @@ struct ModelFolderScanner {
             result.append(
                 FormatterModelEntry(
                     id: id,
-                    displayName: ModelNameRules.ggufShard(fileName: name) == nil
-                        ? stem : Self.stripShardSuffix(stem),
+                    displayName: shard == nil ? stem : Self.stripShardSuffix(stem),
                     kind: .gguf,
                     sizeBytes: size,
                     source: options.source,
@@ -70,7 +72,7 @@ struct ModelFolderScanner {
         let prefix = String(name[..<range.lowerBound])
         let suffix = String(format: "-of-%05d.gguf", count)
         var total: Int64 = 0
-        for index in 1...count {
+        for index in 1...max(count, 1) {
             let sibling = firstShard.deletingLastPathComponent()
                 .appendingPathComponent(prefix + String(format: "-%05d", index) + suffix)
             guard let size = Self.size(of: sibling) else { return nil }
@@ -80,7 +82,8 @@ struct ModelFolderScanner {
     }
 
     private static func stripShardSuffix(_ stem: String) -> String {
-        stem.replacingOccurrences(of: #"-\d{5}-of-\d{5}$"#, with: "", options: .regularExpression)
+        let stripped = stem.replacingOccurrences(of: #"-\d{5}-of-\d{5}$"#, with: "", options: .regularExpression)
+        return stripped.isEmpty ? stem : stripped
     }
 
     // MARK: MLX

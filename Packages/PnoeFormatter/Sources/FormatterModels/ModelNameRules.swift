@@ -32,18 +32,30 @@ enum ModelNameRules {
         return fileName[swiftRange].uppercased()
     }
 
-    /// `-00002-of-00003` shard suffix: the shard number and the shard count.
+    /// The most shards a split model may claim. Real models have a few dozen; a bigger number in a file name is
+    /// not a real split and would only make the scanner stat thousands of missing files.
+    static let maximumShardCount = 999
+
+    /// True when the name ends in `-NNNNN-of-NNNNN.gguf`, valid or not.
+    static func hasShardSuffix(fileName: String) -> Bool {
+        fileName.range(of: shardPattern, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    /// `-00002-of-00003` shard suffix: the shard number and the shard count. Nil when the name has no such suffix
+    /// or its numbers cannot be real (`-00001-of-00000`, shard above count, count above `maximumShardCount`).
     static func ggufShard(fileName: String) -> (index: Int, count: Int)? {
-        let pattern = #"-(\d{5})-of-(\d{5})\.gguf$"#
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return nil }
+        guard let regex = try? NSRegularExpression(pattern: shardPattern, options: [.caseInsensitive]) else { return nil }
         let range = NSRange(fileName.startIndex..., in: fileName)
         guard let match = regex.firstMatch(in: fileName, range: range),
               let first = Range(match.range(at: 1), in: fileName),
               let second = Range(match.range(at: 2), in: fileName),
-              let index = Int(fileName[first]), let count = Int(fileName[second])
+              let index = Int(fileName[first]), let count = Int(fileName[second]),
+              count >= 1, count <= maximumShardCount, index >= 1, index <= count
         else { return nil }
         return (index, count)
     }
+
+    private static let shardPattern = #"-(\d{5})-of-(\d{5})\.gguf$"#
 
     /// MLX conversions: the `mlx-community` org, or a name that says MLX or a bit width, and (checked by the
     /// caller) a `quantization` entry in `config.json`.
