@@ -210,6 +210,11 @@ enum BackupImporter {
         if let model = general.autoLearnModel {
             UserDefaults.standard.set(model, forKey: AutoLearnSettings.modelKey)
         }
+        AutoLearnBackupSettings(
+            repeatThreshold: general.autoLearnRepeatThreshold, usesAIReview: general.autoLearnUsesAIReview
+        ).apply(
+            to: .standard, thresholdKey: AutoLearnSettings.repeatThresholdKey,
+            usesAIReviewKey: AutoLearnSettings.usesAIReviewKey)
         if general.isAutoLearnDictionaryEnabled != nil || importedReviewSchedule != nil {
             Task {
                 if let autoLearnEnabled = general.isAutoLearnDictionaryEnabled {

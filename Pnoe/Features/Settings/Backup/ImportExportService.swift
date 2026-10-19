@@ -151,6 +151,9 @@ class ImportExportService {
                 replacements.map { ($0.originalText, $0.replacementText) }, uniquingKeysWith: { _, last in last })
         }
 
+        let autoLearnRepeatSettings = AutoLearnBackupSettings.current(
+            in: .standard, thresholdKey: AutoLearnSettings.repeatThresholdKey,
+            usesAIReviewKey: AutoLearnSettings.usesAIReviewKey)
         let generalSettingsToExport = GeneralBackup(
             primaryRecordingShortcut: ShortcutStore.shortcut(for: .primaryRecording).map(ShortcutBackup.init),
             secondaryRecordingShortcut: ShortcutStore.shortcut(for: .secondaryRecording).map(ShortcutBackup.init),
@@ -189,7 +192,9 @@ class ImportExportService {
             isAutoLearnDictionaryEnabled: AutoLearnSettings.isEnabled,
             autoLearnReviewSchedule: AutoLearnSettings.reviewSchedule.rawValue,
             autoLearnProvider: AutoLearnSettings.selectedProvider?.rawValue,
-            autoLearnModel: AutoLearnSettings.selectedModel
+            autoLearnModel: AutoLearnSettings.selectedModel,
+            autoLearnRepeatThreshold: autoLearnRepeatSettings.repeatThreshold,
+            autoLearnUsesAIReview: autoLearnRepeatSettings.usesAIReview
         )
 
         let exportedSettings = BackupFile(
