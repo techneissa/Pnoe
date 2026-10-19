@@ -23,14 +23,12 @@ struct SnippetsSectionView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Tappable views rather than Buttons: ImageRenderer draws a Button as a placeholder.
-                Label("Add Snippet", systemImage: "plus.circle.fill")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color.accentColor)
-                    .contentShape(Rectangle())
-                    .onTapGesture(perform: onAdd)
-                    .accessibilityAddTraits(.isButton)
-                    .help("Add snippet")
+                Button(action: onAdd) {
+                    Label("Add Snippet", systemImage: "plus.circle.fill")
+                        .font(.system(size: 13))
+                }
+                .buttonStyle(.borderless)
+                .help("Add snippet")
             }
 
             if rows.isEmpty {
@@ -91,23 +89,23 @@ private struct SnippetRow: View {
                 .help(row.expansion)
 
             HStack(spacing: 6) {
-                Image(systemName: "pencil.circle.fill")
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.primary)
-                    .contentShape(Rectangle())
-                    .onTapGesture(perform: onEdit)
-                    .accessibilityAddTraits(.isButton)
-                    .help("Edit snippet")
-                    .accessibilityLabel("Edit snippet \(row.trigger)")
+                Button(action: onEdit) {
+                    Image(systemName: "pencil.circle.fill")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.primary)
+                }
+                .buttonStyle(.borderless)
+                .help("Edit snippet")
+                .accessibilityLabel("Edit snippet \(row.trigger)")
 
-                Image(systemName: "xmark.circle.fill")
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.primary)
-                    .contentShape(Rectangle())
-                    .onTapGesture(perform: onDelete)
-                    .accessibilityAddTraits(.isButton)
-                    .help("Remove snippet")
-                    .accessibilityLabel("Remove snippet \(row.trigger)")
+                Button(action: onDelete) {
+                    Image(systemName: "xmark.circle.fill")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.primary)
+                }
+                .buttonStyle(.borderless)
+                .help("Remove snippet")
+                .accessibilityLabel("Remove snippet \(row.trigger)")
             }
         }
         .padding(.vertical, 8)

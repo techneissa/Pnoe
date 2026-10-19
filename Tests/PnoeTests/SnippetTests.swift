@@ -49,6 +49,38 @@ final class SnippetMatcherTests: XCTestCase {
         XCTAssertEqual(expanded("my email", [SnippetRule(trigger: "My email.", expansion: "x")]), "x")
     }
 
+    func testTriggersKeepTheirOwnSymbols() {
+        for (trigger, spoken, near) in [
+            ("c++", "I like C++ a lot", "I like c a lot"),
+            ("C#", "I write C# daily", "I write C daily"),
+            ("50%", "give me 50% off", "give me 50 off"),
+            ("a.b", "see a.b now", "see a b now"),
+            ("f(x)", "call f(x) now", "call f x now"),
+            ("(x)", "the (x) case", "the x case"),
+        ] {
+            XCTAssertEqual(SnippetTrigger.normalized(trigger), trigger, trigger)
+            let rule = SnippetRule(trigger: trigger, expansion: "EXP")
+            XCTAssertTrue(SnippetMatcher.match(in: spoken, rules: [rule]).hasMatches, trigger)
+            XCTAssertFalse(SnippetMatcher.match(in: near, rules: [rule]).hasMatches, trigger)
+        }
+        // "C#" must not fire on a bare "C", and "50%" not on a bare "50".
+        XCTAssertEqual(expanded("grade C is fine", [SnippetRule(trigger: "C#", expansion: "EXP")]), "grade C is fine")
+        XCTAssertEqual(expanded("I scored 50.", [SnippetRule(trigger: "50%", expansion: "EXP")]), "I scored 50.")
+        XCTAssertEqual(expanded("f(x) is odd", [SnippetRule(trigger: "(x)", expansion: "EXP")]), "f(x) is odd")
+        // Sentence punctuation after a symbol trigger is still tolerated.
+        XCTAssertEqual(expanded("I write C#.", [SnippetRule(trigger: "C#", expansion: "EXP")]), "I write EXP.")
+        // Quotes and sentence punctuation are trimmed from a typed trigger; symbols are not.
+        XCTAssertEqual(SnippetTrigger.normalized("“c++”."), "c++")
+        XCTAssertEqual(SnippetTrigger.key("C#"), "c#")
+        XCTAssertNotEqual(SnippetTrigger.key("C#"), SnippetTrigger.key("C"))
+    }
+
+    func testSymbolTriggersDoNotCountAsDuplicatesOfTheirLetters() {
+        XCTAssertNil(SnippetValidation.validate(trigger: "C#", expansion: "x", existingTriggers: ["C"]))
+        XCTAssertEqual(
+            SnippetValidation.validate(trigger: "c#", expansion: "x", existingTriggers: ["C#"]), .duplicateTrigger)
+    }
+
     func testOnlyWholeWordsMatch() {
         XCTAssertEqual(expanded("my emailer is broken", [email]), "my emailer is broken")
         XCTAssertEqual(expanded("symy email", [email]), "symy email")
@@ -258,7 +290,7 @@ final class SnippetBackupTests: XCTestCase {
     }
 }
 
-/// Renders the Snippets list offscreen with `ImageRenderer`. Nothing is shown on screen. The folder comes
+/// Renders the Snippets list offscreen in a hosting view that has no window. Nothing is shown on screen. The folder comes
 /// from `PNOE_SNIPPETS_PNG_DIR` (pass it to xcodebuild as `TEST_RUNNER_PNOE_SNIPPETS_PNG_DIR`) and defaults
 /// to a temporary folder.
 @MainActor
@@ -287,12 +319,20 @@ final class SnippetsPreviewTests: XCTestCase {
             .environment(\.colorScheme, .light)
     }
 
+    /// Draws the view with real AppKit controls: a hosting view that is never put in a window or on screen.
     private func writePNG<V: View>(_ view: V, name: String) throws -> URL {
-        let renderer = ImageRenderer(content: view)
-        renderer.scale = 2
-        let image = try XCTUnwrap(renderer.nsImage, name)
-        let tiff = try XCTUnwrap(image.tiffRepresentation, name)
-        let bitmap = try XCTUnwrap(NSBitmapImageRep(data: tiff), name)
+        let host = NSHostingView(rootView: view)
+        host.appearance = NSAppearance(named: .aqua)
+        let size = host.fittingSize
+        host.frame = NSRect(origin: .zero, size: size)
+        host.layoutSubtreeIfNeeded()
+        let bitmap = try XCTUnwrap(
+            NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2),
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0), name)
+        bitmap.size = size
+        host.cacheDisplay(in: host.bounds, to: bitmap)
         let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]), name)
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
         let url = outputDirectory.appendingPathComponent("\(name).png")

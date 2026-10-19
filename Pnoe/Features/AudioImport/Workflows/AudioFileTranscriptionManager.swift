@@ -187,8 +187,16 @@ class AudioTranscriptionManager: ObservableObject {
                 text = ParagraphFormatter.format(text)
             }
 
-            text = WordReplacementService.shared.applyReplacements(to: text, using: modelContext)
-            let cleanedText = text
+            // Same order as live dictation: replacements, then snippets; the model only sees placeholders.
+            let snippets = SnippetProcessor.prepare(
+                text,
+                rules: SnippetService.rules(using: modelContext),
+                applyingReplacements: {
+                    WordReplacementService.shared.applyReplacements(to: $0, using: modelContext)
+                }
+            )
+            text = snippets.textForEnhancement
+            let cleanedText = snippets.expandedText
             try Task.checkCancellation()
 
             // Handle enhancement if enabled
@@ -208,7 +216,8 @@ class AudioTranscriptionManager: ObservableObject {
             if let enhancementService = engine.enhancementService,
                 let enhancementConfiguration,
                 enhancementConfiguration.isEnabled,
-                enhancementService.isConfigured(for: enhancementConfiguration)
+                enhancementService.isConfigured(for: enhancementConfiguration),
+                !snippets.skipsEnhancement
             {
                 item.status = .processing(phase: .enhancing)
                 do {
@@ -219,7 +228,7 @@ class AudioTranscriptionManager: ObservableObject {
                     transcription = Transcription(
                         text: cleanedText,
                         duration: duration,
-                        enhancedText: enhancementResult.text,
+                        enhancedText: snippets.finish(enhanced: enhancementResult.text),
                         audioFileURL: permanentURL.absoluteString,
                         transcriptionModelName: currentModel.displayName,
                         aiEnhancementModelName: enhancementConfiguration.modelName

@@ -192,7 +192,7 @@ class TranscriptionPipeline {
                     }
 
                     onStateChange(.enhancing)
-                    // A recorder reply is not pasted, so it gets the expanded text; a paste gets placeholders.
+                    // Deliberate exception: respond mode pastes nothing and the model needs the snippet content, so it gets the expanded text; a paste gets placeholders.
                     let textForAI = shouldRespondInRecorder ? cleanedText : text
                     if shouldRespondInRecorder {
                         await assistant.startResponse(textForAI, resolvedEnhancementConfiguration)

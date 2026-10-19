@@ -8,9 +8,12 @@ struct SnippetRule: Equatable, Sendable {
 
 /// How triggers are compared. Used by matching, the duplicate check and backup import so all three agree.
 enum SnippetTrigger {
-    private static let edgePunctuation = CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters)
+    /// What a transcriber (or a typed trigger) puts around a phrase: sentence punctuation and quotes.
+    /// Characters that can belong to a trigger itself (`#`, `%`, `+`, brackets) are kept.
+    private static let edgePunctuation = CharacterSet.whitespacesAndNewlines
+        .union(CharacterSet(charactersIn: ".,;:!?…\"'“”„‘’«»"))
 
-    /// Trims whitespace and edge punctuation, collapses inner whitespace and composes accents.
+    /// Trims whitespace, sentence punctuation and quotes at the edges, collapses inner whitespace and composes accents.
     static func normalized(_ trigger: String) -> String {
         trigger
             .trimmingCharacters(in: edgePunctuation)
