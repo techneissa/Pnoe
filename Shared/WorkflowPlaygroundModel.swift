@@ -110,6 +110,19 @@ final class WorkflowPlaygroundModel: ObservableObject {
         selectedWorkflow != nil && !trimmedInput.isEmpty && phase != .running
     }
 
+    /// Where the run is for the symbol effects: a fallback to the plain transcript is the failure-style
+    /// moment, a skipped run (no model ran) is neither a finish nor a failure.
+    var motionPhase: MotionPhase {
+        switch phase {
+        case .idle: return .idle
+        case .running: return .running
+        case .failed: return .failed
+        case .finished(let finished):
+            if finished.outcome.skippedReason != nil { return .idle }
+            return finished.outcome.fallbackReason != nil ? .failed : .finished
+        }
+    }
+
     var finished: Finished? {
         if case .finished(let value) = phase { return value }
         return nil

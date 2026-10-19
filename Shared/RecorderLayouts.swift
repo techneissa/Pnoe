@@ -162,8 +162,8 @@ struct MiniRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
                 cornerRadius: hasLiveTranscript || hasAssistantResponse ? expandedCornerRadius : compactCornerRadius,
                 style: .continuous)
         )
-        .animation(.easeInOut(duration: 0.3), value: hasLiveTranscript)
-        .animation(.easeInOut(duration: 0.3), value: hasAssistantResponse)
+        .motion(.panel, value: hasLiveTranscript)
+        .motion(.panel, value: hasAssistantResponse)
         .gesture(WindowDragGesture(), isEnabled: !isPreview)
         .allowsWindowActivationEvents(!isPreview)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isAtTop ? .top : .bottom)
@@ -194,7 +194,7 @@ struct DotRecorderLayout: View {
         .help(recordingState.recordButtonLabel)
         .accessibilityLabel(Text(recordingState.recordButtonLabel))
         .recorderThemed(theme, shape: Capsule())
-        .animation(.easeInOut(duration: 0.2), value: RecorderDotView.showsTimer(for: recordingState))
+        .motion(.reveal, value: RecorderDotView.showsTimer(for: recordingState))
         .gesture(WindowDragGesture(), isEnabled: !isPreview)
         .allowsWindowActivationEvents(!isPreview)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: placement == .top ? .top : .bottom)
@@ -305,22 +305,13 @@ struct NotchRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
         displayState == .liveText || displayState == .assistant ? 20 : 16
     }
 
-    // MARK: - Animation
-
-    private let expandAnimation = Animation.spring(response: 0.42, dampingFraction: 0.80)
-    private let collapseAnimation = Animation.spring(response: 0.45, dampingFraction: 1.0)
-
-    private var pillAnimation: Animation {
-        displayState == .collapsed ? collapseAnimation : expandAnimation
-    }
-
     // MARK: - Body
 
     var body: some View {
         GeometryReader { geo in
             pill.position(x: geo.size.width / 2, y: pillHeight / 2)
         }
-        .animation(pillAnimation, value: displayState)
+        .motion(.panel, value: displayState)
     }
 
     // MARK: - Pill
@@ -376,10 +367,7 @@ struct NotchRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
             .frame(width: sideExpansion)
             .frame(maxWidth: .infinity, alignment: .leading)
             .opacity(displayState != .collapsed ? 1 : 0)
-            .animation(
-                displayState != .collapsed ? expandAnimation.delay(0.09) : collapseAnimation,
-                value: displayState
-            )
+            .motion(.reveal, value: displayState)
 
             HStack(spacing: 0) {
                 // The centre of the bar is the camera housing, which cannot carry anything, so
@@ -394,10 +382,7 @@ struct NotchRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
             .frame(width: sideExpansion)
             .frame(maxWidth: .infinity, alignment: .trailing)
             .opacity(displayState != .collapsed ? 1 : 0)
-            .animation(
-                displayState != .collapsed ? expandAnimation.delay(0.09) : collapseAnimation,
-                value: displayState
-            )
+            .motion(.reveal, value: displayState)
         }
         .frame(height: mainRowHeight)
     }

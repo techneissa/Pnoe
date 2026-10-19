@@ -3,35 +3,31 @@ import SwiftUI
 struct CopyIconButton: View {
     let textToCopy: String
     var accessibilityLabel: LocalizedStringResource = "Copy"
-    @State private var copied = false
+    @StateObject private var hold = MotionHold()
+
+    private var copied: Bool { hold.isHeld }
 
     var body: some View {
         Button(action: copy) {
-            Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(copied ? AppTheme.Status.positive : AppTheme.Selection.foreground)
-                .frame(width: 28, height: 28)
-                .background(
-                    RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous)
-                        .fill(AppTheme.Surface.window.opacity(0.92))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous)
-                                .strokeBorder(AppTheme.Border.card, lineWidth: 1)
-                        }
-                )
+            CopyButtonFace(
+                copied: copied,
+                idleColor: AppTheme.Selection.foreground,
+                copiedColor: AppTheme.Status.positive,
+                fill: AppTheme.Surface.window.opacity(0.92),
+                border: AppTheme.Border.card,
+                cornerRadius: AppTheme.Radius.control)
         }
         .focusEffectDisabled()
         .buttonStyle(.plain)
+        .motionHover(cornerRadius: AppTheme.Radius.control)
         .help(accessibilityLabel)
         .accessibilityLabel(accessibilityLabel)
+        .onDisappear { hold.cancel() }
     }
 
     private func copy() {
         let _ = ClipboardManager.copyToClipboard(textToCopy)
-        withAnimation { copied = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            withAnimation { copied = false }
-        }
+        hold.hold()
     }
 }
 
@@ -67,14 +63,15 @@ private struct HoverCopyButtonModifier: ViewModifier {
                 if isHovering {
                     CopyIconButton(textToCopy: textToCopy, accessibilityLabel: accessibilityLabel)
                         .padding(padding)
-                        .transition(.opacity)
+                        .motionFade()
                 }
             }
             .contentShape(Rectangle())
             .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.15)) {
+                Motion.animate(.hover) {
                     isHovering = hovering
                 }
             }
+            .onDisappear { isHovering = false }
     }
 }

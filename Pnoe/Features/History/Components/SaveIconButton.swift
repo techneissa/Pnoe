@@ -4,7 +4,9 @@ import UniformTypeIdentifiers
 struct SaveIconButton: View {
     let textToSave: String
     let suggestedBaseName: String
-    @State private var saved = false
+    @StateObject private var hold = MotionHold()
+
+    private var saved: Bool { hold.isHeld }
 
     var body: some View {
         Menu {
@@ -15,16 +17,20 @@ struct SaveIconButton: View {
                 saveFile(as: .text, extension: "md")
             }
         } label: {
-            Image(systemName: saved ? "checkmark" : "square.and.arrow.down")
+            Image(systemName: Motion.copySymbol(copied: saved, idle: "square.and.arrow.down"))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(saved ? AppTheme.Status.positive : .secondary)
+                .motionSymbolReplace(value: saved)
+                .motionBounce(when: saved)
                 .frame(width: 28, height: 28)
                 .background(AppTheme.Surface.control.opacity(0.9))
                 .clipShape(Circle())
         }
         .focusEffectDisabled()
         .buttonStyle(.plain)
+        .motionHover(cornerRadius: 14)
         .help("Save to file")
+        .onDisappear { hold.cancel() }
     }
 
     private func saveFile(as contentType: UTType, extension fileExtension: String) {
@@ -38,10 +44,7 @@ struct SaveIconButton: View {
             do {
                 let content = fileExtension == "md" ? formatAsMarkdown(textToSave) : textToSave
                 try content.write(to: url, atomically: true, encoding: .utf8)
-                withAnimation { saved = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    withAnimation { saved = false }
-                }
+                hold.hold()
             } catch {
                 print("Failed to save file: \(error.localizedDescription)")
             }

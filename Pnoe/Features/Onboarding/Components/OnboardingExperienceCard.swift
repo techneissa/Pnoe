@@ -72,7 +72,7 @@ struct OnboardingExperienceCard: View {
                 .stroke(fieldBorderColor, lineWidth: 1)
         )
         .opacity(hasShortcut ? 1 : 0.5)
-        .animation(.easeInOut(duration: 0.18), value: hasShortcut)
+        .motion(.change, value: hasShortcut)
     }
 
     private var notesToolbar: some View {

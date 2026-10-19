@@ -13,7 +13,8 @@ struct WhisperKitModelCardView: View {
                 onDownload: { modelManager.startDownload(spec) },
                 onCancel: { modelManager.cancelDownload(spec) },
                 onDelete: { modelManager.deleteModel(spec) },
-                onShowInFinder: { modelManager.showModelInFinder(spec) }
+                onShowInFinder: { modelManager.showModelInFinder(spec) },
+                downloadFailed: modelManager.hasDownloadFailed(spec)
             ) {
                 HStack(spacing: 3) {
                     Text("Speed")

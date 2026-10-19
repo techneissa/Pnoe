@@ -61,6 +61,7 @@ struct NativeAppleLanguageAssetControl: View {
             }
             .focusEffectDisabled()
             .buttonStyle(.plain)
+            .motionHover(cornerRadius: 12)
             .controlSize(.small)
             .frame(width: 28, height: 24)
         case .downloading:
@@ -90,9 +91,11 @@ struct NativeAppleLanguageAssetControl: View {
             Button(action: downloadAsset) {
                 Image(systemName: "arrow.clockwise.circle.fill")
                     .font(.system(size: 14, weight: .semibold))
+                    .motionWiggle(when: true)
             }
             .focusEffectDisabled()
             .buttonStyle(.plain)
+            .motionHover(cornerRadius: 12)
             .controlSize(.small)
             .frame(width: 28, height: 24)
         }

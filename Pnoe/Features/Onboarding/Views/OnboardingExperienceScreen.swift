@@ -20,13 +20,13 @@ struct OnboardingExperienceScreen: View {
         Group {
             if isInIntroPhase {
                 introScreen
-                    .transition(.opacity)
+                    .motionFade()
             } else {
                 practiceScreen
-                    .transition(.opacity)
+                    .motionFade()
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: isInIntroPhase)
+        .motion(.screen, value: isInIntroPhase)
         .onAppear(perform: onAppear)
     }
 

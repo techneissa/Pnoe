@@ -135,9 +135,9 @@ struct KeyCapView: View {
                     .mask(RoundedRectangle(cornerRadius: 8))
             )
             .scaleEffect(isPressed ? 0.95 : 1.0)
-            .animation(.spring(response: 0.2, dampingFraction: 0.6), value: isPressed)
+            .motion(.press, value: isPressed)
             .onTapGesture {
-                withAnimation {
+                Motion.animate(.press) {
                     isPressed = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                         isPressed = false

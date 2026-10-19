@@ -290,7 +290,7 @@ struct AudioSetupView: View {
     }
 
     private func refreshMicrophones() {
-        withAnimation(.easeInOut(duration: 0.35)) {
+        Motion.animate(.reveal) {
             refreshIconRotation += 360
         }
         audioDeviceManager.loadAvailableDevices()

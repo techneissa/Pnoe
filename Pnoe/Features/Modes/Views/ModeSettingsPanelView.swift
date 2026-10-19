@@ -53,18 +53,18 @@ struct ModeSettingsPanelView: View {
 
             if !isTipDismissed {
                 ModeSettingsQuickSwitchTip {
-                    withAnimation(.easeInOut(duration: 0.16)) {
+                    Motion.animate(.reveal) {
                         isTipDismissed = true
                     }
                 }
                 .padding(.horizontal, contentInset)
                 .padding(.top, 12)
                 .padding(.bottom, 16)
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .motionPanel(edge: .bottom)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(.easeInOut(duration: 0.16), value: isTipDismissed)
+        .motion(.reveal, value: isTipDismissed)
         .onExitCommand(perform: onDismiss)
     }
 
@@ -174,10 +174,10 @@ private struct ModeReorderRow: View {
         )
         .scaleEffect(isDragged ? 0.985 : 1)
         .opacity(isDragged ? 0.55 : 1)
-        .animation(.smooth(duration: 0.16), value: isDragged)
-        .animation(.smooth(duration: 0.16), value: isTargeted)
+        .motion(.hover, value: isDragged)
+        .motion(.hover, value: isTargeted)
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.12)) {
+            Motion.animate(.hover) {
                 isHovering = hovering
             }
         }
@@ -304,7 +304,7 @@ private struct ModeReorderDropDelegate: DropDelegate {
 
         targetedConfigID = item.id
 
-        withAnimation(.smooth(duration: 0.18)) {
+        Motion.animate(.reveal) {
             var updatedConfigurations = modeManager.configurations
             updatedConfigurations.move(
                 fromOffsets: IndexSet(integer: fromIndex),

@@ -59,8 +59,8 @@ struct ClipboardMessageModifier: ViewModifier {
                             .padding(.vertical, 4)
                             .background(AppTheme.Status.positive.opacity(0.10))
                             .cornerRadius(4)
-                            .transition(.opacity)
-                            .animation(.easeInOut, value: message)
+                            .motionFade()
+                            .motion(.reveal, value: message)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)

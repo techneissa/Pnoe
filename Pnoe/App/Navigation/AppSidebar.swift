@@ -163,7 +163,8 @@ private struct SidebarItemButton: View {
         .help(viewType.title)
         .accessibilityLabel(viewType.title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .animation(.easeInOut(duration: 0.12), value: isSelected)
+        .motionHover(cornerRadius: 10, suppressed: isSelected)
+        .motion(.hover, value: isSelected)
     }
 
     private var rowBackground: some View {

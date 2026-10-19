@@ -230,7 +230,7 @@ struct WaveformView: View {
             )
             .onHover { hovering in
                 if !isLoading {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    Motion.animate(.hover) {
                         isHovering = hovering
                     }
                 }
@@ -278,7 +278,7 @@ struct WaveformBar: View {
                 height: max(CGFloat(sample) * 24, 2)
             )
             .scaleEffect(y: isHovering && isNearHover ? 1.15 : 1.0)
-            .animation(.interpolatingSpring(stiffness: 300, damping: 15), value: isHovering && isNearHover)
+            .motion(.hover, value: isHovering && isNearHover)
     }
 }
 
@@ -299,9 +299,11 @@ private struct CircleIconButton: View {
                     Image(systemName: icon)
                         .font(iconFont)
                         .foregroundStyle(.primary)
+                        .motionSymbolReplace(value: icon)
                 )
         }
         .buttonStyle(.plain)
+        .motionHover(cornerRadius: 16)
     }
 }
 
@@ -321,19 +323,17 @@ private struct AsyncCircleButton: View {
                         if isLoading {
                             ProgressView()
                                 .controlSize(.small)
-                        } else if showSuccess {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(AppTheme.Status.success)
                         } else {
-                            Image(systemName: defaultIcon)
+                            Image(systemName: Motion.symbol(for: showSuccess ? .finished : .idle, idle: defaultIcon))
                                 .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(showSuccess ? AppTheme.Status.success : Color.primary)
+                                .motionJobSymbol(showSuccess ? .finished : .idle)
                         }
                     }
                 )
         }
         .buttonStyle(.plain)
+        .motionHover(cornerRadius: 16)
     }
 }
 
@@ -351,7 +351,6 @@ struct AudioPlayerView: View {
     let transcription: Transcription?
     var onInfoTap: (() -> Void)?
     @StateObject private var playerManager = AudioPlayerManager()
-    @State private var isHovering = false
     @State private var isRetranscribing = false
     @State private var isReEnhancing = false
     @State private var operationFeedback: OperationFeedback?
@@ -431,12 +430,6 @@ struct AudioPlayerView: View {
                         icon: playerManager.isPlaying ? "pause.fill" : "play.fill",
                         action: { playerManager.isPlaying ? playerManager.pause() : playerManager.play() }
                     )
-                    .scaleEffect(isHovering ? 1.05 : 1.0)
-                    .onHover { hovering in
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            isHovering = hovering
-                        }
-                    }
 
                     AsyncCircleButton(
                         defaultIcon: "arrow.clockwise",
@@ -576,7 +569,7 @@ struct AudioPlayerView: View {
         NotificationManager.shared.showNotification(title: title, type: .success, duration: 1.0)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             if operationFeedback == feedback {
-                withAnimation { operationFeedback = nil }
+                Motion.animate(.reveal) { operationFeedback = nil }
             }
         }
     }

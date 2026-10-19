@@ -183,7 +183,7 @@ private struct DictionarySectionSwitcher: View {
                     section: section,
                     isSelected: selection == section
                 ) {
-                    withAnimation(.easeInOut(duration: 0.16)) {
+                    Motion.animate(.reveal) {
                         selection = section
                     }
                 }

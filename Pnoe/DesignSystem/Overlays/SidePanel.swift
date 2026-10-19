@@ -5,15 +5,6 @@ struct SidePanel<PanelContent: View>: ViewModifier {
     let panelWidth: CGFloat
     let dismissOnExitCommand: Bool
     @ViewBuilder let panelContent: () -> PanelContent
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private var animation: Animation {
-        reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.32)
-    }
-
-    private var transition: AnyTransition {
-        reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity)
-    }
 
     private func dismissPanel() {
         isPresented = false
@@ -51,11 +42,11 @@ struct SidePanel<PanelContent: View>: ViewModifier {
                         panelSurface
                     }
                 }
-                .transition(transition)
+                .motionPanel(edge: .trailing)
                 .zIndex(1)
             }
         }
-        .animation(animation, value: isPresented)
+        .motion(.panel, value: isPresented)
     }
 }
 

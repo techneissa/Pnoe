@@ -16,6 +16,7 @@ struct AddIconButton: View {
         }
         .focusEffectDisabled()
         .buttonStyle(.plain)
+        .motionHover(cornerRadius: size / 2)
         .help(helpText)
         .accessibilityLabel(helpText)
         .disabled(isDisabled)

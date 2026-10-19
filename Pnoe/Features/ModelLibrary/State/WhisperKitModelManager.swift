@@ -9,6 +9,8 @@ final class WhisperKitModelManager: ObservableObject {
     private static let maximumDownloadAttempts = 3
 
     @Published private var downloadStatuses: [String: WhisperKitDownloadProgress] = [:]
+    /// Models whose last download failed; cleared when the next attempt starts.
+    @Published private var failedDownloads: Set<String> = []
 
     var onModelDeleted: ((String) -> Void)?
     var onModelsChanged: (() -> Void)?
@@ -34,8 +36,13 @@ final class WhisperKitModelManager: ObservableObject {
         downloadStatuses[spec.name]
     }
 
+    func hasDownloadFailed(_ spec: WhisperKitModelSpec) -> Bool {
+        failedDownloads.contains(spec.name)
+    }
+
     func startDownload(_ spec: WhisperKitModelSpec) {
         guard activeDownloadTasks[spec.name] == nil else { return }
+        failedDownloads.remove(spec.name)
         activeDownloadTasks[spec.name] = Task { [weak self] in
             guard let self else { return }
             await self.downloadModel(spec)
@@ -169,6 +176,7 @@ final class WhisperKitModelManager: ObservableObject {
 
     private func reportFailure(_ error: Error, for spec: WhisperKitModelSpec) {
         logger.error("\(spec.displayName, privacy: .public) download failed: \(error, privacy: .public)")
+        failedDownloads.insert(spec.name)
         NotificationManager.shared.showNotification(
             title: "\(spec.displayName) download failed",
             type: .error
