@@ -3,13 +3,13 @@ import SwiftUI
 import os
 
 class KeyablePanel: NSPanel {
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { true }
+    /// Set while the assistant panel's text field needs the keyboard; see `RecorderKeyWindowPolicy`.
+    var acceptsKeyboardInput = false
+    override var canBecomeKey: Bool { acceptsKeyboardInput }
+    override var canBecomeMain: Bool { acceptsKeyboardInput }
 }
 
 class NotchRecorderPanel: KeyablePanel {
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { true }
 
     private let logger = Logger(subsystem: "com.techneissa.pnoe", category: "NotchRecorderPanel")
 

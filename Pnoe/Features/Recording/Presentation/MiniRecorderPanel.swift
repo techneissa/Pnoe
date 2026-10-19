@@ -2,7 +2,9 @@ import AppKit
 import os
 
 final class MiniRecorderPanel: NSPanel {
-    override var canBecomeKey: Bool { true }
+    /// Set while the assistant panel's text field needs the keyboard; see `RecorderKeyWindowPolicy`.
+    var acceptsKeyboardInput = false
+    override var canBecomeKey: Bool { acceptsKeyboardInput }
 
     private let logger = Logger(subsystem: "com.techneissa.pnoe", category: "MiniRecorderPanel")
 

@@ -46,13 +46,6 @@ struct PartialTranscriptThrottle {
         lastPublishedAt = now
         return text
     }
-
-    /// Drops held text and starts over, so the next partial publishes at once.
-    mutating func reset() {
-        lastPublishedAt = nil
-        pending = nil
-        flushScheduled = false
-    }
 }
 
 /// Feeds partial transcripts to `publish` through a `PartialTranscriptThrottle`.
@@ -93,11 +86,5 @@ final class PartialTranscriptRelay {
         case .hold:
             break
         }
-    }
-
-    func reset() {
-        flushTask?.cancel()
-        flushTask = nil
-        throttle.reset()
     }
 }

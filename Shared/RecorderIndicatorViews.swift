@@ -9,10 +9,11 @@ struct RecorderPalette: Equatable {
     let ink: Color
     let inkInverse: Color
     let border: Color
-    let colorScheme: ColorScheme
+    /// `nil` leaves the system scheme alone, which is what the recorder always did in dark.
+    let colorScheme: ColorScheme?
 
     static let dark = RecorderPalette(
-        ink: .white, inkInverse: .black, border: .clear, colorScheme: .dark)
+        ink: .white, inkInverse: .black, border: .clear, colorScheme: nil)
     static let translucent = RecorderPalette(
         ink: .white, inkInverse: .black, border: Color.white.opacity(0.16), colorScheme: .dark)
     static let light = RecorderPalette(
@@ -61,13 +62,22 @@ struct RecorderThemeBackground: View {
 }
 
 extension View {
+    @ViewBuilder
+    fileprivate func applyingColorScheme(_ scheme: ColorScheme?) -> some View {
+        if let scheme {
+            environment(\.colorScheme, scheme)
+        } else {
+            self
+        }
+    }
+
     /// Applies a recorder theme: palette for the components, a matching color scheme for system
     /// controls, then the background clipped to `shape` with the theme's hairline border.
     func recorderThemed<S: Shape>(_ theme: RecorderTheme, shape: S) -> some View {
         let palette = theme.palette
         return self
             .environment(\.recorderPalette, palette)
-            .environment(\.colorScheme, palette.colorScheme)
+            .applyingColorScheme(palette.colorScheme)
             .background(RecorderThemeBackground(theme: theme))
             .clipShape(shape)
             .overlay(shape.stroke(palette.border, lineWidth: 0.5))

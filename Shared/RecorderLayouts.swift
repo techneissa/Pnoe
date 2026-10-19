@@ -22,8 +22,8 @@ struct MiniRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
 
     private let controlBarHeight: CGFloat = 40
     private let compactWidth: CGFloat = 184
-    private let expandedWidth: CGFloat = 340
-    private let transcriptHorizontalPadding: CGFloat = 14
+    private let expandedWidth: CGFloat = 300
+    private let transcriptHorizontalPadding: CGFloat = 16
     private let assistantWidth: CGFloat = 520
     private let compactCornerRadius: CGFloat = 20
     private let expandedCornerRadius: CGFloat = 14
@@ -297,7 +297,7 @@ struct NotchRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
                 LiveTranscriptView(
                     content: liveContent,
                     size: transcriptSize,
-                    textWidth: pillWidth - 40
+                    textWidth: pillWidth - 48
                 )
             }
         }

@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import os
 
@@ -7,6 +8,8 @@ class MiniWindowManager {
     private var windowController: NSWindowController?
     private var panel: MiniRecorderPanel?
 
+    private let assistantSession: AssistantSession
+    private var assistantCancellable: AnyCancellable?
     private let makeView: () -> AnyView
     private let logger = Logger(subsystem: "com.techneissa.pnoe", category: "MiniWindowManager")
 
@@ -18,6 +21,7 @@ class MiniWindowManager {
         onCloseTapped: @escaping () -> Void,
         onAssistantFollowUp: @escaping (String) -> Void
     ) {
+        self.assistantSession = assistantSession
         self.makeView = {
             AnyView(
                 MiniRecorderView(
@@ -75,10 +79,18 @@ class MiniWindowManager {
         let hostingController = NSHostingController(rootView: view)
         newPanel.contentView = hostingController.view
         panel = newPanel
+        // The panel takes the keyboard only while the assistant's text field is on screen.
+        assistantCancellable = assistantSession.$phase
+            .map { $0 != .inactive }
+            .removeDuplicates()
+            .sink { [weak newPanel] visible in
+                newPanel?.acceptsKeyboardInput = RecorderKeyWindowPolicy.canBecomeKey(assistantVisible: visible)
+            }
         windowController = NSWindowController(window: newPanel)
     }
 
     private func deinitializeWindow() {
+        assistantCancellable = nil
         panel?.orderOut(nil)
         windowController?.close()
         windowController = nil

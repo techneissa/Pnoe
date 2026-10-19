@@ -11,35 +11,10 @@ struct NotchRecorderView<S: RecorderStateProvider & ObservableObject>: View {
     @AppStorage(RecorderDisplaySettingsKeys.liveTranscriptSize) private var liveTranscriptSizeRaw = LiveTranscriptSize.medium.rawValue
     @AppStorage(RecorderDisplaySettingsKeys.theme) private var themeRaw = RecorderTheme.dark.rawValue
     @AppStorage(RecorderDisplaySettingsKeys.visibility) private var visibilityRaw = RecorderVisibility.whileRecording.rawValue
-    /// Bumped on every screen reconfiguration to invalidate the view. The notch metrics below
-    /// come from AppKit, which SwiftUI cannot observe on its own, so without this the view keeps
-    /// whatever sizes it happened to compute the last time it was rendered.
-    @State private var screenGeneration = 0
-
-    /// Reads `screenGeneration` so SwiftUI records a dependency on it: the metrics below come
-    /// from AppKit, which it cannot observe, and a view only re-evaluates the parts that depend
-    /// on the state that changed.
-    private var screenMetrics: (width: CGFloat, height: CGFloat) {
-        _ = screenGeneration
-
-        guard let screen = RecorderScreenResolver.resolve() else { return (180, 37) }
-
-        let width: CGFloat = {
-            if let left = screen.auxiliaryTopLeftArea?.width,
-                let right = screen.auxiliaryTopRightArea?.width
-            {
-                return screen.frame.width - left - right
-            }
-            return 180
-        }()
-
-        let height: CGFloat = {
-            if screen.safeAreaInsets.top > 0 { return screen.safeAreaInsets.top }
-            return NSApplication.shared.mainMenu?.menuBarHeight ?? NSStatusBar.system.thickness
-        }()
-
-        return (width, height)
-    }
+    /// Notch size of the screen the recorder is on. It comes from AppKit, which SwiftUI cannot
+    /// observe, so it is read once when the view is created and again on every screen
+    /// reconfiguration, never while rendering: `body` runs for every partial transcript.
+    @State private var screenMetrics = NotchScreenMetrics.current()
 
     private var shouldShowCloseButton: Bool {
         assistantSession.isVisible && stateProvider.recordingState == .idle && !assistantSession.isBusy
@@ -79,7 +54,32 @@ struct NotchRecorderView<S: RecorderStateProvider & ObservableObject>: View {
         .onReceive(
             LifecycleObserver.shared.publisher(for: .screenConfigurationChanged)
         ) { _ in
-            screenGeneration += 1
+            screenMetrics = NotchScreenMetrics.current()
         }
+    }
+}
+
+struct NotchScreenMetrics {
+    let width: CGFloat
+    let height: CGFloat
+
+    static func current() -> NotchScreenMetrics {
+        guard let screen = RecorderScreenResolver.resolve() else { return NotchScreenMetrics(width: 180, height: 37) }
+
+        let width: CGFloat = {
+            if let left = screen.auxiliaryTopLeftArea?.width,
+                let right = screen.auxiliaryTopRightArea?.width
+            {
+                return screen.frame.width - left - right
+            }
+            return 180
+        }()
+
+        let height: CGFloat = {
+            if screen.safeAreaInsets.top > 0 { return screen.safeAreaInsets.top }
+            return NSApplication.shared.mainMenu?.menuBarHeight ?? NSStatusBar.system.thickness
+        }()
+
+        return NotchScreenMetrics(width: width, height: height)
     }
 }

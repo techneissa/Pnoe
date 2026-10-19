@@ -179,6 +179,14 @@ final class RecorderIndicatorTests: XCTestCase {
         }
     }
 
+    func testSnapsToWholeWordsWhenCuttingSpacedText() {
+        let text = (1...80).map { "wordnumber\($0)" }.joined(separator: " ")
+        let result = LiveTranscriptFormatter.tail(text, fontSize: 12, width: 268)
+        for word in result.dropFirst().split(separator: " ") {
+            XCTAssertTrue(word.hasPrefix("wordnumber"), String(word))
+        }
+    }
+
     func testLargerTextKeepsFewerWords() {
         let text = (1...80).map { "word\($0)" }.joined(separator: " ")
         let small = LiveTranscriptFormatter.tail(text, fontSize: LiveTranscriptSize.small.fontSize, width: 300)
@@ -192,6 +200,27 @@ final class RecorderIndicatorTests: XCTestCase {
         XCTAssertEqual(result, text)
     }
 
+    func testTextWithoutSpacesKeepsTheNewestCharacters() {
+        let samples = [
+            ("今日は天気がいいので散歩に行きます。", "ます。"),
+            ("我今天想把这份报告整理好然后发给大家看看有没有问题。", "有问题。"),
+            ("วันนี้อากาศดีมากเราจึงตัดสินใจไปเดินเล่นที่สวนสาธารณะใกล้บ้านกัน", "ใกล้บ้านกัน"),
+        ]
+        for (unit, ending) in samples {
+            let text = String(repeating: unit, count: 12)
+            let result = LiveTranscriptFormatter.tail(text, fontSize: 12, width: 268)
+            XCTAssertTrue(result.hasPrefix(LiveTranscriptFormatter.ellipsis), unit)
+            XCTAssertTrue(result.hasSuffix(ending), unit)
+            XCTAssertLessThanOrEqual(lineCount(result, fontSize: 12, width: 268), 2, unit)
+            XCTAssertLessThan(result.count, text.count, unit)
+            XCTAssertGreaterThan(result.count, 10, unit)
+        }
+    }
+
+    func testShortTextWithoutSpacesIsUnchanged() {
+        XCTAssertEqual(LiveTranscriptFormatter.tail("今日は天気がいい", fontSize: 12, width: 268), "今日は天気がいい")
+    }
+
     func testVeryLongTextAndSingleLongWordStayBounded() {
         let huge = String(repeating: "alpha beta gamma ", count: 4000)
         let result = LiveTranscriptFormatter.tail(huge, fontSize: 12, width: 300)
@@ -200,6 +229,11 @@ final class RecorderIndicatorTests: XCTestCase {
 
         let word = String(repeating: "x", count: 600)
         XCTAssertFalse(LiveTranscriptFormatter.tail("start " + word, fontSize: 12, width: 300).isEmpty)
+    }
+
+    func testOnlyTheAssistantPanelMayBecomeKey() {
+        XCTAssertFalse(RecorderKeyWindowPolicy.canBecomeKey(assistantVisible: false))
+        XCTAssertTrue(RecorderKeyWindowPolicy.canBecomeKey(assistantVisible: true))
     }
 
     // MARK: - Throttle
@@ -225,16 +259,12 @@ final class RecorderIndicatorTests: XCTestCase {
         XCTAssertEqual(throttle.submit("ab", now: 10.2), .publish("ab"))
     }
 
-    func testFlushStartsNewIntervalAndResetClearsHeldText() {
+    func testFlushStartsNewInterval() {
         var throttle = PartialTranscriptThrottle(interval: 0.1)
         _ = throttle.submit("a", now: 10)
         _ = throttle.submit("ab", now: 10.05)
         XCTAssertEqual(throttle.flush(now: 10.1), "ab")
         XCTAssertEqual(throttle.submit("abc", now: 10.12), .schedule(at: 10.2))
-
-        throttle.reset()
-        XCTAssertNil(throttle.flush(now: 10.3))
-        XCTAssertEqual(throttle.submit("x", now: 10.31), .publish("x"))
     }
 
     @MainActor
@@ -247,18 +277,5 @@ final class RecorderIndicatorTests: XCTestCase {
 
         try await Task.sleep(nanoseconds: 250_000_000)
         XCTAssertEqual(published, ["a", "abcd"])
-    }
-
-    @MainActor
-    func testRelayResetDropsHeldText() async throws {
-        var published: [String] = []
-        let relay = PartialTranscriptRelay(interval: 0.05) { published.append($0) }
-
-        relay.submit("a")
-        relay.submit("ab")
-        relay.reset()
-
-        try await Task.sleep(nanoseconds: 200_000_000)
-        XCTAssertEqual(published, ["a"])
     }
 }

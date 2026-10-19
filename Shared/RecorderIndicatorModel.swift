@@ -260,9 +260,17 @@ enum LiveTranscriptMetrics {
         return ceil(font.ascender - font.descender + font.leading)
     }
 
-    /// Height of the whole line area: two text lines plus padding. Fixed per size, so the
-    /// recorder does not change height while words arrive.
+    /// Height of the whole line area: two text lines plus padding, at least the 56 points the
+    /// old scrolling box had. Fixed per size, so the recorder does not change height while
+    /// words arrive.
     static func height(for size: LiveTranscriptSize) -> CGFloat {
-        lineHeight(for: size) * CGFloat(maxLines) + 14
+        max(56, lineHeight(for: size) * CGFloat(maxLines) + 14)
     }
+}
+
+/// When a recorder panel may become the key window. The panels never activate the app, but a
+/// key panel takes keyboard focus from the frontmost app, so only the assistant panel's
+/// follow-up text field earns it. Buttons and dragging work on a panel that is not key.
+enum RecorderKeyWindowPolicy {
+    static func canBecomeKey(assistantVisible: Bool) -> Bool { assistantVisible }
 }
