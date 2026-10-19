@@ -225,6 +225,12 @@ enum BackupImporter {
 
     @MainActor
     private static func importDictionary(from backup: BackupFile, modelContext: ModelContext) async throws {
+        let importedSnippetCount = try SnippetService.importBackup(
+            backup.snippetPayload.snippets, context: modelContext)
+        if importedSnippetCount > 0 {
+            print("Successfully imported \(importedSnippetCount) snippets.")
+        }
+
         guard backup.vocabularyWords != nil || backup.wordReplacements != nil else {
             print("No new dictionary entries were imported.")
             DictionaryService.cleanUpDictionaryContent(context: modelContext, source: "settings import")

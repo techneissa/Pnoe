@@ -201,7 +201,8 @@ class ImportExportService {
             wordReplacements: exportedWordReplacements,
             generalSettings: generalSettingsToExport,
             customEmojis: emojiManager.customEmojis,
-            customCloudModels: customModels
+            customCloudModels: customModels,
+            snippetPayload: .forExport(snippets: SnippetService.backupItems(context: modelContext))
         )
 
         let encoder = JSONEncoder()
