@@ -14,11 +14,6 @@ enum RecordingState: Equatable {
     case busy
 }
 
-struct AudioMeter: Equatable {
-    let averagePower: Double
-    let peakPower: Double
-}
-
 enum RecorderPanelStyle: String, CaseIterable, Identifiable {
     case notch
     case mini
@@ -44,6 +39,7 @@ enum RecorderDisplaySettingsKeys {
     static let showLiveTranscript = "ShowLiveTranscript"
     static let liveTranscriptSize = "RecorderLiveTranscriptSize"
     static let theme = "RecorderTheme"
+    static let levelDisplay = "RecorderLevelDisplay"
     static let display = "RecorderDisplay"
     static let miniPlacement = "RecorderMiniPlacement"
     static let visibility = "RecorderVisibility"

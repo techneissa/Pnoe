@@ -24,6 +24,7 @@ struct SettingsView: View {
     @AppStorage(RecorderDisplaySettingsKeys.showLiveTranscript) private var showLiveTranscript = true
     @AppStorage(RecorderDisplaySettingsKeys.liveTranscriptSize) private var liveTranscriptSize = LiveTranscriptSize.medium.rawValue
     @AppStorage(RecorderDisplaySettingsKeys.theme) private var recorderTheme = RecorderTheme.dark.rawValue
+    @AppStorage(RecorderDisplaySettingsKeys.levelDisplay) private var recorderLevelDisplay = RecorderLevelDisplay.bars.rawValue
     @AppStorage(RecorderDisplaySettingsKeys.display) private var recorderDisplay = RecorderDisplaySelection.active.storedValue
     @AppStorage(RecorderDisplaySettingsKeys.miniPlacement) private var recorderMiniPlacement = MiniRecorderPlacement.bottom.rawValue
     @AppStorage(RecorderDisplaySettingsKeys.visibility) private var recorderVisibility = RecorderVisibility.whileRecording.rawValue
@@ -240,6 +241,13 @@ struct SettingsView: View {
                 Picker("Recorder Theme", selection: $recorderTheme) {
                     ForEach(RecorderTheme.allCases) { theme in
                         Text(theme.displayName).tag(theme.rawValue)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Picker("Level Display", selection: $recorderLevelDisplay) {
+                    ForEach(RecorderLevelDisplay.allCases) { display in
+                        Text(display.displayName).tag(display.rawValue)
                     }
                 }
                 .pickerStyle(.menu)
