@@ -4,6 +4,14 @@ import SwiftUI
 // views feed them state and hand in the mode button and assistant panel, and the unit tests
 // render them offscreen with sample values.
 
+/// Mini and Pill share one layout: a bar with the record button and the side slots that grows
+/// into the live transcript line and the assistant panel. The Pill is the compact variant: a
+/// capsule with no mode button.
+enum MiniRecorderVariant {
+    case mini
+    case pill
+}
+
 struct MiniRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
     let recordingState: RecordingState
     let liveContent: LiveTranscriptContent?
@@ -14,6 +22,12 @@ struct MiniRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
     let showsCloseButton: Bool
     let levelHistoryProvider: () -> LevelHistory
     let levelDisplay: RecorderLevelDisplay
+    var variant: MiniRecorderVariant = .mini
+    var slots = RecorderSideSlots.defaults(for: .mini)
+    var modeName = ""
+    var clockProvider: () -> RecordingClock = { RecordingClock() }
+    /// Set by the settings preview: no window drag, since the preview sits in the settings window.
+    var isPreview = false
     let onRecordButtonTapped: () -> Void
     let onCloseTapped: () -> Void
     let modeButton: ModeButton
@@ -21,45 +35,86 @@ struct MiniRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
 
     // MARK: - Layout Constants
 
-    private let controlBarHeight: CGFloat = 40
-    private let compactWidth: CGFloat = 184
-    private let expandedWidth: CGFloat = 300
     private let transcriptHorizontalPadding: CGFloat = 16
     private let assistantWidth: CGFloat = 520
-    private let compactCornerRadius: CGFloat = 20
     private let expandedCornerRadius: CGFloat = 14
 
     private var palette: RecorderPalette { theme.palette }
     private var isAtTop: Bool { placement == .top }
     private var hasLiveTranscript: Bool { liveContent != nil }
+    private var isPill: Bool { variant == .pill }
 
-    private var controlBar: some View {
-        HStack(spacing: 0) {
-            Group {
-                if showsCloseButton {
-                    RecorderCloseButton(action: onCloseTapped)
-                } else {
-                    RecorderRecordButton(
-                        recordingState: recordingState,
-                        action: onRecordButtonTapped
-                    )
-                }
+    private var controlBarHeight: CGFloat { isPill ? RecorderBarMetrics.pillHeight : 40 }
+    private var compactCornerRadius: CGFloat { isPill ? RecorderBarMetrics.pillHeight / 2 : 20 }
+
+    private var compactWidth: CGFloat {
+        isPill
+            ? RecorderBarMetrics.pillBarWidth(slots: slots) : RecorderBarMetrics.miniBarWidth(slots: slots)
+    }
+
+    private var expandedWidth: CGFloat {
+        isPill
+            ? max(RecorderBarMetrics.miniExpandedWidth, RecorderBarMetrics.pillBarWidth(slots: slots))
+            : RecorderBarMetrics.miniExpandedBarWidth(slots: slots)
+    }
+
+    private func slotView(_ content: RecorderSlotContent) -> some View {
+        RecorderSlotView(
+            content: content,
+            recordingState: recordingState,
+            levelHistoryProvider: levelHistoryProvider,
+            levelDisplay: levelDisplay,
+            clockProvider: clockProvider,
+            modeName: modeName
+        )
+    }
+
+    private var recordOrCloseButton: some View {
+        Group {
+            if showsCloseButton {
+                RecorderCloseButton(action: onCloseTapped)
+            } else {
+                RecorderRecordButton(
+                    recordingState: recordingState,
+                    action: onRecordButtonTapped
+                )
             }
-            .padding(.leading, 10)
-
-            Spacer(minLength: 0)
-
-            RecorderStatusDisplay(
-                currentState: recordingState,
-                levelHistoryProvider: levelHistoryProvider,
-                levelDisplay: levelDisplay
-            )
-
-            Spacer(minLength: 0)
-
-            modeButton
-                .padding(.trailing, 12)
         }
+    }
+
+    /// Record button at the far left, then the left slot, the centre and the right slot, then
+    /// (Mini only) the mode button. Each slot sits at its own position: the left slot next to the
+    /// record button, the right slot at the other end, the centre in the space between them. An
+    /// empty slot takes no room.
+    private var controlBar: some View {
+        let spacing = RecorderBarMetrics.slotSpacing
+        let centerGap: CGFloat = slots.center != .none ? spacing : 0
+        return HStack(spacing: 0) {
+            recordOrCloseButton
+                .padding(.leading, 10)
+
+            if slots.left != .none {
+                slotView(slots.left).padding(.leading, spacing)
+            }
+
+            Spacer(minLength: centerGap)
+
+            if slots.center != .none {
+                slotView(slots.center)
+            }
+
+            Spacer(minLength: centerGap)
+
+            if slots.right != .none {
+                slotView(slots.right).padding(.trailing, spacing)
+            }
+
+            if !isPill {
+                modeButton
+                    .padding(.trailing, 12)
+            }
+        }
+        .padding(.trailing, isPill ? 12 : 0)
         .frame(height: controlBarHeight)
     }
 
@@ -109,9 +164,40 @@ struct MiniRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
         )
         .animation(.easeInOut(duration: 0.3), value: hasLiveTranscript)
         .animation(.easeInOut(duration: 0.3), value: hasAssistantResponse)
-        .gesture(WindowDragGesture())
-        .allowsWindowActivationEvents()
+        .gesture(WindowDragGesture(), isEnabled: !isPreview)
+        .allowsWindowActivationEvents(!isPreview)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isAtTop ? .top : .bottom)
+    }
+}
+
+/// The dot style: a small capsule with the dot and, while recording, the time. No live line and
+/// no assistant panel; while the assistant is open the pill layout is shown instead.
+struct DotRecorderLayout: View {
+    let recordingState: RecordingState
+    let theme: RecorderTheme
+    let placement: MiniRecorderPlacement
+    let levelHistoryProvider: () -> LevelHistory
+    var clockProvider: () -> RecordingClock = { RecordingClock() }
+    var isPreview = false
+    let onRecordButtonTapped: () -> Void
+
+    var body: some View {
+        Button(action: onRecordButtonTapped) {
+            RecorderDotView(
+                recordingState: recordingState,
+                levelHistoryProvider: levelHistoryProvider,
+                clockProvider: clockProvider)
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .disabled(!recordingState.allowsRecordButton)
+        .help(recordingState.recordButtonLabel)
+        .accessibilityLabel(Text(recordingState.recordButtonLabel))
+        .recorderThemed(theme, shape: Capsule())
+        .animation(.easeInOut(duration: 0.2), value: RecorderDotView.showsTimer(for: recordingState))
+        .gesture(WindowDragGesture(), isEnabled: !isPreview)
+        .allowsWindowActivationEvents(!isPreview)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: placement == .top ? .top : .bottom)
     }
 }
 
@@ -127,6 +213,9 @@ struct NotchRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
     let notchHeight: CGFloat
     let levelHistoryProvider: () -> LevelHistory
     let levelDisplay: RecorderLevelDisplay
+    var slots = RecorderSideSlots.defaults(for: .notch)
+    var modeName = ""
+    var clockProvider: () -> RecordingClock = { RecordingClock() }
     let onRecordButtonTapped: () -> Void
     let onCloseTapped: () -> Void
     let modeButton: ModeButton
@@ -159,9 +248,17 @@ struct NotchRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
 
     // MARK: - Layout Constants
 
-    private let recordingSideExpansion: CGFloat = 90
-    private let transcriptSideExpansion: CGFloat = 110
-    private let assistantSideExpansion: CGFloat = 230
+    // How far the pill reaches out on each side. The base is what each state always had; a slot
+    // that needs more room (the timer or the mode name next to the buttons) widens it.
+    private var recordingSideExpansion: CGFloat {
+        RecorderBarMetrics.notchSideExpansion(base: 90, edgePadding: 16, slots: slots)
+    }
+    private var transcriptSideExpansion: CGFloat {
+        RecorderBarMetrics.notchSideExpansion(base: 110, edgePadding: 20, slots: slots)
+    }
+    private var assistantSideExpansion: CGFloat {
+        RecorderBarMetrics.notchSideExpansion(base: 230, edgePadding: 20, slots: slots)
+    }
     private let activeHeightBonus: CGFloat = 6
     private let assistantPanelHeight: CGFloat = 320
 
@@ -246,6 +343,18 @@ struct NotchRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
 
     // MARK: - Main Row
 
+    private func slotView(_ content: RecorderSlotContent) -> some View {
+        RecorderSlotView(
+            content: content,
+            recordingState: recordingState,
+            levelHistoryProvider: levelHistoryProvider,
+            levelDisplay: levelDisplay,
+            clockProvider: clockProvider,
+            modeName: modeName,
+            menuBarHeight: notchHeight
+        )
+    }
+
     private var mainRow: some View {
         ZStack {
             Color.clear
@@ -260,6 +369,7 @@ struct NotchRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
                     )
                 }
                 modeButton
+                if slots.left != .none { slotView(slots.left) }
                 Spacer(minLength: 0)
             }
             .padding(.leading, sideEdgePadding)
@@ -272,13 +382,13 @@ struct NotchRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
             )
 
             HStack(spacing: 0) {
-                Spacer(minLength: 0)
-                RecorderStatusDisplay(
-                    currentState: recordingState,
-                    levelHistoryProvider: levelHistoryProvider,
-                    levelDisplay: levelDisplay,
-                    menuBarHeight: notchHeight
-                )
+                // The centre of the bar is the camera housing, which cannot carry anything, so
+                // the centre item sits right beside it and the right slot at the outer edge.
+                if slots.center != .none {
+                    slotView(slots.center).padding(.leading, RecorderBarMetrics.notchSlotSpacing)
+                }
+                Spacer(minLength: slots.center != .none && slots.right != .none ? RecorderBarMetrics.notchSlotSpacing : 0)
+                if slots.right != .none { slotView(slots.right) }
             }
             .padding(.trailing, sideEdgePadding)
             .frame(width: sideExpansion)

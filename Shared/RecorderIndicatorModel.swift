@@ -15,24 +15,43 @@ enum RecordingState: Equatable {
 }
 
 enum RecorderPanelStyle: String, CaseIterable, Identifiable {
-    case notch
     case mini
+    case notch
+    case pill
+    case dot
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .notch:
-            return String(localized: "Notch")
         case .mini:
             return String(localized: "Mini")
+        case .notch:
+            return String(localized: "Notch")
+        case .pill:
+            return String(localized: "Pill")
+        case .dot:
+            return String(localized: "Dot")
         }
     }
 
-    static var stored: RecorderPanelStyle {
-        let rawValue = UserDefaults.standard.string(forKey: "RecorderType") ?? RecorderPanelStyle.mini.rawValue
-        return RecorderPanelStyle(rawValue: rawValue) ?? .mini
+    /// A stored value maps to its style; a missing or unknown one (an older or newer build wrote
+    /// it) is Mini, which is what Pnoe showed by default before the other styles existed. The
+    /// two values older builds wrote, `mini` and `notch`, keep their meaning.
+    init(storedValue: String?) {
+        self = storedValue.flatMap(RecorderPanelStyle.init(rawValue:)) ?? .mini
     }
+
+    static var stored: RecorderPanelStyle {
+        RecorderPanelStyle(storedValue: UserDefaults.standard.string(forKey: "RecorderType"))
+    }
+
+    /// Whether the style has a left and a right side that the slot settings fill.
+    var hasSideSlots: Bool { self != .dot }
+
+    /// Whether the style can show the live transcript line by itself. The dot cannot; while the
+    /// assistant panel is open it shows the pill layout, which carries the panel.
+    var showsLiveTranscript: Bool { self != .dot }
 }
 
 enum RecorderDisplaySettingsKeys {
@@ -43,6 +62,12 @@ enum RecorderDisplaySettingsKeys {
     static let display = "RecorderDisplay"
     static let miniPlacement = "RecorderMiniPlacement"
     static let visibility = "RecorderVisibility"
+}
+
+extension RecorderPanelStyle {
+    /// The panel shows the Mini family (Mini, Pill, Dot) in `MiniRecorderPanel` and Notch in
+    /// `NotchRecorderPanel`.
+    var usesMiniPanel: Bool { self != .notch }
 }
 
 /// Settings for how the recording indicator looks and where it appears. Every value is stored
@@ -153,6 +178,9 @@ struct RecorderIndicatorSettings: Equatable {
     var display: RecorderDisplaySelection
     var miniPlacement: MiniRecorderPlacement
     var visibility: RecorderVisibility
+    /// What each style shows beside its controls. They decide how wide a panel's window is, so a
+    /// change rebuilds the panel like the other values here.
+    var sideSlots: [RecorderPanelStyle: RecorderSideSlots]
 
     static var current: RecorderIndicatorSettings {
         RecorderIndicatorSettings(defaults: .standard)
@@ -161,11 +189,21 @@ struct RecorderIndicatorSettings: Equatable {
     init(
         display: RecorderDisplaySelection = .active,
         miniPlacement: MiniRecorderPlacement = .bottom,
-        visibility: RecorderVisibility = .whileRecording
+        visibility: RecorderVisibility = .whileRecording,
+        sideSlots: [RecorderPanelStyle: RecorderSideSlots] = [:]
     ) {
         self.display = display
         self.miniPlacement = miniPlacement
         self.visibility = visibility
+        // Styles not given keep their default slots, so two settings values compare equal
+        // whether they came from the defaults or from an empty `UserDefaults`.
+        self.sideSlots = RecorderPanelStyle.allCases.reduce(into: [:]) { result, style in
+            result[style] = sideSlots[style] ?? .defaults(for: style)
+        }
+    }
+
+    func slots(for style: RecorderPanelStyle) -> RecorderSideSlots {
+        sideSlots[style] ?? .defaults(for: style)
     }
 
     init(defaults: UserDefaults) {
@@ -176,6 +214,10 @@ struct RecorderIndicatorSettings: Equatable {
         visibility =
             defaults.string(forKey: RecorderDisplaySettingsKeys.visibility)
             .flatMap(RecorderVisibility.init(rawValue:)) ?? .whileRecording
+        sideSlots = Dictionary(
+            uniqueKeysWithValues: RecorderPanelStyle.allCases.map { style in
+                (style, RecorderSideSlots(defaults: defaults, style: style))
+            })
     }
 }
 
@@ -225,6 +267,12 @@ enum RecorderDisplayPlanner {
     static func effectiveStyle(requested: RecorderPanelStyle, display: RecorderDisplayInfo?) -> RecorderPanelStyle {
         guard requested == .notch, let display else { return requested }
         return display.isBuiltIn && !display.hasNotch ? .mini : .notch
+    }
+
+    /// The layout actually drawn. The dot has no room for the assistant panel, so while that
+    /// panel is open the dot is replaced by the pill, which expands to carry it.
+    static func layoutStyle(for style: RecorderPanelStyle, assistantVisible: Bool) -> RecorderPanelStyle {
+        style == .dot && assistantVisible ? .pill : style
     }
 }
 

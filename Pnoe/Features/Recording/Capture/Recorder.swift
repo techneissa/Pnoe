@@ -22,6 +22,7 @@ class Recorder: NSObject, ObservableObject {
     private var playbackSessionID: UUID?
     private var levelHistory = LevelHistory()
     private var smoothedLevel: Float = 0
+    private var recordingClock = RecordingClock()
     private var levelSamplingTimer: Timer?
 
     /// Audio chunk callback for streaming. Can be updated while recording;
@@ -94,6 +95,7 @@ class Recorder: NSObject, ObservableObject {
             showRecordingDeviceNotification(for: deviceID, resolution: resolution)
             UserDefaults.standard.set(String(deviceID), forKey: "lastUsedMicrophoneDeviceID")
             startLevelSampling()
+            recordingClock.start(at: RecordingClock.now)
         } catch {
             logger.error(
                 "Failed to start recording deviceID=\(deviceID, privacy: .public) file=\(url.lastPathComponent, privacy: .public) error=\(error, privacy: .public)"
@@ -125,6 +127,7 @@ class Recorder: NSObject, ObservableObject {
         onAudioChunk = nil
 
         resetLevelSampling()
+        recordingClock.stop(at: RecordingClock.now)
 
         audioRestorationTask?.cancel()
         audioRestorationTask = Task {
@@ -191,6 +194,12 @@ class Recorder: NSObject, ObservableObject {
     /// The recent input levels, oldest first, for the recorder's level display.
     func levelHistorySnapshot() -> LevelHistory {
         levelHistory
+    }
+
+    /// The recording time for the indicator's timer: counting while recording, frozen at the
+    /// length of the take once recording has stopped.
+    func recordingClockSnapshot() -> RecordingClock {
+        recordingClock
     }
 
     /// Takes a level every 1/30 s while recording. The audio thread already stores its decibel
