@@ -85,7 +85,7 @@ class AIEnhancementService: ObservableObject {
 
         guard configuration.prompt != nil else { return false }
 
-        if provider == .localCLI || provider == .ollama {
+        if provider == .localCLI || provider == .ollama || provider == .builtIn {
             return true
         }
 
@@ -217,7 +217,7 @@ class AIEnhancementService: ObservableObject {
             contextSnapshot: contextSnapshot
         )
 
-        if provider != .openRouter, provider != .ollama, provider != .localCLI {
+        if provider != .openRouter, provider != .ollama, provider != .builtIn, provider != .localCLI {
             try await waitForRateLimit()
         }
 
@@ -244,7 +244,7 @@ class AIEnhancementService: ObservableObject {
             if PromptTemplates.rewritingPromptIds.contains(prompt.id) {
                 filteredResult = RewriteOutputSanitizer.sanitize(filteredResult, input: text)
             }
-            guard provider == .ollama || provider == .localCLI || !filteredResult.isEmpty else {
+            guard provider == .ollama || provider == .builtIn || provider == .localCLI || !filteredResult.isEmpty else {
                 throw EnhancementError.enhancementFailed
             }
             return (
@@ -430,21 +430,26 @@ class AIEnhancementService: ObservableObject {
         let modelName = configuration.modelName ?? provider.defaultModel
         let timeout = requestTimeout
         let aiService = self.aiService
-        let cleanup = GuardedCleanup.make(
-            ollamaBaseURL: provider == .ollama ? provider.baseURL : nil,
-            modelName: modelName
-        ) { system, turns, deadline in
-            do {
-                let completion = try await aiService.performChatCompletion(
-                    provider: provider,
-                    modelName: modelName,
-                    messages: turns.map { ChatMessage(role: $0.role, content: $0.content) },
-                    systemPrompt: system,
-                    timeout: min(timeout, deadline)
-                )
-                return ChatCompletionRuntime.Completion(text: completion.text, finishReason: completion.finishReason)
-            } catch EnhancementError.outputTruncated {
-                return ChatCompletionRuntime.Completion(text: "", finishReason: "length")
+        let cleanup: GuardedCleanup
+        if provider == .builtIn {
+            cleanup = await GuardedCleanup.makeBuiltIn(modelID: modelName)
+        } else {
+            cleanup = GuardedCleanup.make(
+                ollamaBaseURL: provider == .ollama ? provider.baseURL : nil,
+                modelName: modelName
+            ) { system, turns, deadline in
+                do {
+                    let completion = try await aiService.performChatCompletion(
+                        provider: provider,
+                        modelName: modelName,
+                        messages: turns.map { ChatMessage(role: $0.role, content: $0.content) },
+                        systemPrompt: system,
+                        timeout: min(timeout, deadline)
+                    )
+                    return ChatCompletionRuntime.Completion(text: completion.text, finishReason: completion.finishReason)
+                } catch EnhancementError.outputTruncated {
+                    return ChatCompletionRuntime.Completion(text: "", finishReason: "length")
+                }
             }
         }
         let vocabulary = customVocabularyService.words(from: modelContext)

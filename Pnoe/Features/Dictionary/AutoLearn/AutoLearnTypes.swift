@@ -193,6 +193,7 @@ enum AutoLearnLimits {
 
 enum AutoLearnProviderPolicy {
     static func isSupported(_ provider: AIProvider) -> Bool {
-        provider.supportsEnhancement
+        // The Built-in engine has no chat client to review with; it is for workflows.
+        provider.supportsEnhancement && provider != .builtIn
     }
 }

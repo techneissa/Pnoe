@@ -385,6 +385,7 @@ struct ConfigurationRow: View {
 
                 if config.isAIEnhancementEnabled,
                     config.selectedAIProvider != AIProvider.localCLI.rawValue,
+                    config.selectedAIProvider != AIProvider.builtIn.rawValue,
                     let modelName = config.selectedAIModel,
                     !modelName.isEmpty
                 {
@@ -468,7 +469,7 @@ struct ConfigurationRow: View {
 
                 if isHovering {
                     editModeButton
-                        .transition(.opacity)
+                        .motionFade()
                 }
             }
             .contentShape(Rectangle())
@@ -489,7 +490,7 @@ struct ConfigurationRow: View {
         }
         .opacity(config.isEnabled ? 1.0 : 0.70)
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.12)) {
+            Motion.animate(.hover) {
                 isHovering = hovering
             }
         }

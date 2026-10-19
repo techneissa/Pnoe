@@ -7,12 +7,18 @@ struct PlaygroundModelChoice: Hashable, Identifiable {
     let provider: String
     /// The model, or nil for a provider that has no model to pick (Local CLI runs its own command).
     let model: String?
+    /// What to show instead of `model` when that is an id and not a name (a Built-in model is a file).
+    var title: String? = nil
 
     var id: String { provider + "|" + (model ?? "") }
     /// The menu row: "Ollama · gemma3:4b".
-    var label: String { model.map { "\(provider) · \($0)" } ?? provider }
+    var label: String { (title ?? model).map { "\(provider) · \($0)" } ?? provider }
     /// The name for the time line.
-    var modelName: String { model ?? provider }
+    var modelName: String { title ?? model ?? provider }
+
+    // Two choices are the same choice when they name the same provider and model; the title is only a label.
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.id == rhs.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
 /// What the Playground's model menu lists, built from the providers the app reports as connected.
@@ -38,9 +44,24 @@ enum PlaygroundModelOptions {
         return merged(result, own: own)
     }
 
-    /// `choices` with `own` first when missing, and no repeats.
+    /// `choices` with `own` first when missing, and no repeats. A repeat that has a title gives it to the first
+    /// copy (the workflow's own choice carries an id; the model list knows its name).
     static func merged(_ choices: [PlaygroundModelChoice], own: PlaygroundModelChoice?) -> [PlaygroundModelChoice] {
-        var seen = Set<String>()
-        return ((own.map { [$0] } ?? []) + choices).filter { seen.insert($0.id).inserted }
+        var result: [PlaygroundModelChoice] = []
+        var index: [String: Int] = [:]
+        for choice in (own.map { [$0] } ?? []) + choices {
+            if let existing = index[choice.id] {
+                if result[existing].title == nil, choice.title != nil { result[existing].title = choice.title }
+            } else {
+                index[choice.id] = result.count
+                result.append(choice)
+            }
+        }
+        return result
+    }
+
+    /// The installed Built-in models, listed by name. The model is the id that the workflow stores.
+    static func builtIn(_ rows: [BuiltInModelRow], providerName: String) -> [PlaygroundModelChoice] {
+        rows.map { PlaygroundModelChoice(provider: providerName, model: $0.id, title: $0.name) }
     }
 }

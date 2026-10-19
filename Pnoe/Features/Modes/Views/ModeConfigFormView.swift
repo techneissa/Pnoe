@@ -356,7 +356,7 @@ struct ModeConfigFormView: View {
                         }
                         if draft.selectedAIModel == nil,
                             let provider = configuredSelectedAIProvider,
-                            provider != .localCLI
+                            provider != .localCLI, provider != .builtIn
                         {
                             draft.selectedAIModel = warmupSnapshot.selectedModel(for: provider)
                         }
@@ -397,7 +397,7 @@ struct ModeConfigFormView: View {
                     .onChange(of: draft.selectedAIProvider) { _, newValue in
                         if let provider = newValue.flatMap({ AIProvider(rawValue: $0) }) {
                             switch provider {
-                            case .localCLI:
+                            case .localCLI, .builtIn:
                                 draft.selectedAIModel = nil
                             case .ollama:
                                 if draft.selectedAIModel == nil || draft.selectedAIModel?.isEmpty == true {
@@ -447,6 +447,8 @@ struct ModeConfigFormView: View {
             .onAppear {
                 draft.selectedAIModel = nil
             }
+        } else if provider == .builtIn {
+            BuiltInEngineSection(selectedModelID: $draft.selectedAIModel)
         } else {
             let models = aiModelOptions(for: provider)
             if models.isEmpty {

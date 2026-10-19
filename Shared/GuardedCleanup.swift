@@ -44,6 +44,14 @@ struct GuardedCleanup {
         return GuardedCleanup(runtime: runtime, spec: RuntimeModelSpec(identifier: modelName))
     }
 
+    /// The Built-in engine: the same pipeline, prompt and fallback over the XPC service. `modelID` is the id of
+    /// an installed model (`BuiltInModels`); a model that is gone gives a spec without a file, which the runtime
+    /// refuses, so the take pastes the plain transcript like any other runtime error.
+    static func makeBuiltIn(modelID: String, engine: BuiltInEngine = .shared) async -> GuardedCleanup {
+        let spec = await engine.spec(forModelID: modelID) ?? RuntimeModelSpec(identifier: modelID)
+        return GuardedCleanup(runtime: engine.runtime, spec: spec)
+    }
+
     func clean(_ text: String, vocabulary: [String] = []) async -> Result {
         // Snippet placeholders travel through the formatter as protected terms and come back unchanged.
         let snippets = SnippetKeeper(text)
@@ -64,7 +72,12 @@ struct GuardedCleanup {
         // The user is waiting on the paste, and a local model may still be loading: more room than the
         // package's default 3 s.
         var configuration = FormatterPipeline.Configuration()
-        configuration.timeBudget = { words in .milliseconds(Int(min(20_000, 6_000 + 40 * Double(words)))) }
+        let budget = { (words: Int) in Duration.milliseconds(Int(min(20_000, 6_000 + 40 * Double(words)))) }
+        // One deadline for the whole take: loading the model and generating share it, so a cold start cannot
+        // add its wait on top of the generation budget.
+        let remaining = RemainingBudget(budget(text.split(whereSeparator: \.isWhitespace).count))
+        configuration.timeBudget = { _ in remaining.value }
+        let deadline = ContinuousClock.now + remaining.value
         guard let pipeline = try? FormatterPipeline.bundled(runtime: runtime, configuration: configuration) else {
             // No pipeline to run: the same code-only cleanup the pipeline gives a rejected take.
             return Result(
@@ -74,12 +87,35 @@ struct GuardedCleanup {
         let prefix = pipeline.prefix
         // A failed prepare shows up again as a runtime error from `generate`, which the pipeline turns
         // into the plain transcript.
-        try? await runtime.prepare(spec, prefix: prefix)
+        try? await runtime.prepare(spec, prefix: prefix, deadline: deadline)
+        // What is left for generating, with a floor so a load that used the whole budget still gets the
+        // pipeline's own cleanup and a reason code (the runtime says `model_loading` at once).
+        remaining.set(max(deadline - .now, .milliseconds(500)))
         let outcome = await pipeline.format(text, context: .plain, vocabulary: vocabulary)
         return Result(
             text: outcome.text,
             fallbackReason: outcome.reason?.rawValue,
             systemPrompt: prefix.messages.first?.content ?? "")
+    }
+}
+
+/// The generation budget of one take, shortened after the model load used some of it.
+private final class RemainingBudget: @unchecked Sendable {
+    private let lock = NSLock()
+    private var duration: Duration
+
+    init(_ duration: Duration) { self.duration = duration }
+
+    var value: Duration {
+        lock.lock()
+        defer { lock.unlock() }
+        return duration
+    }
+
+    func set(_ duration: Duration) {
+        lock.lock()
+        self.duration = duration
+        lock.unlock()
     }
 }
 
@@ -97,6 +133,10 @@ actor CapturingRuntime: FormatterRuntime {
 
     func prepare(_ spec: RuntimeModelSpec, prefix: PromptPrefix) async throws {
         try await base.prepare(spec, prefix: prefix)
+    }
+
+    func prepare(_ spec: RuntimeModelSpec, prefix: PromptPrefix, deadline: ContinuousClock.Instant) async throws {
+        try await base.prepare(spec, prefix: prefix, deadline: deadline)
     }
 
     func generate(_ request: GenerationRequest) async throws -> GenerationResult {

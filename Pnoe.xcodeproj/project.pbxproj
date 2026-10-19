@@ -24,6 +24,12 @@
 		E1FC0A1030B0000000000011 /* FormatterCore in Frameworks */ = {isa = PBXBuildFile; productRef = E1FC0A1030A0000000000011 /* FormatterCore */; };
 		E1FC0A1030B0000000000012 /* FormatterModels in Frameworks */ = {isa = PBXBuildFile; productRef = E1FC0A1030A0000000000012 /* FormatterModels */; };
 		E1FC0A1030B0000000000013 /* FormatterOllama in Frameworks */ = {isa = PBXBuildFile; productRef = E1FC0A1030A0000000000013 /* FormatterOllama */; };
+		E1FC0A2030F0000000000021 /* FormatterCore in Frameworks */ = {isa = PBXBuildFile; productRef = E1FC0A2030F0000000000011 /* FormatterCore */; };
+		E1FC0A2030F0000000000022 /* FormatterXPC in Frameworks */ = {isa = PBXBuildFile; productRef = E1FC0A2030F0000000000012 /* FormatterXPC */; };
+		E1FC0A2030F0000000000023 /* LlamaRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = E1FC0A2030F0000000000013 /* LlamaRuntime */; };
+		E1FC0A2030F0000000000024 /* FormatterXPC in Frameworks */ = {isa = PBXBuildFile; productRef = E1FC0A2030F0000000000014 /* FormatterXPC */; };
+		E1FC0A2030F0000000000025 /* FormatterXPC in Frameworks */ = {isa = PBXBuildFile; productRef = E1FC0A2030F0000000000015 /* FormatterXPC */; };
+		E1FC0A2030F000000000000C /* PnoeFormatterXPC.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = E1FC0A2030F0000000000001 /* PnoeFormatterXPC.xpc */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -33,6 +39,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = E11473AF2CBE0F0A00318EE4;
 			remoteInfo = Pnoe;
+		};
+		E1FC0A2030F000000000000E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E11473A82CBE0F0A00318EE4 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E1FC0A2030F0000000000004;
+			remoteInfo = PnoeFormatterXPC;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -48,6 +61,17 @@
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E1FC0A2030F000000000000B /* Embed XPC Services */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/XPCServices";
+			dstSubfolderSpec = 16;
+			files = (
+				E1FC0A2030F000000000000C /* PnoeFormatterXPC.xpc in Embed XPC Services */,
+			);
+			name = "Embed XPC Services";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -58,6 +82,7 @@
 		E1A0BD052EB1E7B800266859 /* whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = whisper.xcframework; path = "$(HOME)/Pnoe-Dependencies/whisper.cpp/build-apple/whisper.xcframework"; sourceTree = "<group>"; };
 		E1B2DCAA2E3DE70A008DFD68 /* whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = whisper.xcframework; path = "../whisper.cpp/build-apple/whisper.xcframework"; sourceTree = "<group>"; };
 		E1CE28772E4336150082B758 /* whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = whisper.xcframework; path = "../build-apple/whisper.xcframework"; sourceTree = "<group>"; };
+		E1FC0A2030F0000000000001 /* PnoeFormatterXPC.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = PnoeFormatterXPC.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -67,6 +92,13 @@
 				Info.plist,
 			);
 			target = E11473AF2CBE0F0A00318EE4 /* Pnoe */;
+		};
+		E1FC0A2030F0000000000003 /* Exceptions for "PnoeFormatterXPC" folder in "PnoeFormatterXPC" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = E1FC0A2030F0000000000004 /* PnoeFormatterXPC */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -94,6 +126,14 @@
 			path = Shared;
 			sourceTree = "<group>";
 		};
+		E1FC0A2030F0000000000002 /* PnoeFormatterXPC */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E1FC0A2030F0000000000003 /* Exceptions for "PnoeFormatterXPC" folder in "PnoeFormatterXPC" target */,
+			);
+			path = PnoeFormatterXPC;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -114,6 +154,7 @@
 				E1FC0A1030B0000000000001 /* FormatterCore in Frameworks */,
 				E1FC0A1030B0000000000002 /* FormatterModels in Frameworks */,
 				E1FC0A1030B0000000000003 /* FormatterOllama in Frameworks */,
+				E1FC0A2030F0000000000024 /* FormatterXPC in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -124,6 +165,7 @@
 				E1FC0A1030B0000000000011 /* FormatterCore in Frameworks */,
 				E1FC0A1030B0000000000012 /* FormatterModels in Frameworks */,
 				E1FC0A1030B0000000000013 /* FormatterOllama in Frameworks */,
+				E1FC0A2030F0000000000025 /* FormatterXPC in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -131,6 +173,16 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1FC0A2030F0000000000009 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1FC0A2030F0000000000021 /* FormatterCore in Frameworks */,
+				E1FC0A2030F0000000000022 /* FormatterXPC in Frameworks */,
+				E1FC0A2030F0000000000023 /* LlamaRuntime in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -150,6 +202,7 @@
 			isa = PBXGroup;
 			children = (
 				E11473B22CBE0F0A00318EE4 /* Pnoe */,
+				E1FC0A2030F0000000000002 /* PnoeFormatterXPC */,
 				E1FA00042FA7000000000001 /* Shared */,
 				A63D21E830A49E0000000001 /* Tests */,
 				E114741C2CBE1DE200318EE4 /* Frameworks */,
@@ -163,6 +216,7 @@
 				E11473B02CBE0F0A00318EE4 /* Pnoe Dev.app */,
 				E11473C32CBE0F0B00318EE4 /* PnoeTests.xctest */,
 				E11473CD2CBE0F0B00318EE4 /* PnoeUITests.xctest */,
+				E1FC0A2030F0000000000001 /* PnoeFormatterXPC.xpc */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -189,10 +243,12 @@
 				E11473AD2CBE0F0A00318EE4 /* Frameworks */,
 				E11473AE2CBE0F0A00318EE4 /* Resources */,
 				E1A8C8CD2E1257B7003E58EC /* Embed Frameworks */,
+				E1FC0A2030F000000000000B /* Embed XPC Services */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				E1FC0A2030F000000000000D /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				E11473B22CBE0F0A00318EE4 /* Pnoe */,
@@ -211,6 +267,7 @@
 				E1FC0A1030A0000000000001 /* FormatterCore */,
 				E1FC0A1030A0000000000002 /* FormatterModels */,
 				E1FC0A1030A0000000000003 /* FormatterOllama */,
+				E1FC0A2030F0000000000014 /* FormatterXPC */,
 			);
 			productName = Pnoe;
 			productReference = E11473B02CBE0F0A00318EE4 /* Pnoe Dev.app */;
@@ -237,6 +294,7 @@
 				E1FC0A1030A0000000000011 /* FormatterCore */,
 				E1FC0A1030A0000000000012 /* FormatterModels */,
 				E1FC0A1030A0000000000013 /* FormatterOllama */,
+				E1FC0A2030F0000000000015 /* FormatterXPC */,
 			);
 			productName = PnoeTests;
 			productReference = E11473C32CBE0F0B00318EE4 /* PnoeTests.xctest */;
@@ -264,6 +322,31 @@
 			productName = PnoeUITests;
 			productReference = E11473CD2CBE0F0B00318EE4 /* PnoeUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		E1FC0A2030F0000000000004 /* PnoeFormatterXPC */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E1FC0A2030F0000000000005 /* Build configuration list for PBXNativeTarget "PnoeFormatterXPC" */;
+			buildPhases = (
+				E1FC0A2030F0000000000008 /* Sources */,
+				E1FC0A2030F0000000000009 /* Frameworks */,
+				E1FC0A2030F000000000000A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				E1FC0A2030F0000000000002 /* PnoeFormatterXPC */,
+			);
+			name = PnoeFormatterXPC;
+			packageProductDependencies = (
+				E1FC0A2030F0000000000011 /* FormatterCore */,
+				E1FC0A2030F0000000000012 /* FormatterXPC */,
+				E1FC0A2030F0000000000013 /* LlamaRuntime */,
+			);
+			productName = PnoeFormatterXPC;
+			productReference = E1FC0A2030F0000000000001 /* PnoeFormatterXPC.xpc */;
+			productType = "com.apple.product-type.xpc-service";
 		};
 /* End PBXNativeTarget section */
 
@@ -310,6 +393,7 @@
 				E1AF67003031B7AA006D5003 /* XCRemoteSwiftPackageReference "WhisperKit" */,
 				E1701E73305E77220098872B /* XCRemoteSwiftPackageReference "LLMkit" */,
 				E1FC0A1030C0000000000001 /* XCLocalSwiftPackageReference "Packages/PnoeFormatter" */,
+				E1FC0A2030F0000000000010 /* XCLocalSwiftPackageReference "Packages/PnoeLlama" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E11473B12CBE0F0A00318EE4 /* Products */;
@@ -319,6 +403,7 @@
 				E11473AF2CBE0F0A00318EE4 /* Pnoe */,
 				E11473C22CBE0F0B00318EE4 /* PnoeTests */,
 				E11473CC2CBE0F0B00318EE4 /* PnoeUITests */,
+				E1FC0A2030F0000000000004 /* PnoeFormatterXPC */,
 			);
 		};
 /* End PBXProject section */
@@ -339,6 +424,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		E11473CB2CBE0F0B00318EE4 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1FC0A2030F000000000000A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -369,6 +461,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E1FC0A2030F0000000000008 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -376,6 +475,11 @@
 			isa = PBXTargetDependency;
 			target = E11473AF2CBE0F0A00318EE4 /* Pnoe */;
 			targetProxy = E11473CE2CBE0F0B00318EE4 /* PBXContainerItemProxy */;
+		};
+		E1FC0A2030F000000000000D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E1FC0A2030F0000000000004 /* PnoeFormatterXPC */;
+			targetProxy = E1FC0A2030F000000000000E /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -513,7 +617,7 @@
 				ARCHS = "$(ARCHS_STANDARD)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Pnoe/Pnoe.debug.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "$(PNOE_APP_ENTITLEMENTS)";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -534,6 +638,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 0.1.0;
+				PNOE_APP_ENTITLEMENTS = Pnoe/Pnoe.debug.entitlements;
 				PRODUCT_BUNDLE_IDENTIFIER = com.techneissa.Pnoe.dev;
 				PRODUCT_MODULE_NAME = Pnoe;
 				PRODUCT_NAME = "Pnoe Dev";
@@ -549,7 +654,7 @@
 				ARCHS = "$(ARCHS_STANDARD)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Pnoe/Pnoe.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "$(PNOE_APP_ENTITLEMENTS)";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -570,6 +675,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 0.1.0;
+				PNOE_APP_ENTITLEMENTS = Pnoe/Pnoe.entitlements;
 				PRODUCT_BUNDLE_IDENTIFIER = com.techneissa.Pnoe;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "ENABLE_NATIVE_SPEECH_ANALYZER $(inherited)";
@@ -642,6 +748,69 @@
 			};
 			name = Release;
 		};
+		E1FC0A2030F0000000000006 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ARCHS = "$(ARCHS_STANDARD)";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = "$(PNOE_XPC_ENTITLEMENTS)";
+				INFOPLIST_FILE = PnoeFormatterXPC/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = PnoeFormatterXPC;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1.0;
+				PNOE_XPC_ENTITLEMENTS = PnoeFormatterXPC/PnoeFormatterXPC.entitlements;
+				PRODUCT_BUNDLE_IDENTIFIER = com.techneissa.Pnoe.PnoeFormatterXPC;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		E1FC0A2030F0000000000007 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ARCHS = "$(ARCHS_STANDARD)";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = "$(PNOE_XPC_ENTITLEMENTS)";
+				INFOPLIST_FILE = PnoeFormatterXPC/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = PnoeFormatterXPC;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1.0;
+				PNOE_XPC_ENTITLEMENTS = PnoeFormatterXPC/PnoeFormatterXPC.entitlements;
+				PRODUCT_BUNDLE_IDENTIFIER = com.techneissa.Pnoe.PnoeFormatterXPC;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -681,12 +850,25 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		E1FC0A2030F0000000000005 /* Build configuration list for PBXNativeTarget "PnoeFormatterXPC" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1FC0A2030F0000000000006 /* Debug */,
+				E1FC0A2030F0000000000007 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
 		E1FC0A1030C0000000000001 /* XCLocalSwiftPackageReference "Packages/PnoeFormatter" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/PnoeFormatter;
+		};
+		E1FC0A2030F0000000000010 /* XCLocalSwiftPackageReference "Packages/PnoeLlama" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/PnoeLlama;
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -827,6 +1009,31 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E1FC0A1030C0000000000001 /* XCLocalSwiftPackageReference "Packages/PnoeFormatter" */;
 			productName = FormatterOllama;
+		};
+		E1FC0A2030F0000000000011 /* FormatterCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1FC0A1030C0000000000001 /* XCLocalSwiftPackageReference "Packages/PnoeFormatter" */;
+			productName = FormatterCore;
+		};
+		E1FC0A2030F0000000000012 /* FormatterXPC */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1FC0A1030C0000000000001 /* XCLocalSwiftPackageReference "Packages/PnoeFormatter" */;
+			productName = FormatterXPC;
+		};
+		E1FC0A2030F0000000000013 /* LlamaRuntime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1FC0A2030F0000000000010 /* XCLocalSwiftPackageReference "Packages/PnoeLlama" */;
+			productName = LlamaRuntime;
+		};
+		E1FC0A2030F0000000000014 /* FormatterXPC */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1FC0A1030C0000000000001 /* XCLocalSwiftPackageReference "Packages/PnoeFormatter" */;
+			productName = FormatterXPC;
+		};
+		E1FC0A2030F0000000000015 /* FormatterXPC */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1FC0A1030C0000000000001 /* XCLocalSwiftPackageReference "Packages/PnoeFormatter" */;
+			productName = FormatterXPC;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

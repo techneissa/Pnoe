@@ -291,6 +291,11 @@ class ModeManager: ObservableObject {
             UserDefaults.standard.set(data, forKey: configKey)
         }
         NotificationCenter.default.post(name: .modeConfigurationsDidChange, object: nil)
+        // A workflow that left Built-in, or turned AI off, may have been the last one using the model.
+        BuiltInEngine.unloadIfUnused(
+            workflows: configurations.map {
+                BuiltInUsage.Workflow(isAIEnabled: $0.isAIEnhancementEnabled, providerName: $0.selectedAIProvider)
+            })
     }
 
     func addConfiguration(_ newConfiguration: ModeConfig) {

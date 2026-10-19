@@ -100,7 +100,12 @@ struct ModeConfigEditorView: View {
         let snapshot = modeWarmupStore.snapshot
 
         if case .add = mode {
-            draft.applyAddModeDefaults(snapshot: snapshot)
+            let inheritsBuiltIn = draft.selectedAIProvider == AIProvider.builtIn.rawValue
+            draft.applyAddModeDefaults(
+                snapshot: snapshot,
+                builtInModelInstalled: inheritsBuiltIn
+                    && BuiltInModels.isInstalled(
+                        modelID: draft.selectedAIModel, chosenFiles: BuiltInEngine.storedChosenFiles()))
             draft.inheritUsableTranscriptionModelSelection(from: snapshot)
             if let promptId = draft.selectedPromptId, !snapshot.prompts.contains(where: { $0.id == promptId }) {
                 draft.selectedPromptId = nil
@@ -125,18 +130,21 @@ struct ModeConfigEditorView: View {
     }
 
     /// A template built for a local model starts on the smallest suitable Gemma or Qwen model Ollama has
-    /// already pulled. Nothing is downloaded or started; with none installed the provider stays as it was.
+    /// already pulled; with Ollama not running, on an installed Built-in model. Nothing is downloaded or
+    /// started; with none of either the provider stays as it was.
     private func preselectInstalledOllamaModel() {
         let startingProvider = draft.selectedAIProvider
         let endpoint = URL(string: AIProvider.ollama.baseURL) ?? OllamaModelDiscovery.defaultEndpoint
         Task { @MainActor in
             guard
-                let choice = await TemplateProviderPreselection.choose(discovery: {
-                    await OllamaModelDiscovery(endpoint: endpoint).fetch()
-                })
+                let choice = await TemplateProviderPreselection.chooseLocal(
+                    ollama: { await OllamaModelDiscovery(endpoint: endpoint).fetch() },
+                    builtIn: { await BuiltInModels.installed(chosenFiles: BuiltInEngine.storedChosenFiles()) })
             else { return }
             // Ollama only counts as a connected provider once the app has looked at it.
-            _ = await aiService.refreshOllamaAvailability()
+            if choice.providerName == TemplateProviderPreselection.ollamaProviderName {
+                _ = await aiService.refreshOllamaAvailability()
+            }
             draft.preselect(choice, startingProvider: startingProvider)
         }
     }

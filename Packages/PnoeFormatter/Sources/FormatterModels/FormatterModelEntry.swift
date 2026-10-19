@@ -16,6 +16,10 @@ public enum FormatterModelSource: String, Sendable, Codable, CaseIterable {
     case ollama
     case huggingFaceCache
     case lmStudio
+    /// Ollama's model folder read from disk, with Ollama itself not running.
+    case ollamaStore
+    /// A model Pnoe downloaded itself.
+    case downloaded
     case userChosen
 }
 

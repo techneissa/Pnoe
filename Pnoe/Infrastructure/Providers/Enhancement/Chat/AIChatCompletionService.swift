@@ -86,6 +86,21 @@ extension AIService {
                 model: resolvedModel,
                 timeout: timeout
             )
+        case .builtIn:
+            do {
+                result = try await BuiltInEngine.shared.complete(
+                    system: systemPrompt ?? "",
+                    user: localUserPrompt ?? chatPrompt(from: messages),
+                    modelID: resolvedModel,
+                    timeout: timeout
+                )
+            } catch BuiltInEngineError.timedOut {
+                throw EnhancementError.timeout
+            } catch BuiltInEngineError.outputTooLong {
+                throw EnhancementError.outputTruncated
+            } catch let error as BuiltInEngineError {
+                throw EnhancementError.customError(error.localizedDescription)
+            }
         case .localCLI:
             result = try await enhanceWithLocalCLI(
                 systemPrompt: systemPrompt ?? "",

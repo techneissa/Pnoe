@@ -15,7 +15,7 @@ final class WorkflowPlaygroundPreviewTests: XCTestCase {
         return URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("pnoe-playground-png")
     }
 
-    private func render<V: View>(_ view: V, size: CGSize, name: String, dark: Bool = false) throws {
+    func render<V: View>(_ view: V, size: CGSize, name: String, dark: Bool = false) throws {
         _ = NSApplication.shared
         let host = NSHostingView(
             rootView: view
@@ -106,5 +106,33 @@ final class WorkflowPlaygroundPreviewTests: XCTestCase {
             PlaygroundOutcome(output: "", duration: 0)
         }
         try render(WorkflowPlaygroundView(model: model, onDismiss: {}), size: CGSize(width: 720, height: 360), name: "playground-empty")
+    }
+}
+
+extension WorkflowPlaygroundPreviewTests {
+    private static let popoverChoices: [PlaygroundModelChoice] = [
+        PlaygroundModelChoice(provider: "Anthropic", model: "claude-haiku-5-5"),
+        PlaygroundModelChoice(provider: "Anthropic", model: "claude-sonnet-5-5"),
+        PlaygroundModelChoice(provider: "Gemini", model: "gemini-3.8-flash"),
+        PlaygroundModelChoice(provider: "Ollama", model: "gemma3:4b"),
+        PlaygroundModelChoice(provider: "Ollama", model: "qwen3:4b"),
+        PlaygroundModelChoice(provider: "Built-in", model: "hf:unsloth/gemma-4-E2B-it-GGUF/gemma-4-E2B-it-Q4_K_M.gguf", title: "gemma-4-E2B-it"),
+        PlaygroundModelChoice(provider: "Built-in", model: "file:/models/Qwen3-4B-Instruct-Q8_0.gguf", title: "Qwen3-4B-Instruct"),
+    ]
+
+    private func popover(query: String) -> some View {
+        PlaygroundModelPopoverContent(
+            choices: Self.popoverChoices, selectedID: Self.popoverChoices[3].id, initialQuery: query, startsShown: true,
+            onSelect: { _ in }, onClose: {}
+        )
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.15)))
+        .padding(20)
+    }
+
+    func testRenderTheModelPopoverWithASearchTyped() throws {
+        try render(popover(query: "gemma"), size: CGSize(width: 440, height: 190), name: "playground-model-popover-search")
+        try render(popover(query: "gemma"), size: CGSize(width: 440, height: 190), name: "playground-model-popover-search-dark", dark: true)
+        try render(popover(query: ""), size: CGSize(width: 440, height: 350), name: "playground-model-popover-all")
     }
 }

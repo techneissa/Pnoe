@@ -206,7 +206,9 @@ final class SystemInfoService {
             return "Disabled"
         }
 
-        let configuration = [mode.selectedAIProvider, mode.selectedAIModel]
+        // A Built-in model is a file on this Mac; its id has a path in it, so only the provider is listed.
+        let model = mode.selectedAIProvider == AIProvider.builtIn.rawValue ? nil : mode.selectedAIModel
+        let configuration = [mode.selectedAIProvider, model]
             .compactMap { value -> String? in
                 guard let value, !value.isEmpty else { return nil }
                 return value

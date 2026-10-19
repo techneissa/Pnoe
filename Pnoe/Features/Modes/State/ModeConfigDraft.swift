@@ -116,15 +116,21 @@ struct ModeConfigDraft {
         !name.isEmpty
     }
 
-    mutating func applyAddModeDefaults(snapshot: ModeFormWarmupSnapshot) {
-        let connectedProviders = snapshot.connectedAIProviders
-        let inheritedProvider = selectedAIProvider.flatMap(AIProvider.init(rawValue:))
-        let provider =
-            inheritedProvider.flatMap { provider in
-                connectedProviders.contains(provider) ? provider : nil
-            } ?? connectedProviders.first
+    /// `builtInModelInstalled`: the Built-in model this draft already has is on the Mac. Built-in is inherited,
+    /// with that model, only then; otherwise the draft takes the normal pick.
+    mutating func applyAddModeDefaults(snapshot: ModeFormWarmupSnapshot, builtInModelInstalled: Bool = false) {
+        let provider = TemplateProviderPreselection.defaultProvider(
+            inherited: selectedAIProvider,
+            available: snapshot.connectedAIProviders.map(\.rawValue),
+            builtIn: AIProvider.builtIn.rawValue,
+            builtInModelInstalled: builtInModelInstalled
+        ).flatMap(AIProvider.init(rawValue:))
 
+        let inheritedBuiltIn = selectedAIProvider == AIProvider.builtIn.rawValue
         selectedAIProvider = provider?.rawValue
+        if provider == .builtIn { return }
+        // A Built-in model id means nothing to any other provider.
+        if inheritedBuiltIn { selectedAIModel = nil }
         guard let provider, provider != .localCLI else {
             selectedAIModel = nil
             return

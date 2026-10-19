@@ -72,7 +72,8 @@ public struct FormatterPipeline: Sendable {
         let request = GenerationRequest(
             suffix: promptBuilder.suffix(transcript: protected.text, context: context),
             maxTokens: configuration.maxTokens(estimatedTokens(protected.text)),
-            deadline: .now + configuration.timeBudget(words)
+            deadline: .now + configuration.timeBudget(words),
+            prefixKey: promptBuilder.prefix.key
         )
         let result: GenerationResult
         do {
