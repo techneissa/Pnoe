@@ -6,6 +6,8 @@ let package = Package(
     platforms: [.macOS(.v15)],
     products: [
         .library(name: "FormatterCore", targets: ["FormatterCore"]),
+        .library(name: "FormatterModels", targets: ["FormatterModels"]),
+        .executable(name: "pnoe-list-models", targets: ["ListModels"]),
         .library(name: "FormatterOllama", targets: ["FormatterOllama"]),
         .library(name: "FormatterEvalKit", targets: ["FormatterEvalKit"]),
         .executable(name: "pnoe-format-eval", targets: ["pnoe-format-eval"]),
@@ -15,9 +17,21 @@ let package = Package(
             name: "FormatterCore",
             resources: [.process("Resources")]
         ),
+        .target(
+            name: "FormatterModels",
+            dependencies: ["FormatterCore"]
+        ),
+        .executableTarget(
+            name: "ListModels",
+            dependencies: ["FormatterModels"]
+        ),
         .testTarget(
             name: "FormatterCoreTests",
             dependencies: ["FormatterCore"]
+        ),
+        .testTarget(
+            name: "FormatterModelsTests",
+            dependencies: ["FormatterModels"]
         ),
         // Ollama over HTTP: Foundation only, shared by the app and the eval CLI.
         .target(name: "FormatterOllama", dependencies: ["FormatterCore"]),
