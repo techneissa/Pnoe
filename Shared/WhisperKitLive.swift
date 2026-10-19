@@ -61,6 +61,8 @@ struct WhisperKitLivePlanner {
     private(set) var windowStart = 0
     private(set) var lastHandledEnd = 0
     private(set) var confirmedText = ""
+    /// The unconfirmed text of the last decoded window.
+    private var hypothesis = ""
 
     init(settings: Settings = Settings(), language: String?, prompt: String?) {
         self.settings = settings
@@ -81,9 +83,14 @@ struct WhisperKitLivePlanner {
         )
     }
 
-    /// New audio that was silent: nothing to decode, and the next pass waits for more.
+    /// The pass for this window did not produce text (the new audio was silent, or the decode failed).
+    /// The text shown so far is final, and the window moves on: a long pause or an error never makes
+    /// the next window grow.
     mutating func skip(_ request: Request) {
         lastHandledEnd = request.windowEnd
+        confirmedText = Self.join([confirmedText, hypothesis])
+        hypothesis = ""
+        windowStart = request.windowEnd
     }
 
     /// Takes a decoded window and returns the full text for the live line.
@@ -94,12 +101,14 @@ struct WhisperKitLivePlanner {
         }
 
         let segments = result.segments.filter { !Self.isNoise($0.text) }
+        let texts = Self.withoutRepeatedTail(of: confirmedText, in: segments.map { Self.clean($0.text) })
         let rate = Double(settings.sampleRate)
         let windowSeconds = Double(request.windowEnd - request.windowStart) / rate
 
         var confirmedCount = 0
-        var nextStart = windowStart
+        var nextStart: Int?
         if windowSeconds >= settings.maxWindowSeconds {
+            // Past the limit the window always moves on, even when it held nothing but tags.
             confirmedCount = segments.count
             nextStart = request.windowEnd
         } else if windowSeconds >= settings.commitAfterSeconds, segments.count >= 2 {
@@ -108,18 +117,49 @@ struct WhisperKitLivePlanner {
             nextStart = min(request.windowEnd, request.windowStart + Int(end * rate))
         }
 
-        if confirmedCount > 0 {
-            let confirmed = segments.prefix(confirmedCount).map { Self.clean($0.text) }
-            confirmedText = Self.join([confirmedText] + confirmed)
+        if let nextStart {
+            confirmedText = Self.join([confirmedText] + texts.prefix(confirmedCount))
             windowStart = nextStart
         }
-        let hypothesis = segments.dropFirst(confirmedCount).map { Self.clean($0.text) }
-        return Self.join([confirmedText] + hypothesis)
+        hypothesis = Self.join(Array(texts.dropFirst(confirmedCount)))
+        return Self.join([confirmedText, hypothesis])
     }
 
     private func prompt() -> String? {
         let tail = String(confirmedText.suffix(settings.promptTailCharacters))
         return Self.join([basePrompt ?? "", tail]).nilIfEmpty
+    }
+
+    /// The window starts at a segment boundary, and Whisper sometimes repeats the last words of
+    /// the text before it. Drops up to `seamWords` leading words that repeat the tail of the confirmed text.
+    private static let seamWords = 5
+
+    private static func withoutRepeatedTail(of confirmed: String, in texts: [String]) -> [String] {
+        let tail = confirmed.split(whereSeparator: \.isWhitespace).suffix(seamWords).map { normalized(String($0)) }
+        let words = texts.map { $0.split(whereSeparator: \.isWhitespace).map(String.init) }
+        let leading = words.flatMap { $0 }.prefix(seamWords).map(normalized)
+        guard !tail.isEmpty, !leading.isEmpty else { return texts }
+
+        var drop = 0
+        for count in stride(from: min(tail.count, leading.count), through: 1, by: -1) {
+            let a = Array(tail.suffix(count)), b = Array(leading.prefix(count))
+            if a == b, !a.contains("") {
+                drop = count
+                break
+            }
+        }
+        guard drop > 0 else { return texts }
+
+        var remaining = drop
+        return words.map { segmentWords in
+            let cut = min(remaining, segmentWords.count)
+            remaining -= cut
+            return segmentWords.dropFirst(cut).joined(separator: " ")
+        }
+    }
+
+    private static func normalized(_ word: String) -> String {
+        word.lowercased().filter { $0.isLetter || $0.isNumber }
     }
 
     private static func clean(_ text: String) -> String {
@@ -181,7 +221,9 @@ actor WhisperKitLiveSession {
         loop = Task { [weak self] in
             while !Task.isCancelled {
                 do { try await Task.sleep(for: interval) } catch { return }
-                await self?.tick()
+                // A released session ends its own loop.
+                guard let self else { return }
+                await self.tick()
             }
         }
     }
@@ -198,13 +240,15 @@ actor WhisperKitLiveSession {
 
         let from = request.windowStart - bufferStart
         let to = request.windowEnd - bufferStart
-        let window = Array(buffer[from..<to])
 
-        let newAudio = window.suffix(request.windowEnd - planner.lastHandledEnd)
-        if Self.rms(of: newAudio) < planner.settings.silenceRMS {
+        // Silence is judged on the new audio, before anything is copied: a pause moves the window on.
+        let newFrom = max(planner.lastHandledEnd, request.windowStart) - bufferStart
+        if Self.rms(of: buffer[newFrom..<to]) < planner.settings.silenceRMS {
             planner.skip(request)
+            trimBuffer()
             return
         }
+        let window = Array(buffer[from..<to])
 
         isDecoding = true
         defer { isDecoding = false }
@@ -219,6 +263,11 @@ actor WhisperKitLiveSession {
             decodeTask = nil
             if !(error is CancellationError) {
                 logger.error("Live pass failed: \(error.localizedDescription, privacy: .public)")
+                // Move on, so one repeating error cannot stop the live text for the rest of the take.
+                if !isStopped {
+                    planner.skip(request)
+                    trimBuffer()
+                }
             }
             return
         }

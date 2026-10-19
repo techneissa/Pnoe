@@ -55,8 +55,9 @@ final class WhisperKitLivePlannerTests: XCTestCase {
         var planner = planner()
         let request = planner.nextRequest(totalSamples: rate)!
         planner.skip(request)
-        XCTAssertNil(planner.nextRequest(totalSamples: rate + rate / 4))
-        XCTAssertNotNil(planner.nextRequest(totalSamples: rate + rate / 2))
+        XCTAssertEqual(planner.windowStart, rate, "the silent audio is left behind")
+        XCTAssertNil(planner.nextRequest(totalSamples: rate + rate / 2), "the new window needs one second")
+        XCTAssertNotNil(planner.nextRequest(totalSamples: 2 * rate))
     }
 
     func testTheLiveTextIsTheWholeWindowAndRepeatsStayStable() {
@@ -99,6 +100,56 @@ final class WhisperKitLivePlannerTests: XCTestCase {
         XCTAssertEqual(planner.confirmedText, "long speech")
         XCTAssertEqual(planner.windowStart, 28 * rate)
         XCTAssertNil(planner.nextRequest(totalSamples: 28 * rate + rate / 2), "a new window needs one second")
+    }
+
+    func testASilentSkipConfirmsThePendingTextAndMovesTheWindowToItsEnd() {
+        var planner = planner()
+        let first = planner.nextRequest(totalSamples: 2 * rate)!
+        XCTAssertEqual(planner.apply(result([segment("hello there", 0, 2)]), to: first), "hello there")
+        XCTAssertEqual(planner.confirmedText, "")
+
+        let silent = planner.nextRequest(totalSamples: 3 * rate)!
+        planner.skip(silent)
+
+        XCTAssertEqual(planner.confirmedText, "hello there")
+        XCTAssertEqual(planner.windowStart, 3 * rate)
+        XCTAssertNil(planner.nextRequest(totalSamples: 3 * rate + rate / 2), "the new window needs one second")
+        XCTAssertEqual(planner.nextRequest(totalSamples: 4 * rate)?.prompt, "hello there")
+        let next = planner.nextRequest(totalSamples: 4 * rate)!
+        XCTAssertEqual(planner.apply(result([segment("and more", 0, 1)]), to: next), "hello there and more")
+    }
+
+    func testAWindowPastTheLimitThatHeldOnlyTagsStillMovesOn() {
+        var planner = planner()
+        let request = planner.nextRequest(totalSamples: 29 * rate)!
+        let text = planner.apply(result([segment("[BLANK_AUDIO]", 0, 29)]), to: request)
+        XCTAssertEqual(text, "")
+        XCTAssertEqual(planner.windowStart, 29 * rate)
+
+        let empty = planner.nextRequest(totalSamples: 58 * rate)!
+        XCTAssertEqual(planner.apply(result([]), to: empty), "")
+        XCTAssertEqual(planner.windowStart, 58 * rate)
+    }
+
+    func testWordsRepeatedAtTheSeamAreShownOnce() {
+        var planner = planner()
+        var request = planner.nextRequest(totalSamples: 21 * rate)!
+        _ = planner.apply(
+            result([segment("we went to the market today.", 0, 12), segment("and", 12, 21)]), to: request)
+        XCTAssertEqual(planner.confirmedText, "we went to the market today.")
+
+        request = planner.nextRequest(totalSamples: 22 * rate)!
+        let text = planner.apply(result([segment("The market, today! and then home", 0, 4)]), to: request)
+        XCTAssertEqual(text, "we went to the market today. and then home")
+    }
+
+    func testOnlyARealRepeatOfTheTailIsDropped() {
+        var planner = planner()
+        let request = planner.nextRequest(totalSamples: 21 * rate)!
+        _ = planner.apply(result([segment("one two three", 0, 12), segment("x", 12, 21)]), to: request)
+
+        let next = planner.nextRequest(totalSamples: 22 * rate)!
+        XCTAssertEqual(planner.apply(result([segment("two four", 0, 2)]), to: next), "one two three two four")
     }
 
     func testTheDetectedLanguageIsPinnedAfterTheFirstPass() {
@@ -148,6 +199,10 @@ private final class FakeDecoder: WhisperKitLiveDecoding, @unchecked Sendable {
     private(set) var maxRunning = 0
     private(set) var cancelled = 0
     private var held = false
+    private var failures = 0
+
+    /// The next `count` decodes throw.
+    func failNext(_ count: Int) { lock.withLock { failures = count } }
 
     init(replies: [WhisperKitLiveResult?]) { self.replies = replies }
 
@@ -156,13 +211,20 @@ private final class FakeDecoder: WhisperKitLiveDecoding, @unchecked Sendable {
     var callCount: Int { lock.withLock { calls.count } }
 
     func decodeLive(samples: [Float], language: String?, prompt: String?) async throws -> WhisperKitLiveResult? {
+        var shouldFail = false
         let reply: WhisperKitLiveResult? = lock.withLock {
             calls.append((samples.count, language, prompt))
             running += 1
             maxRunning = max(maxRunning, running)
+            if failures > 0 {
+                failures -= 1
+                shouldFail = true
+                return nil
+            }
             return replies.isEmpty ? nil : replies.removeFirst()
         }
         defer { lock.withLock { running -= 1 } }
+        if shouldFail { throw CocoaError(.fileReadCorruptFile) }
         while lock.withLock({ held }) {
             do {
                 try await Task.sleep(for: .milliseconds(5))
@@ -353,5 +415,76 @@ final class WhisperKitLiveSessionTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(80))
         XCTAssertEqual(decoder.callCount, calls, "no pass after stop")
         XCTAssertEqual(decoder.running, 0)
+    }
+
+    func testALongSilenceNeverGrowsTheWindowAndSpeechAfterItIsDecodedAlone() async {
+        let decoder = FakeDecoder(replies: [result([segment("finally", 0, 1.5)])])
+        let partials = Partials()
+        let session = makeSession(decoder, partials: partials)
+
+        // 40 s of silence arrives in 10 s steps, a tick after each.
+        for _ in 0..<4 {
+            await session.append([Float](repeating: 0, count: 10 * rate))
+            await session.tick()
+        }
+        XCTAssertEqual(decoder.callCount, 0)
+
+        await session.append(speech(seconds: 1.5))
+        await session.tick()
+
+        XCTAssertEqual(decoder.callCount, 1)
+        XCTAssertEqual(decoder.calls[0].samples, Int(1.5 * Double(rate)), "the silence is not part of the window")
+        XCTAssertEqual(partials.all, ["finally"])
+    }
+
+    func testAPauseConfirmsWhatWasSaidAndTheNextWindowStartsAfterIt() async {
+        let decoder = FakeDecoder(replies: [
+            result([segment("first part", 0, 1.5)]), result([segment("second part", 0, 1)]),
+        ])
+        let partials = Partials()
+        let session = makeSession(decoder, partials: partials)
+
+        await session.append(speech(seconds: 1.5))
+        await session.tick()
+        await session.append([Float](repeating: 0, count: 2 * rate))
+        await session.tick()
+        XCTAssertEqual(decoder.callCount, 1, "a pause is not decoded")
+        await session.append(speech(seconds: 1))
+        await session.tick()
+
+        XCTAssertEqual(decoder.calls[1].samples, rate)
+        XCTAssertEqual(decoder.calls[1].prompt, "first part")
+        XCTAssertEqual(partials.all, ["first part", "first part second part"])
+    }
+
+    func testARepeatingErrorDoesNotStopTheLiveTextAfterItGoesAway() async {
+        let decoder = FakeDecoder(replies: [result([segment("recovered", 0, 1)])])
+        let partials = Partials()
+        let session = makeSession(decoder, partials: partials)
+        decoder.failNext(3)
+
+        for _ in 0..<3 {
+            await session.append(speech(seconds: 1))
+            await session.tick()
+        }
+        XCTAssertEqual(decoder.callCount, 3)
+        XCTAssertEqual(decoder.calls.map(\.samples), [rate, rate, rate], "a failed window is not retried and grown")
+        XCTAssertEqual(partials.all, [])
+
+        await session.append(speech(seconds: 1))
+        await session.tick()
+        XCTAssertEqual(partials.all, ["recovered"])
+    }
+
+    func testASessionThatIsReleasedStopsItsOwnLoop() async throws {
+        let decoder = FakeDecoder(replies: [])
+        weak var weakSession: WhisperKitLiveSession?
+        do {
+            let session = makeSession(decoder, partials: Partials())
+            weakSession = session
+            await session.start(interval: .milliseconds(10))
+        }
+        try await waitUntil("session released") { weakSession == nil }
+        XCTAssertNil(weakSession)
     }
 }
