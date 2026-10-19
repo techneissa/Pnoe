@@ -3,6 +3,8 @@ import Foundation
 public enum FormatterRuntimeID: String, Sendable, Codable {
     case llama
     case mlx
+    /// An Ollama server reached over HTTP.
+    case ollama
 }
 
 public struct ChatMessage: Sendable, Equatable, Codable {

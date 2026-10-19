@@ -179,9 +179,9 @@ struct WordDiffGuardTests {
 
 @Suite("WordDiffGuard on the round 1 targets")
 struct WordDiffGuardRoundOneTests {
-    /// Targets that no longer fit the rules: round 1 allowed "$12,500" for "twelve thousand five hundred dollars"
-    /// (e4), and kept the "okay so" opener that the chat cleanup now drops before the model (c3).
-    static let knownRuleChanges: Set<String> = ["e4", "c3"]
+    /// Targets that no longer fit the rules: round 1 kept the "okay so" opener that the chat cleanup now drops
+    /// before the model (c3).
+    static let knownRuleChanges: Set<String> = ["c3"]
 
     @Test func roundOneTargetsPassTheirOwnGuard() {
         for item in RoundOneInputs.all where !Self.knownRuleChanges.contains(item.id) {
@@ -191,10 +191,10 @@ struct WordDiffGuardRoundOneTests {
         }
     }
 
-    @Test func roundOneCurrencyTargetIsRejectedByDesign() {
+    @Test func roundOneSpokenDollarsMayBecomeASymbol() {
         let item = RoundOneInputs.all.first { $0.id == "e4" }!
         let protected = TokenProtector.protect(FillerCleaner.clean(item.raw, context: item.context))
-        #expect(WordDiffGuard.check(input: protected.normalized, output: item.expected, context: item.context) == .inventedCurrency)
+        #expect(WordDiffGuard.check(input: protected.normalized, output: item.expected, context: item.context) == nil)
     }
 
     @Test func hyphenatedCompoundsMatchTheirClosedForm() {
@@ -214,5 +214,99 @@ struct WordDiffGuardRoundOneTests {
         #expect(WordDiffGuard.check(
             input: "use the gh CLI not the API and keep the PR description short under five lines",
             output: "Use the gh CLI, not the API, and keep the PR description short, under 6 lines.", context: .agent) == .newNumber)
+    }
+}
+
+@Suite("WordDiffGuard currency")
+struct WordDiffGuardCurrencyTests {
+    func check(_ input: String, _ output: String, _ context: FormatterContext = .email) -> FallbackReason? {
+        WordDiffGuard.check(input: input, output: output, context: context)
+    }
+
+    // Passes: the speaker said "dollars" or "bucks" right after the number.
+    @Test func dollarsAfterTheNumberMayBecomeASymbol() {
+        #expect(check("the total of 12,500 dollars is slightly above our budget", "The total of $12,500 is slightly above our budget.") == nil)
+        #expect(check("the ticket costs 20 bucks at the door", "The ticket costs $20 at the door.", .chat) == nil)
+        #expect(check("it was 3.50 dollars for the coffee yesterday", "It was $3.50 for the coffee yesterday.", .chat) == nil)
+        #expect(check("a deposit of 500 dollars and a fee of 40 dollars", "A deposit of $500 and a fee of $40.") == nil)
+    }
+
+    @Test func aSymbolFollowedByCommaOrFullStopStillMatches() {
+        #expect(check("it is 12,500 dollars, which is high", "It is $12,500, which is high.") == nil)
+        #expect(check("the fee is 40 dollars", "The fee is $40.", .chat) == nil)
+    }
+
+    // Fails: every other added currency symbol.
+    @Test func noDollarsSpokenMeansNoSymbol() {
+        #expect(check("the budget is 40,000 for Q3 and 60,000 for Q4", "The budget is $40,000 for Q3 and $60,000 for Q4.", .notes) == .inventedCurrency)
+    }
+
+    @Test func aDifferentNumberThanTheOneSpokenWithDollarsIsInvented() {
+        #expect(check("a deposit of 500 dollars and a fee of 40 percent", "A deposit of $500 and a fee of $40 percent.") == .inventedCurrency)
+        #expect(check("a deposit of 500 dollars and 40 items", "A deposit of $500 and $40 items.") == .inventedCurrency)
+    }
+
+    @Test func dollarsNotNextToTheNumberAreNotEnough() {
+        #expect(check("the dollars figure is 500 this year", "The figure is $500 this year.") == .inventedCurrency)
+    }
+
+    @Test func aSymbolForAnotherCurrencyThanSpokenIsInvented() {
+        #expect(check("the total of 12,500 dollars is high", "The total of €12,500 is high.") == .inventedCurrency)
+        #expect(check("the total of 12,500 euros is high", "The total of $12,500 is high.") == .inventedCurrency)
+        #expect(check("the total of 12,500 euros is high", "The total of £12,500 is high.") == .inventedCurrency)
+    }
+
+    @Test func eachSpokenCurrencyMayBecomeItsOwnSymbol() {
+        #expect(check("the total of 12,500 euros is high", "The total of €12,500 is high.") == nil)
+        #expect(check("the total of 12,500 yen is high", "The total of ¥12,500 is high.") == nil)
+    }
+
+    // The input carries a currency symbol, and that must not excuse a different one (review round 2).
+    @Test func aWrittenSymbolDoesNotExcuseAnotherCurrency() {
+        #expect(check("the total of $12,500 is high", "the total of £12,500 is high") == .inventedCurrency)
+        #expect(check("the total of $12,500 is high", "the total of €12,500 is high") == .inventedCurrency)
+        #expect(check("the total of $12,500 is high", "the total of $12,500 is high") == nil)
+    }
+
+    @Test func aWrittenSymbolDoesNotExcuseASymbolOnAnotherAmount() {
+        let input = "the fee is $40 and the tip is 3 pounds"
+        #expect(check(input, "the fee is $40 and the tip is $3") == .inventedCurrency)
+        #expect(check("the fee is $40 and the tip is 3", "the fee is $40 and the tip is $3") == .inventedCurrency)
+    }
+
+    // "pound" is also a weight, so it never turns into a symbol.
+    @Test func poundsStayAWordAndNeverBecomeSterling() {
+        #expect(check("buy 3 pounds of rice and some beans", "Buy £3 of rice and some beans.", .chat) == .inventedCurrency)
+        // On a take this short the dropped "pounds" trips an earlier rule; either way it is rejected.
+        #expect(check("3 pounds of rice", "£3 of rice", .notes) != nil)
+        #expect(check("the total of 12,500 pounds is high", "The total of £12,500 is high.") == .inventedCurrency)
+        #expect(check("buy 3 pounds of rice and some beans", "Buy 3 pounds of rice and some beans.", .chat) == nil)
+        // A £ the speaker wrote is still fine.
+        #expect(check("the tip is £3 today", "The tip is £3 today.", .chat) == nil)
+    }
+
+    @Test func currencySymbolsBeyondTheCommonFourAreRecognised() {
+        #expect(check("the fee is 40 items", "the fee is ₹40 items") == .inventedCurrency)
+        #expect(check("the fee is 40 items", "the fee is ₩40 items") == .inventedCurrency)
+        #expect(check("the fee is ₹40 items", "the fee is ₹40 items") == nil)
+    }
+
+    @Test func aSymbolBehindTheAmountIsJudgedToo() {
+        #expect(check("the fee is 40 euros", "the fee is 40€") == nil)
+        #expect(check("the fee is 40 items", "the fee is 40€ items") == .inventedCurrency)
+    }
+
+    @Test func aBareSymbolWithNoNumberIsInvented() {
+        // The bare symbol also loses the number, so an earlier rule may fire first; it is rejected either way.
+        #expect(check("the total of 12,500 dollars is high", "The total of $ is high.") != nil)
+        #expect(check("the total of 12,500 dollars is high", "The total of $12,500 and $ is high.") == .inventedCurrency)
+    }
+
+    @Test func eachSymbolNeedsItsOwnSpokenAmount() {
+        #expect(check("the total of 12,500 dollars is high", "The total of $12,500 is high, about $9,000.") == .inventedCurrency)
+    }
+
+    @Test func aSymbolTheSpeakerSaidStaysAllowed() {
+        #expect(check("the total of $12,500 is high", "The total of $12,500 is high.") == nil)
     }
 }
