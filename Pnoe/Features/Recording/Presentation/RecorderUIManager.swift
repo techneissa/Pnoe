@@ -265,7 +265,7 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
         }
     }
 
-    /// The level check listens from the moment the start sound is played, so the sound is in its window.
+    /// Listening to the players starts with the start sound, so the pause does not wait for it.
     private func playStartSound() {
         PlaybackController.shared.beginLevelProbe()
         SoundManager.shared.play(.start)

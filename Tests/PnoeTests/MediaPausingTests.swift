@@ -17,9 +17,10 @@ final class MediaPausingTests: XCTestCase {
     private final class FakeMeter: AudioLevelMeasuring, @unchecked Sendable {
         struct State {
             var reading = AudioLevelReading.sound
-            var own = AudioLevelReading.silent
-            var asked: [[AudioProcess]] = []
-            var askedForOwn: [Bool] = []
+                        var asked: [[AudioProcess]] = []
+            var permissionRequests = 0
+            var granted = true
+            var tapWorks = true
         }
         private let lock = OSAllocatedUnfairLock(initialState: State())
         /// What the players' mix reads.
@@ -27,33 +28,34 @@ final class MediaPausingTests: XCTestCase {
             get { lock.withLock { $0.reading } }
             set { lock.withLock { $0.reading = newValue } }
         }
-        /// What Pnoe's own start sound reads, when it is asked for.
-        var own: AudioLevelReading {
-            get { lock.withLock { $0.own } }
-            set { lock.withLock { $0.own = newValue } }
-        }
         var asked: [[AudioProcess]] { lock.withLock { $0.asked } }
-        var askedForOwn: [Bool] { lock.withLock { $0.askedForOwn } }
-        func forgetAsked() { lock.withLock { $0.asked = []; $0.askedForOwn = [] } }
+        var permissionRequests: Int { lock.withLock { $0.permissionRequests } }
+        /// What the permission reads: `hasPermission` (no prompt) and what `requestPermission` ends with.
+        var granted: Bool {
+            get { lock.withLock { $0.granted } }
+            set { lock.withLock { $0.granted = newValue } }
+        }
+        func hasPermission() async -> Bool { lock.withLock { $0.granted } }
+        func requestPermission() async -> Bool {
+            lock.withLock { $0.permissionRequests += 1; return $0.granted }
+        }
+        func forgetAsked() { lock.withLock { $0.asked = [] } }
 
-        func measure(processes: [AudioProcess], includingOwnProcess: Bool, window: TimeInterval) async
-            -> AudioLevelMeasurement
-        {
+        func measure(processes: [AudioProcess], window: TimeInterval) async -> AudioLevelMeasurement {
             lock.withLock {
                 $0.asked.append(processes)
-                $0.askedForOwn.append(includingOwnProcess)
-                return AudioLevelMeasurement(players: $0.reading, own: includingOwnProcess ? $0.own : nil)
+                return AudioLevelMeasurement(players: $0.reading)
             }
         }
     }
 
     /// A meter stuck in a CoreAudio call, as when the permission prompt is up.
     private struct StuckMeter: AudioLevelMeasuring {
-        func measure(processes: [AudioProcess], includingOwnProcess: Bool, window: TimeInterval) async
-            -> AudioLevelMeasurement
-        {
+        func measure(processes: [AudioProcess], window: TimeInterval) async -> AudioLevelMeasurement {
             await withCheckedContinuation { (_: CheckedContinuation<AudioLevelMeasurement, Never>) in }
         }
+        func hasPermission() async -> Bool { true }
+        func requestPermission() async -> Bool { true }
     }
 
     private let music = AudioProcess(pid: 100, objectID: 7, bundleID: "com.apple.Music", isRunningOutput: true, isRunningInput: false)
@@ -66,7 +68,6 @@ final class MediaPausingTests: XCTestCase {
     private var meter = FakeMeter()
     private var presses = 0
     private var now: TimeInterval = 1_000
-    private var startSoundOn = false
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -75,7 +76,6 @@ final class MediaPausingTests: XCTestCase {
         meter = FakeMeter()
         presses = 0
         now = 1_000
-        startSoundOn = false
     }
 
     override func tearDown() {
@@ -83,36 +83,19 @@ final class MediaPausingTests: XCTestCase {
         super.tearDown()
     }
 
-    /// `heardSound` first runs one dictation over playing music, so the check has proof that the tap works.
     private func makeController(
-        levelCheck: Bool, heardSound: Bool = false, startSound: Bool = false, meter: AudioLevelMeasuring? = nil
+        withMeter: Bool = true, meter: AudioLevelMeasuring? = nil
     ) async -> PlaybackController {
-        startSoundOn = startSound
         defaults.set(true, forKey: PlaybackController.pauseMediaKey)
-        defaults.set(levelCheck, forKey: PlaybackController.levelCheckKey)
         let audio = self.audio
         let controller = PlaybackController(
             readAudioProcesses: { audio.read() },
             pressKey: { [unowned self] in presses += 1 },
-            levelMeter: meter ?? self.meter,
+            levelMeter: withMeter ? (meter ?? self.meter) : nil,
             defaults: defaults,
             levelDeadline: 0.2,
-            clock: { [unowned self] in now },
-            isStartSoundOn: { [unowned self] in startSoundOn }
+            clock: { [unowned self] in now }
         )
-        if heardSound {
-            let before = (audio.processes, self.meter.reading)
-            audio.processes = [music]
-            self.meter.reading = .sound
-            let session = controller.beginRecordingSession()
-            await controller.pauseMedia(sessionID: session)
-            audio.processes = []
-            await controller.resumeMedia(sessionID: session)
-            audio.processes = before.0
-            self.meter.reading = before.1
-            self.meter.forgetAsked()
-            presses = 0
-        }
         return controller
     }
 
@@ -124,78 +107,153 @@ final class MediaPausingTests: XCTestCase {
         await controller.resumeMedia(sessionID: session)
     }
 
-    // MARK: - Without the level check (the default, no permission)
+    // MARK: - The switch and the permission
 
-    func testPlayingPlayerIsPausedAndResumed() async {
+    func testPausingIsOffByDefaultAndAsksForNoPermission() {
+        let controller = PlaybackController(levelMeter: meter, defaults: defaults)
+        XCTAssertFalse(controller.isPauseMediaEnabled)
+        XCTAssertFalse(controller.needsPermission)
+        XCTAssertEqual(meter.permissionRequests, 0)
+    }
+
+    func testGrantedPermissionKeepsTheSwitchOn() async {
+        let controller = PlaybackController(levelMeter: meter, defaults: defaults)
+        controller.isPauseMediaEnabled = true
+        try? await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(meter.permissionRequests, 1)
+        XCTAssertTrue(controller.isPauseMediaEnabled)
+        XCTAssertFalse(controller.needsPermission)
+        XCTAssertTrue(defaults.bool(forKey: PlaybackController.pauseMediaKey))
+    }
+
+    func testDeniedPermissionTurnsTheSwitchOffAndNeverPresses() async {
+        meter.granted = false
         audio.processes = [music]
-        let controller = await makeController(levelCheck: false)
+        let controller = PlaybackController(
+            readAudioProcesses: { [audio] in audio.read() },
+            pressKey: { [unowned self] in presses += 1 },
+            levelMeter: meter, defaults: defaults)
+        controller.isPauseMediaEnabled = true
+        try? await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertFalse(controller.isPauseMediaEnabled)
+        XCTAssertTrue(controller.needsPermission)
+        XCTAssertFalse(defaults.bool(forKey: PlaybackController.pauseMediaKey))
+
+        await dictate(controller)
+        XCTAssertEqual(presses, 0)
+        XCTAssertTrue(meter.asked.isEmpty)
+    }
+
+    func testTurningItOnAgainClearsTheNote() async {
+        meter.granted = false
+        let controller = PlaybackController(levelMeter: meter, defaults: defaults)
+        controller.isPauseMediaEnabled = true
+        try? await Task.sleep(for: .milliseconds(100))
+        XCTAssertTrue(controller.needsPermission)
+
+        meter.granted = true
+        controller.isPauseMediaEnabled = true
+        XCTAssertFalse(controller.needsPermission)
+        try? await Task.sleep(for: .milliseconds(100))
+        XCTAssertTrue(controller.isPauseMediaEnabled)
+    }
+
+    func testNoMeterMeansTheSwitchTurnsOffAndNothingIsPressed() async {
+        audio.processes = [music]
+        let controller = await makeController(withMeter: false)
+
+        await dictate(controller)
+
+        XCTAssertFalse(controller.isPauseMediaEnabled)
+        XCTAssertTrue(controller.needsPermission)
+        XCTAssertEqual(presses, 0)
+    }
+
+    func testPermissionRevokedLaterTurnsTheSwitchOffAtTheNextRecording() async {
+        audio.processes = [music]
+        meter.reading = .sound
+        let controller = await makeController()
+        await dictate(controller)
+        XCTAssertEqual(presses, 2, "Granted: the level check is used and music is paused and resumed")
+        XCTAssertEqual(meter.asked.count, 1)
+        presses = 0
+
+        meter.granted = false  // revoked in System Settings
+        await dictate(controller)
+
+        XCTAssertFalse(controller.isPauseMediaEnabled)
+        XCTAssertTrue(controller.needsPermission)
+        XCTAssertEqual(presses, 0)
+        XCTAssertEqual(meter.asked.count, 1, "No tap is made without the permission")
+    }
+
+    func testPermissionRevokedWhileTheAppWasClosedTurnsTheSwitchOffAtLaunch() async {
+        meter.granted = false
+        defaults.set(true, forKey: PlaybackController.pauseMediaKey)
+        let controller = PlaybackController(levelMeter: meter, defaults: defaults)
+        try? await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertFalse(controller.isPauseMediaEnabled)
+        XCTAssertTrue(controller.needsPermission)
+        XCTAssertEqual(meter.permissionRequests, 0, "Launch never shows the prompt")
+    }
+
+    func testAStoredOnSettingWithPermissionStaysOnAtLaunch() async {
+        defaults.set(true, forKey: PlaybackController.pauseMediaKey)
+        let controller = PlaybackController(levelMeter: meter, defaults: defaults)
+        try? await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertTrue(controller.isPauseMediaEnabled)
+        XCTAssertFalse(controller.needsPermission)
+        XCTAssertEqual(meter.permissionRequests, 0)
+    }
+
+    func testAnOldStoredLevelCheckValueIsIgnored() async {
+        defaults.set(false, forKey: "isMediaLevelCheckEnabled")
+        audio.processes = [music]
+        meter.reading = .silent
+        let controller = await makeController()
+        await dictate(controller)
+        XCTAssertEqual(presses, 0)
+        XCTAssertEqual(meter.asked.count, 1, "Pausing on always checks the level")
+    }
+
+    // MARK: - The level check
+
+    func testPlayingMusicIsPausedAndResumed() async {
+        audio.processes = [music]
+        meter.reading = .sound
+        let controller = await makeController()
 
         let session = controller.beginRecordingSession()
         await controller.pauseMedia(sessionID: session)
         XCTAssertEqual(presses, 1)
 
-        audio.processes = []  // the press paused it and its output stopped
+        audio.processes = []
         await controller.resumeMedia(sessionID: session)
         XCTAssertEqual(presses, 2)
     }
-
-    func testLevelCheckIsOffByDefault() {
-        let controller = PlaybackController(defaults: defaults)
-        XCTAssertFalse(controller.isLevelCheckEnabled)
-        XCTAssertFalse(controller.isPauseMediaEnabled)
-    }
-
-    func testMeterIsNeverAskedWhileTheCheckIsOff() async {
-        audio.processes = [music]
-        meter.reading = .silent
-        let controller = await makeController(levelCheck: false, heardSound: true)
-
-        await dictate(controller)
-
-        XCTAssertTrue(meter.asked.isEmpty, "The default path must not touch the tap, which would ask for a permission")
-        XCTAssertEqual(presses, 2)
-    }
-
-    func testNothingPlayingPressesNothing() async {
-        audio.processes = [game]
-        let controller = await makeController(levelCheck: true, heardSound: true)
-
-        await dictate(controller)
-
-        XCTAssertEqual(presses, 0)
-        XCTAssertTrue(meter.asked.isEmpty)
-    }
-
-    func testCallBlocksThePressAndTheMeter() async {
-        audio.processes = [music, zoom]
-        let controller = await makeController(levelCheck: true, heardSound: true)
-
-        await dictate(controller)
-
-        XCTAssertEqual(presses, 0)
-        XCTAssertTrue(meter.asked.isEmpty)
-    }
-
-    // MARK: - With the level check
 
     func testLingeringOutputIsNotStartedAgain() async {
         // The player was paused a moment ago: it still reports output, but its audio is silence.
         audio.processes = [music]
         meter.reading = .silent
-        let controller = await makeController(levelCheck: true, heardSound: true)
+        let controller = await makeController()
 
         await dictate(controller)
 
         XCTAssertEqual(meter.asked.count, 1)
         XCTAssertEqual(presses, 0, "Neither the pause press nor a resume press may start music the user paused")
+        XCTAssertTrue(controller.isPauseMediaEnabled, "Silence is a real answer, not a permission problem")
     }
 
     func testPausingMusicAndDictatingWithinOneSecondStartsNothing() async {
         audio.processes = [music]
-        let controller = await makeController(levelCheck: true, heardSound: true)
-
-        // The user pauses by hand: the output flag stays on, the samples turn to silence.
         meter.reading = .silent
+        let controller = await makeController()
+
         let started = Date()
         await dictate(controller, lasting: 0.4)
 
@@ -203,127 +261,92 @@ final class MediaPausingTests: XCTestCase {
         XCTAssertEqual(presses, 0)
     }
 
-    func testPlayingMusicIsPausedAndResumed() async {
+    func testATapThatCannotBeMadeTurnsTheSwitchOffAndPressesNothing() async {
         audio.processes = [music]
-        meter.reading = .sound
-        let controller = await makeController(levelCheck: true)
-
-        let session = controller.beginRecordingSession()
-        await controller.pauseMedia(sessionID: session)
-        XCTAssertEqual(presses, 1)
-
-        audio.processes = []
-        await controller.resumeMedia(sessionID: session)
-        XCTAssertEqual(presses, 2)
-    }
-
-    func testSilenceIsBelievedWhileSoundWasHeardLately() async {
-        audio.processes = [music]
-        let controller = await makeController(levelCheck: true, heardSound: true)
-        meter.reading = .silent
-        now += 60
-
-        let session = controller.beginRecordingSession()
-        await controller.pauseMedia(sessionID: session)
-
-        XCTAssertEqual(presses, 0)
-    }
-
-    func testSoundsOffProofDoesNotExpire() async {
-        // With the start sound off nothing can refresh the proof, so it stays until a tap error or a toggle.
-        audio.processes = [music]
-        let controller = await makeController(levelCheck: true, heardSound: true)
-        meter.reading = .silent
-        now += 24 * 3600
-
-        let session = controller.beginRecordingSession()
-        await controller.pauseMedia(sessionID: session)
-
-        XCTAssertEqual(presses, 0)
-    }
-
-    func testATapErrorClearsTheProof() async {
-        audio.processes = [music]
-        let controller = await makeController(levelCheck: true, heardSound: true)
-
         meter.reading = .unavailable
-        var session = controller.beginRecordingSession()
-        await controller.pauseMedia(sessionID: session)
-        XCTAssertEqual(presses, 1)
-        audio.processes = []
-        await controller.resumeMedia(sessionID: session)
-        presses = 0
+        let controller = await makeController()
 
-        // Silence right after the error is not believed.
-        audio.processes = [music]
-        meter.reading = .silent
-        session = controller.beginRecordingSession()
-        await controller.pauseMedia(sessionID: session)
-        XCTAssertEqual(presses, 1)
+        await dictate(controller)
+
+        XCTAssertEqual(presses, 0, "The output flag alone never decides")
+        XCTAssertFalse(controller.isPauseMediaEnabled)
+        XCTAssertTrue(controller.needsPermission)
     }
 
-    func testTurningTheCheckOffAndOnClearsTheProof() async {
+    func testASkippedMeasurementKeepsTheSwitchOnAndPressesNothing() async {
+        // A busy meter, or one with no samples: permission is granted, so only this recording is skipped.
         audio.processes = [music]
-        let controller = await makeController(levelCheck: true, heardSound: true)
-        controller.isLevelCheckEnabled = false
-        controller.isLevelCheckEnabled = true
-        meter.reading = .silent
+        meter.reading = .skipped
+        let controller = await makeController()
 
-        let session = controller.beginRecordingSession()
-        await controller.pauseMedia(sessionID: session)
+        await dictate(controller)
 
-        XCTAssertEqual(presses, 1)
+        XCTAssertEqual(presses, 0, "Never restart a player that may have been paused a moment ago")
+        XCTAssertTrue(controller.isPauseMediaEnabled)
+        XCTAssertFalse(controller.needsPermission)
+
+        meter.reading = .sound
+        await dictate(controller)
+        XCTAssertEqual(presses, 2, "The next recording works")
     }
 
-    func testAMeterThatNeverReturnsFallsBackToTheOutputFlag() async {
+    func testAMeterThatNeverReturnsSkipsThisRecordingWithinTheDeadline() async {
         audio.processes = [music]
-        let controller = await makeController(levelCheck: true, meter: StuckMeter())
+        let controller = await makeController(meter: StuckMeter())
 
         let started = Date()
         let session = controller.beginRecordingSession()
         await controller.pauseMedia(sessionID: session)
 
-        XCTAssertEqual(presses, 1)
+        XCTAssertEqual(presses, 0)
+        XCTAssertTrue(controller.isPauseMediaEnabled)
+        XCTAssertFalse(controller.needsPermission)
         XCTAssertLessThan(Date().timeIntervalSince(started), 1.0)
-
-        // The next recording is not stuck behind the first.
-        audio.processes = []
-        await controller.resumeMedia(sessionID: session)
-        presses = 0
-        audio.processes = [music]
-        let second = controller.beginRecordingSession()
-        await controller.pauseMedia(sessionID: second)
-        XCTAssertEqual(presses, 1)
     }
 
-    func testSilenceIsNotBelievedBeforeSoundWasHeard() async {
-        // Without the System Audio Recording permission a tap can deliver silence for loud music. Until the check
-        // has heard sound lately, the output flag decides, so the pause still works.
+    func testProbeWithRevokedPermissionMakesNoTapAndTurnsTheSwitchOff() async {
+        // The start sound starts the probe before pauseMedia runs its own check.
         audio.processes = [music]
-        meter.reading = .silent
-        let controller = await makeController(levelCheck: true, heardSound: false)
+        meter.reading = .sound
+        let controller = await makeController()
+        meter.granted = false
 
-        let session = controller.beginRecordingSession()
-        await controller.pauseMedia(sessionID: session)
+        controller.beginLevelProbe()
+        try? await Task.sleep(for: .milliseconds(100))
+        XCTAssertTrue(meter.asked.isEmpty, "No tap without the permission")
+        XCTAssertFalse(controller.isPauseMediaEnabled)
+        XCTAssertTrue(controller.needsPermission)
 
-        XCTAssertEqual(presses, 1)
+        await dictate(controller)
+        XCTAssertEqual(presses, 0)
+        XCTAssertTrue(meter.asked.isEmpty)
     }
 
-    func testUnavailableReadingFallsBackToTheOutputFlag() async {
-        audio.processes = [music]
-        meter.reading = .unavailable
-        let controller = await makeController(levelCheck: true, heardSound: true)
+    func testNothingPlayingPressesNothing() async {
+        audio.processes = [game]
+        let controller = await makeController()
 
-        let session = controller.beginRecordingSession()
-        await controller.pauseMedia(sessionID: session)
+        await dictate(controller)
 
-        XCTAssertEqual(presses, 1)
+        XCTAssertEqual(presses, 0)
+        XCTAssertTrue(meter.asked.isEmpty)
+        XCTAssertTrue(controller.isPauseMediaEnabled)
+    }
+
+    func testCallBlocksThePressAndTheMeter() async {
+        audio.processes = [music, zoom]
+        let controller = await makeController()
+
+        await dictate(controller)
+
+        XCTAssertEqual(presses, 0)
+        XCTAssertTrue(meter.asked.isEmpty)
     }
 
     func testMeterIsAskedOnlyAboutThePlayersThatHaveOutput() async {
         audio.processes = [music, game]
         meter.reading = .sound
-        let controller = await makeController(levelCheck: true, heardSound: true)
+        let controller = await makeController()
 
         let session = controller.beginRecordingSession()
         await controller.pauseMedia(sessionID: session)
@@ -331,166 +354,55 @@ final class MediaPausingTests: XCTestCase {
         XCTAssertEqual(meter.asked, [[music]])
     }
 
-    // MARK: - Pnoe's own start sound as proof
+    // MARK: - The probe started with the start sound
 
-    func testOwnSoundHeardAndPlayersSilentPressesNothing() async {
-        // The main case: music paused a moment ago, no earlier proof at all. The start sound comes through the
-        // tap, so the tap works now and the players' silence is real.
+    func testProbeAnswersThePause() async {
         audio.processes = [music]
         meter.reading = .silent
-        meter.own = .sound
-        let controller = await makeController(levelCheck: true, startSound: true)
+        let controller = await makeController()
 
         controller.beginLevelProbe()
         await dictate(controller)
 
         XCTAssertEqual(presses, 0)
-        XCTAssertEqual(meter.askedForOwn, [true], "One listening session, started with the start sound")
+        XCTAssertEqual(meter.asked.count, 1, "One listening session, started with the start sound")
     }
 
-    func testOwnSoundSilentFallsBackToTheOutputFlag() async {
-        // The start sound played but the tap did not deliver it (permission revoked): silence proves nothing.
-        audio.processes = [music]
-        meter.reading = .silent
-        meter.own = .silent
-        let controller = await makeController(levelCheck: true, heardSound: true, startSound: true)
-
-        controller.beginLevelProbe()
-        let session = controller.beginRecordingSession()
-        await controller.pauseMedia(sessionID: session)
-
-        XCTAssertEqual(presses, 1)
-    }
-
-    func testOwnSoundSilentClearsTheEarlierProof() async {
-        audio.processes = [music]
-        let controller = await makeController(levelCheck: true, heardSound: true, startSound: true)
-        meter.reading = .silent
-        meter.own = .silent
-        controller.beginLevelProbe()
-        var session = controller.beginRecordingSession()
-        await controller.pauseMedia(sessionID: session)
+    func testAProbeFromBeforeTheMusicStartedIsNotUsed() async {
         audio.processes = []
-        await controller.resumeMedia(sessionID: session)
-        presses = 0
-
-        // A later recording with the start sound off cannot lean on the cleared proof.
-        startSoundOn = false
-        audio.processes = [music]
-        controller.beginLevelProbe()
-        session = controller.beginRecordingSession()
-        await controller.pauseMedia(sessionID: session)
-        XCTAssertEqual(presses, 1)
-    }
-
-    func testOwnSoundUnavailableFallsBackToTheOutputFlag() async {
-        audio.processes = [music]
-        meter.reading = .silent
-        meter.own = .unavailable
-        let controller = await makeController(levelCheck: true, startSound: true)
-
-        controller.beginLevelProbe()
-        let session = controller.beginRecordingSession()
-        await controller.pauseMedia(sessionID: session)
-
-        XCTAssertEqual(presses, 1)
-    }
-
-    func testPlayersMakingSoundArePausedWhateverTheOwnSoundReads() async {
-        audio.processes = [music]
         meter.reading = .sound
-        meter.own = .silent
-        let controller = await makeController(levelCheck: true, startSound: true)
-
+        let controller = await makeController()
         controller.beginLevelProbe()
         let session = controller.beginRecordingSession()
-        await controller.pauseMedia(sessionID: session)
-
-        XCTAssertEqual(presses, 1)
-    }
-
-    func testSoundsOffWithEarlierProofBelievesSilence() async {
-        audio.processes = [music]
-        let controller = await makeController(levelCheck: true, heardSound: true, startSound: false)
-        meter.reading = .silent
-
-        controller.beginLevelProbe()
-        await dictate(controller)
-
-        XCTAssertEqual(presses, 0)
-        XCTAssertEqual(meter.askedForOwn, [false], "Without a start sound the tap listens to the players alone")
-    }
-
-    func testSoundsOffWithoutProofFallsBackToTheOutputFlag() async {
-        audio.processes = [music]
-        meter.reading = .silent
-        let controller = await makeController(levelCheck: true, startSound: false)
-
-        controller.beginLevelProbe()
-        let session = controller.beginRecordingSession()
-        await controller.pauseMedia(sessionID: session)
-
-        XCTAssertEqual(presses, 1)
-    }
-
-    func testAProbeFromBeforeTheMusicStartedDoesNotCountAsProof() async {
-        // Nothing was playing when the start sound played, so no tap was made. Music that is playing by the time of
-        // the pause is measured fresh, without the start sound, and silence without proof is not believed.
-        audio.processes = []
-        meter.reading = .silent
-        meter.own = .sound
-        let controller = await makeController(levelCheck: true, startSound: true)
-        controller.beginLevelProbe()
-        let session = controller.beginRecordingSession()
-        try? await Task.sleep(for: .milliseconds(50))  // the probe has read the processes by now
+        try? await Task.sleep(for: .milliseconds(50))
         audio.processes = [music]
         await controller.pauseMedia(sessionID: session)
 
         XCTAssertEqual(presses, 1)
-        XCTAssertEqual(meter.askedForOwn, [false])
-    }
-
-    func testStartSoundOnButNoProbeIgnoresTheEarlierProof() async {
-        // The earlier proof is for start-sound-off. With the sound on, a pause without a probe that heard Pnoe's
-        // own sound falls back to the output flag, however recent the proof.
-        audio.processes = [music]
-        let controller = await makeController(levelCheck: true, heardSound: true, startSound: true)
-        meter.reading = .silent
-
-        let session = controller.beginRecordingSession()
-        await controller.pauseMedia(sessionID: session)
-
-        XCTAssertEqual(presses, 1)
+        XCTAssertEqual(meter.asked.count, 1)
     }
 
     func testAPlayerTheProbeDidNotListenToGetsANewLook() async {
-        // Music was playing at the probe; a browser player starts before the pause. The probe's silence was about
-        // the music only, so it does not vouch for the browser.
         let browser = AudioProcess(pid: 400, objectID: 10, bundleID: "com.google.Chrome", isRunningOutput: true, isRunningInput: false)
         audio.processes = [music]
         meter.reading = .silent
-        meter.own = .sound
-        let controller = await makeController(levelCheck: true, startSound: true)
+        let controller = await makeController()
         controller.beginLevelProbe()
-        try? await Task.sleep(for: .milliseconds(50))  // the probe has listened to the music by now
+        try? await Task.sleep(for: .milliseconds(50))
         audio.processes = [music, browser]
 
         let session = controller.beginRecordingSession()
         await controller.pauseMedia(sessionID: session)
 
-        XCTAssertEqual(presses, 1)
         XCTAssertEqual(meter.asked.count, 2)
         XCTAssertEqual(meter.asked.last, [music, browser], "A new look at both players")
-        XCTAssertEqual(meter.askedForOwn, [true, false])
     }
 
-    func testPlayersTheProbeListenedToKeepItsProof() async {
-        // The probe covered every player now playing, even though one stopped since: its proof holds.
+    func testPlayersTheProbeListenedToKeepItsAnswer() async {
         let browser = AudioProcess(pid: 400, objectID: 10, bundleID: "com.google.Chrome", isRunningOutput: true, isRunningInput: false)
         audio.processes = [music, browser]
         meter.reading = .silent
-        meter.own = .sound
-        let controller = await makeController(levelCheck: true, startSound: true)
+        let controller = await makeController()
         controller.beginLevelProbe()
         try? await Task.sleep(for: .milliseconds(50))
         audio.processes = [music]
@@ -505,31 +417,20 @@ final class MediaPausingTests: XCTestCase {
     func testAStaleProbeIsIgnored() async {
         audio.processes = [music]
         meter.reading = .silent
-        meter.own = .sound
-        let controller = await makeController(levelCheck: true, startSound: true)
+        let controller = await makeController()
         controller.beginLevelProbe()
         now += 10
 
         let session = controller.beginRecordingSession()
         await controller.pauseMedia(sessionID: session)
 
-        XCTAssertEqual(presses, 1, "The old sound proves nothing about now")
-    }
-
-    func testNoProbeIsStartedWhileTheCheckIsOff() async {
-        audio.processes = [music]
-        let controller = await makeController(levelCheck: false, startSound: true)
-
-        controller.beginLevelProbe()
-        await dictate(controller)
-
-        XCTAssertTrue(meter.asked.isEmpty)
-        XCTAssertEqual(presses, 2)
+        XCTAssertEqual(meter.asked.count, 2, "A new look, not the old probe")
+        XCTAssertEqual(presses, 0)
     }
 
     func testNoProbeTapDuringACall() async {
         audio.processes = [music, zoom]
-        let controller = await makeController(levelCheck: true, startSound: true)
+        let controller = await makeController()
 
         controller.beginLevelProbe()
         await dictate(controller)
@@ -538,46 +439,25 @@ final class MediaPausingTests: XCTestCase {
         XCTAssertEqual(presses, 0)
     }
 
-    func testAMeterThatNeverReturnsDoesNotHoldBackTheProbe() async {
-        audio.processes = [music]
-        let controller = await makeController(levelCheck: true, startSound: true, meter: StuckMeter())
-
-        controller.beginLevelProbe()
-        let started = Date()
-        let session = controller.beginRecordingSession()
-        await controller.pauseMedia(sessionID: session)
-
-        XCTAssertEqual(presses, 1)
-        XCTAssertLessThan(Date().timeIntervalSince(started), 1.0)
-    }
-
     // MARK: - Listening plan
 
     func testListeningStopsAtOnceWhenAPlayerMakesSound() {
-        XCTAssertTrue(ListeningPlan.isDone(elapsed: 0.01, window: 0.3, players: .sound, own: .unavailable))
+        XCTAssertTrue(ListeningPlan.isDone(elapsed: 0.01, window: 0.3, players: .sound))
     }
 
     func testListeningWaitsForTheMinimumWindow() {
-        XCTAssertFalse(ListeningPlan.isDone(elapsed: 0.05, window: 0.15, players: .silent, own: nil))
-        XCTAssertTrue(ListeningPlan.isDone(elapsed: 0.15, window: 0.15, players: .silent, own: nil))
-    }
-
-    func testListeningWaitsForOwnSoundUntilTheWindowEnds() {
-        XCTAssertFalse(ListeningPlan.isDone(elapsed: 0.2, window: 0.3, players: .silent, own: .silent))
-        XCTAssertTrue(ListeningPlan.isDone(elapsed: 0.2, window: 0.3, players: .silent, own: .sound))
-        XCTAssertTrue(ListeningPlan.isDone(elapsed: 0.3, window: 0.3, players: .silent, own: .silent))
+        XCTAssertFalse(ListeningPlan.isDone(elapsed: 0.05, window: 0.3, players: .silent))
+        XCTAssertTrue(ListeningPlan.isDone(elapsed: 0.15, window: 0.3, players: .silent))
     }
 
     // MARK: - Settings
 
-    func testTogglesAreSavedInTheGivenDefaults() {
+    func testToggleIsSavedInTheGivenDefaults() {
         let controller = PlaybackController(defaults: defaults)
-        controller.isLevelCheckEnabled = true
         controller.isPauseMediaEnabled = true
 
-        XCTAssertTrue(defaults.bool(forKey: PlaybackController.levelCheckKey))
         XCTAssertTrue(defaults.bool(forKey: PlaybackController.pauseMediaKey))
-        XCTAssertTrue(PlaybackController(defaults: defaults).isLevelCheckEnabled)
+        XCTAssertTrue(PlaybackController(defaults: defaults).isPauseMediaEnabled)
     }
 
     // MARK: - Peak meter

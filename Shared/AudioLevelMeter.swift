@@ -6,51 +6,50 @@ enum AudioLevelReading: Sendable, Equatable {
     case silent
     /// At least one sample rose above the threshold.
     case sound
-    /// No reading was possible: no permission, no tap, or no samples arrived in the window.
+    /// No tap could be made (no permission, or CoreAudio refused). The permission is not there, so pausing turns off.
     case unavailable
+    /// A tap was or could have been made, but there is no answer for this recording: the meter was busy, took too
+    /// long, or no samples arrived in the window. Nothing is pressed this time; the switch stays on.
+    case skipped
 }
 
 /// What a listening session heard.
 struct AudioLevelMeasurement: Sendable, Equatable {
     /// The players' audio, mixed.
     var players: AudioLevelReading
-    /// Pnoe's own audio (its start sound), read separately from the players'. `nil` when it was not asked for.
-    /// Heard sound here proves the tap delivers audio right now, so silence in `players` is real.
-    var own: AudioLevelReading?
 
-    static func unavailable(includingOwn: Bool) -> AudioLevelMeasurement {
-        AudioLevelMeasurement(players: .unavailable, own: includingOwn ? .unavailable : nil)
-    }
+    static let unavailable = AudioLevelMeasurement(players: .unavailable)
+    static let skipped = AudioLevelMeasurement(players: .skipped)
 }
 
 /// Measures the level of the audio some processes send to the output, which the process list cannot say.
 ///
 /// The process list (`AudioOutputProcesses`) reports a process as playing for as long as it keeps its stream
 /// open, and players keep it open after a pause, with silence in it. Only the samples tell playing from lingering.
-/// Reading them needs a CoreAudio process tap, which needs the System Audio Recording permission, so this is
-/// optional and off by default.
+/// Reading them needs a CoreAudio process tap, which needs the System Audio Recording permission, so it is
+/// used only when the user turns on pausing media.
 protocol AudioLevelMeasuring: Sendable {
-    /// Listens to the mix of `processes`, and to Pnoe's own audio separately when `includingOwnProcess` is set,
-    /// for at most `window` seconds (`ListeningPlan` says when it may stop sooner). Never throws: any failure
-    /// is `.unavailable`.
-    func measure(processes: [AudioProcess], includingOwnProcess: Bool, window: TimeInterval) async
-        -> AudioLevelMeasurement
+    /// Listens to the mix of `processes` for at most `window` seconds (`ListeningPlan` says when it may stop
+    /// sooner). Never throws: no tap is `.unavailable`, any other failure is `.skipped`.
+    func measure(processes: [AudioProcess], window: TimeInterval) async -> AudioLevelMeasurement
+
+    /// Whether the System Audio Recording permission is granted. Never shows a prompt.
+    func hasPermission() async -> Bool
+
+    /// Asks for the permission if it has not been decided, and says whether it is granted and a tap can be made.
+    /// Called when the user turns pausing on.
+    func requestPermission() async -> Bool
 }
 
 /// When a listening session may stop before its window ends.
 enum ListeningPlan {
-    /// Listening to the players alone, or to the players and Pnoe's own audio, lasts at least this long, so a
+    /// Listening lasts at least this long, so a
     /// player that is about to produce sound is not judged on a few milliseconds.
     static let minimumWindow: TimeInterval = 0.15
 
-    static func isDone(
-        elapsed: TimeInterval, window: TimeInterval, players: AudioLevelReading, own: AudioLevelReading?
-    ) -> Bool {
-        if elapsed >= window { return true }
+    static func isDone(elapsed: TimeInterval, window: TimeInterval, players: AudioLevelReading) -> Bool {
         // A player making sound answers the question at once.
-        if players == .sound { return true }
-        // Without Pnoe's own audio to wait for, or once it has been heard, the minimum is enough.
-        return elapsed >= minimumWindow && (own == nil || own == .sound)
+        elapsed >= window || players == .sound || elapsed >= minimumWindow
     }
 }
 

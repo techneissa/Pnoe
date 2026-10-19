@@ -18940,28 +18940,6 @@
         }
       }
     },
-    "Check Audio Level Before Pausing" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Audiopegel vor dem Pausieren prüfen"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vérifier le niveau audio avant la pause"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "暂停前检查音频电平"
-          }
-        }
-      }
-    },
     "Choose a template" : {
       "localizations" : {
         "de" : {
@@ -19024,28 +19002,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在输出之前，用 AI 模型和提示词润色或改写转写文本。"
-          }
-        }
-      }
-    },
-    "Does not start music you just paused. Needs the System Audio Recording permission. With the start sound off, switch this off and on again if you revoke it." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Startet Musik, die du gerade pausiert hast, nicht neu. Benötigt die Berechtigung „Systemaudio-Aufnahme“. Schalte dies bei ausgeschaltetem Startton aus und wieder ein, wenn du sie widerrufst."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ne relance pas une musique que vous venez de mettre en pause. Nécessite l’autorisation « Enregistrement audio du système ». Si le son de démarrage est désactivé, désactivez puis réactivez cette option après l’avoir révoquée."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "不会重新播放你刚暂停的音乐。需要“系统音频录制”权限。若关闭了开始音效，撤销权限后请将此选项关闭再打开。"
           }
         }
       }
@@ -23099,9 +23055,7 @@
         }
       }
     },
-    "Skip" : {
-
-    },
+    "Skip" : {},
     "Skip API Setup" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -23125,9 +23079,7 @@
         }
       }
     },
-    "Skip onboarding" : {
-
-    },
+    "Skip onboarding" : {},
     "Skip short transcriptions" : {
       "localizations" : {
         "de" : {
@@ -23150,9 +23102,7 @@
         }
       }
     },
-    "Skip the remaining onboarding steps" : {
-
-    },
+    "Skip the remaining onboarding steps" : {},
     "Skipped %lld duplicate, conflicting, invalid, or cyclic entries." : {
       "localizations" : {
         "de" : {
@@ -29127,6 +29077,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你的字数和基准对比会显示在这里。"
+          }
+        }
+      }
+    },
+    "Does not start music you just paused. Needs the System Audio Recording permission." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Startet Musik, die du gerade pausiert hast, nicht neu. Benötigt die Berechtigung „Systemaudio-Aufnahme“."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ne relance pas une musique que vous venez de mettre en pause. Nécessite l’autorisation « Enregistrement audio du système »."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不会重新播放你刚暂停的音乐。需要“系统音频录制”权限。"
+          }
+        }
+      }
+    },
+    "Pausing media needs the System Audio Recording permission, so it was turned off." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Pausieren von Medien benötigt die Berechtigung „Systemaudio-Aufnahme“ und wurde deshalb ausgeschaltet."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La pause des médias nécessite l’autorisation « Enregistrement audio du système » ; elle a donc été désactivée."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂停媒体需要“系统音频录制”权限，因此已将其关闭。"
+          }
+        }
+      }
+    },
+    "Open System Settings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Systemeinstellungen öffnen"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir Réglages Système"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开系统设置"
           }
         }
       }
