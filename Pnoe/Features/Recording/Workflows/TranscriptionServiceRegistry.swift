@@ -72,6 +72,7 @@ class TranscriptionServiceRegistry {
             let streamingService = StreamingTranscriptionService(
                 modelContext: modelContext,
                 fluidAudioService: model.provider == .fluidAudio ? fluidAudioTranscriptionService : nil,
+                whisperKitService: model.provider == .whisperKit ? whisperKitTranscriptionService : nil,
                 onPartialTranscript: onPartialTranscript
             )
             let fallback = service(for: model.provider)

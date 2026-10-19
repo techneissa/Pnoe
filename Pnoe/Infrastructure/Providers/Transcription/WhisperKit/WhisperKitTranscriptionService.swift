@@ -41,6 +41,13 @@ final class WhisperKitTranscriptionService: TranscriptionService, @unchecked Sen
         try await engine.load(spec)
     }
 
+    /// The decoder the live line uses for this model: it runs on the same engine as the final
+    /// take, so a live window and the final decode never overlap.
+    func liveDecoder(for model: WhisperKitModel) throws -> any WhisperKitLiveDecoding {
+        guard let spec = model.spec else { throw unsupportedModelError(model.name) }
+        return WhisperKitEngineLiveDecoder(engine: engine, spec: spec)
+    }
+
     func transcribe(
         audioURL: URL,
         model: any TranscriptionModel,
