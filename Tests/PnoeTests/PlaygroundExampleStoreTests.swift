@@ -219,6 +219,17 @@ final class PlaygroundExampleStoreTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: destination, encoding: .utf8), "")
     }
 
+    func testTheModelIsKeptWhenGivenAndAbsentLinesStillLoad() throws {
+        try store.append(
+            .make(raw: "open the file", output: "Open the file.", expected: "Open the file.", workflowName: "Cleaned Text",
+                  template: .cleanedText, model: "gemma3:4b", id: "mine-a"))
+        try store.append(example("mine-b"))
+        let loaded = try store.load().examples
+        XCTAssertEqual(loaded.map(\.model), ["gemma3:4b", nil])
+        let line = try XCTUnwrap(fileLines().last)
+        XCTAssertFalse(line.contains("\"model\""), "no key when no model was given")
+    }
+
     func testExampleIdsAreUniqueAndCarryThePrefix() {
         let a = PlaygroundExample.make(raw: "a", output: "b", expected: "b", workflowName: "W", template: nil)
         let b = PlaygroundExample.make(raw: "a", output: "b", expected: "b", workflowName: "W", template: nil)
@@ -234,18 +245,78 @@ final class PlaygroundExampleStoreTests: XCTestCase {
 }
 
 final class PlaygroundFallbackTextTests: XCTestCase {
-    func testEveryFallbackReasonHasASentenceThatSaysThePlainTranscriptWasUsed() {
+    func testEveryFallbackReasonHasAShortSentenceWithoutTheOldTail() {
         for reason in FallbackReason.allCases {
             let sentence = PlaygroundFallbackText.sentence(forCode: reason.rawValue)
             XCTAssertTrue(sentence.hasSuffix("."), reason.rawValue)
-            XCTAssertTrue(reason.isExpected || sentence.contains("transcript") || sentence.contains("no text"), reason.rawValue)
+            XCTAssertLessThan(sentence.count, 70, reason.rawValue)
+            XCTAssertFalse(sentence.contains("transcript"), reason.rawValue)
+            XCTAssertFalse(sentence.contains("code-only"), reason.rawValue)
             XCTAssertFalse(sentence.contains("_"), reason.rawValue)
         }
-        XCTAssertTrue(PlaygroundFallbackText.sentence(forCode: "dropped").contains("changed your words"))
-        XCTAssertTrue(PlaygroundFallbackText.sentence(forCode: "timeout").contains("too long"))
+    }
+
+    func testWordingReasonsAllSayTheModelChangedTheWording() {
+        for code in ["length", "new_words", "dropped", "dropped_span", "meta"] {
+            XCTAssertEqual(PlaygroundFallbackText.sentence(forCode: code), "The model changed your wording.", code)
+        }
+        XCTAssertEqual(PlaygroundFallbackText.sentence(forCode: "timeout"), "The model took too long.")
+        XCTAssertEqual(PlaygroundFallbackText.sentence(forCode: "placeholder_lost"), "The model changed a name, path or number.")
+        XCTAssertEqual(PlaygroundFallbackText.sentence(forCode: "new_number"), "The model added a number you didn't say.")
+    }
+
+    func testTheFullSentenceAddsWhatWasPastedExceptForEmptyInput() {
+        XCTAssertEqual(
+            PlaygroundFallbackText.fullSentence(forCode: "timeout"), "The model took too long. Pnoe's own cleanup was used.")
+        XCTAssertEqual(PlaygroundFallbackText.fullSentence(forCode: "empty_input"), "There was no text to clean.")
     }
 
     func testAnUnknownCodeStillGetsASentence() {
-        XCTAssertTrue(PlaygroundFallbackText.sentence(forCode: "brand_new").contains("transcript"))
+        XCTAssertEqual(PlaygroundFallbackText.sentence(forCode: "brand_new"), "The model's text was rejected.")
+    }
+}
+
+final class PlaygroundModelOptionsTests: XCTestCase {
+    func testMenuListsEveryModelOfEveryConnectedProviderInOrder() {
+        let choices = PlaygroundModelOptions.choices(from: [
+            .init(name: "Ollama", models: ["gemma3:4b", "qwen3:4b"]),
+            .init(name: "Anthropic", models: ["claude-haiku-5-5"]),
+            .init(name: "Local CLI", models: [], usesDefaultModel: true),
+            .init(name: "Custom", models: ["my-endpoint-model"]),
+        ])
+        XCTAssertEqual(
+            choices.map(\.label),
+            ["Ollama · gemma3:4b", "Ollama · qwen3:4b", "Anthropic · claude-haiku-5-5", "Local CLI", "Custom · my-endpoint-model"])
+        XCTAssertEqual(choices[3].model, nil)
+    }
+
+    func testAProviderWithNoModelsAndNoDefaultIsLeftOut() {
+        let choices = PlaygroundModelOptions.choices(from: [
+            .init(name: "Ollama", models: []),
+            .init(name: "Groq", models: ["llama-3.3-70b"]),
+        ])
+        XCTAssertEqual(choices.map(\.label), ["Groq · llama-3.3-70b"])
+    }
+
+    func testNothingConnectedGivesAnEmptyMenu() {
+        XCTAssertTrue(PlaygroundModelOptions.choices(from: []).isEmpty)
+    }
+
+    func testTheWorkflowsOwnChoiceComesFirstOnceAndNeverRepeats() {
+        let own = PlaygroundModelChoice(provider: "Groq", model: "llama-3.3-70b")
+        let providers: [PlaygroundModelOptions.Provider] = [
+            .init(name: "Ollama", models: ["gemma3:4b"]), .init(name: "Groq", models: ["llama-3.3-70b"]),
+        ]
+        XCTAssertEqual(
+            PlaygroundModelOptions.choices(from: providers, including: own).map(\.label),
+            ["Groq · llama-3.3-70b", "Ollama · gemma3:4b"])
+        let missing = PlaygroundModelChoice(provider: "Anthropic", model: "gone")
+        XCTAssertEqual(PlaygroundModelOptions.choices(from: providers, including: missing).first, missing)
+    }
+
+    func testIdsAreUniquePerProviderAndModel() {
+        let a = PlaygroundModelChoice(provider: "Ollama", model: "x")
+        let b = PlaygroundModelChoice(provider: "Groq", model: "x")
+        XCTAssertNotEqual(a.id, b.id)
     }
 }

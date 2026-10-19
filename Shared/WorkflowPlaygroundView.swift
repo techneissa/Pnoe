@@ -73,6 +73,7 @@ struct WorkflowPlaygroundView: View {
                     }
                     .labelsHidden()
                     .fixedSize()
+                    modelMenu
                     Spacer()
                 }
             }
@@ -105,12 +106,15 @@ struct WorkflowPlaygroundView: View {
                     Button("Cancel", action: model.cancel)
                         .buttonStyle(.link)
                 }
+                InfoTip(
+                    "To dictate a sample, click in the sample box and use your recording shortcut. Pnoe pastes the take into the box.",
+                    accessibilityLabel: "How to dictate a sample")
                 if let finished = model.finished {
                     HStack(spacing: 6) {
                         Image(systemName: "clock")
                         Text(
                             finished.outcome.skippedReason == nil
-                                ? "\(finished.workflow.name), \(Self.seconds(finished.outcome.duration))"
+                                ? "\(finished.workflow.name)\(finished.choice.map { " · " + $0.modelName } ?? ""), \(Self.seconds(finished.outcome.duration))"
                                 : "\(finished.workflow.name), no model ran")
                     }
                     .font(.caption)
@@ -119,11 +123,33 @@ struct WorkflowPlaygroundView: View {
                 Spacer()
             }
 
-            Text("To dictate a sample, click in the sample box and use your recording shortcut. Pnoe pastes the take into the box.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-
             verdict
+        }
+    }
+
+    /// Which provider and model this run uses. Picking one changes only Playground runs.
+    @ViewBuilder
+    private var modelMenu: some View {
+        if let current = model.selectedChoice ?? model.menuChoices.first {
+            Menu {
+                ForEach(model.menuChoices) { choice in
+                    Button {
+                        model.pick(choice)
+                    } label: {
+                        if choice == model.selectedChoice {
+                            Label(choice.label, systemImage: "checkmark")
+                        } else {
+                            Text(choice.label)
+                        }
+                    }
+                }
+            } label: {
+                Text(current.label).lineLimit(1)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("The provider and model this run uses. Only the Playground changes; the workflow keeps its own.")
+            .accessibilityLabel("Model for this run")
         }
     }
 
@@ -200,9 +226,14 @@ struct WorkflowPlaygroundView: View {
     /// struck through.
     private func rejectedSection(_ segments: [WordDiff.Segment]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("What the model wrote")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(.secondary)
+            HStack(spacing: 4) {
+                Text("What the model wrote")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.secondary)
+                InfoTip(
+                    "Red underlined words are ones the model added; struck-through words are ones it left out.",
+                    accessibilityLabel: "About the marked words")
+            }
             Text(Self.attributed(segments))
                 .font(.system(size: 13))
                 .textSelection(.enabled)
@@ -210,9 +241,6 @@ struct WorkflowPlaygroundView: View {
                 .padding(8)
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor).opacity(0.6)))
                 .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.08)))
-            Text("Red underlined words are ones the model added; struck-through words are ones it left out.")
-                .font(.caption)
-                .foregroundColor(.secondary)
         }
         .accessibilityElement(children: .combine)
     }

@@ -63,9 +63,15 @@ final class WorkflowPlaygroundPreviewTests: XCTestCase {
                 expected: "First call Sam, second send the file, third book the room.", workflowName: "Cleaned Text",
                 template: .cleanedText, id: "mine-demo-b", now: now))
 
-        let cleaned = PlaygroundWorkflow(id: UUID(), name: "Cleaned Text", symbol: "text.badge.checkmark", template: .cleanedText)
-        let summary = PlaygroundWorkflow(id: UUID(), name: "Summary", symbol: "text.alignleft", template: .summary)
-        let model = WorkflowPlaygroundModel(workflows: [cleaned, summary], store: store) { text, _ in
+        let gemma = PlaygroundModelChoice(provider: "Ollama", model: "gemma3:4b")
+        let cleaned = PlaygroundWorkflow(
+            id: UUID(), name: "Cleaned Text", symbol: "text.badge.checkmark", template: .cleanedText, defaultChoice: gemma)
+        let summary = PlaygroundWorkflow(
+            id: UUID(), name: "Summary", symbol: "text.alignleft", template: .summary,
+            defaultChoice: PlaygroundModelChoice(provider: "Anthropic", model: "claude-haiku-5-5"))
+        let model = WorkflowPlaygroundModel(
+            workflows: [cleaned, summary],
+            modelChoices: [gemma, PlaygroundModelChoice(provider: "Ollama", model: "qwen3:4b")], store: store) { text, _, _ in
             PlaygroundOutcome(
                 output: fallbackReason == nil
                     ? "Open the file on Thursday and send it to Sam, please."
@@ -96,7 +102,7 @@ final class WorkflowPlaygroundPreviewTests: XCTestCase {
     func testRenderEmptyPlayground() throws {
         let store = PlaygroundExampleStore(
             fileURL: FileManager.default.temporaryDirectory.appendingPathComponent("nothing-\(UUID().uuidString).jsonl"))
-        let model = WorkflowPlaygroundModel(workflows: [], store: store) { _, _ in
+        let model = WorkflowPlaygroundModel(workflows: [], store: store) { _, _, _ in
             PlaygroundOutcome(output: "", duration: 0)
         }
         try render(WorkflowPlaygroundView(model: model, onDismiss: {}), size: CGSize(width: 720, height: 360), name: "playground-empty")

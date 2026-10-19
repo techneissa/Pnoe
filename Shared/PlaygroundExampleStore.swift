@@ -21,6 +21,8 @@ struct PlaygroundExample: Codable, Identifiable, Equatable {
     var workflow: String
     /// What the workflow actually wrote, so a pair saved "as is" can be told from an edited one.
     var output: String
+    /// The model the pair was run on, when it was run in the Playground with one.
+    var model: String?
     var created: Date
     /// The line of the file it was read from (0 for the first). Not saved.
     var line = 0
@@ -29,7 +31,7 @@ struct PlaygroundExample: Codable, Identifiable, Equatable {
     var listID: String { "\(line)-\(id)" }
 
     enum CodingKeys: String, CodingKey {
-        case id, context, raw, expected, kind, tags, workflow, output, created
+        case id, context, raw, expected, kind, tags, workflow, output, model, created
         case protectedSpans = "protected"
         case mustContain = "must_contain"
         case mustNot = "must_not"
@@ -51,12 +53,12 @@ struct PlaygroundExample: Codable, Identifiable, Equatable {
 
     static func make(
         raw: String, output: String, expected: String, workflowName: String,
-        template: LocalWorkflowTemplate?, id: String = idPrefix + UUID().uuidString.prefix(8).lowercased(),
+        template: LocalWorkflowTemplate?, model: String? = nil, id: String = idPrefix + UUID().uuidString.prefix(8).lowercased(),
         now: Date = Date()
     ) -> PlaygroundExample {
         PlaygroundExample(
             id: id, raw: raw, expected: expected, tags: [personalTag, tag(for: template)],
-            workflow: workflowName, output: output, created: now)
+            workflow: workflowName, output: output, model: model, created: now)
     }
 }
 
@@ -187,33 +189,36 @@ struct PlaygroundExampleStore {
     }
 }
 
-/// The sentence the Playground shows when Cleaned Text pasted the plain transcript instead of the model's
-/// text. The input is a `FallbackReason` code.
+/// The sentence the Playground shows when Cleaned Text did not paste the model's text. The input is a
+/// `FallbackReason` code.
 enum PlaygroundFallbackText {
+    /// Said after the reason: what was pasted instead.
+    static let usedPhrase = "Pnoe's own cleanup was used."
+
+    /// Why the model's text was not used, in a few words.
     static func sentence(forCode code: String) -> String {
-        guard let reason = FallbackReason(rawValue: code) else {
-            return "The checks rejected the model's text, so the transcript was pasted with a code-only cleanup (fillers out, a capital, a final period)."
-        }
+        guard let reason = FallbackReason(rawValue: code) else { return "The model's text was rejected." }
         switch reason {
-        case .tooShort: return "The text is too short to need the model, so only the code cleanup ran."
-        case .disabled, .contextOff: return "Cleanup is switched off for this text, so only the code cleanup ran."
+        case .tooShort: return "The text is too short for the model."
+        case .disabled, .contextOff: return "Cleanup is switched off for this text."
         case .emptyInput: return "There was no text to clean."
-        case .modelNotReady, .modelLoading: return "The model was not ready, so the transcript was pasted with a code-only cleanup (fillers out, a capital, a final period)."
-        case .timeout: return "The model took too long, so the transcript was pasted with a code-only cleanup (fillers out, a capital, a final period)."
-        case .runtimeCrashed, .runtimeError: return "The model failed to answer, so the transcript was pasted with a code-only cleanup (fillers out, a capital, a final period)."
-        case .cancelled: return "The run was cancelled, so the transcript was pasted with a code-only cleanup (fillers out, a capital, a final period)."
-        case .truncated: return "The model's reply was cut off, so the transcript was pasted with a code-only cleanup (fillers out, a capital, a final period)."
-        case .wrapper, .empty:
-            return "The model's reply was empty or wrapped in extra text, so the transcript was pasted with a code-only cleanup (fillers out, a capital, a final period)."
+        case .modelNotReady, .modelLoading: return "The model was not ready."
+        case .timeout: return "The model took too long."
+        case .runtimeCrashed, .runtimeError: return "The model failed to answer."
+        case .cancelled: return "The run was cancelled."
+        case .truncated: return "The model's reply was cut off."
+        case .wrapper, .empty: return "The model's reply was empty or wrapped in extra text."
         case .placeholderLost, .placeholderDup, .placeholderOrder, .placeholderUnknown:
-            return "The model changed a protected name, path or number, so the transcript was pasted with a code-only cleanup (fillers out, a capital, a final period)."
-        case .length, .newWords, .dropped, .droppedSpan, .meta:
-            return "The model changed your words, so the transcript was pasted with a code-only cleanup (fillers out, a capital, a final period)."
-        case .newNumber, .inventedCurrency:
-            return "The model added a number or currency you did not say, so the transcript was pasted with a code-only cleanup (fillers out, a capital, a final period)."
-        case .questionLost, .statementToQuestion:
-            return "The model changed a question into a statement or the other way round, so the transcript was pasted with a code-only cleanup (fillers out, a capital, a final period)."
+            return "The model changed a name, path or number."
+        case .length, .newWords, .dropped, .droppedSpan, .meta: return "The model changed your wording."
+        case .newNumber, .inventedCurrency: return "The model added a number you didn't say."
+        case .questionLost, .statementToQuestion: return "The model turned a question into a statement, or the reverse."
         }
+    }
+
+    /// The reason and what was pasted instead.
+    static func fullSentence(forCode code: String) -> String {
+        FallbackReason(rawValue: code) == .emptyInput ? sentence(forCode: code) : sentence(forCode: code) + " " + usedPhrase
     }
 }
 
