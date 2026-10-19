@@ -151,7 +151,7 @@ struct OnboardingMicrophoneScreen: View {
     }
 
     private var devices: [MicrophoneDevice] {
-        audioDeviceManager.availableDevices
+        audioDeviceManager.visibleDevices
     }
 
     private var selectedDevice: MicrophoneDevice? {
@@ -209,7 +209,7 @@ struct OnboardingMicrophoneScreen: View {
 
     private func saveSelectionAndContinue() {
         guard let selectedDevice else { return }
-        guard audioDeviceManager.availableDevices.contains(where: { $0.uid == selectedDevice.uid }) else {
+        guard audioDeviceManager.visibleDevices.contains(where: { $0.uid == selectedDevice.uid }) else {
             selectedDeviceUID = nil
             refreshMicrophones(selectingIfNeeded: true)
             return

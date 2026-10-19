@@ -26,7 +26,9 @@
 		E1FA00C22FA7000000000001 /* SoundSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B22FA7000000000001 /* SoundSettings.swift */; };
 		E1FA00D22FA7000000000001 /* SoundSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B22FA7000000000001 /* SoundSettings.swift */; };
 		E1FA00C32FA7000000000001 /* SoundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B32FA7000000000001 /* SoundManager.swift */; };
+		E1FA00E52FA7000000000001 /* RecordingDevicePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E42FA7000000000001 /* RecordingDevicePolicy.swift */; };
 		E1FA00D32FA7000000000001 /* SoundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B32FA7000000000001 /* SoundManager.swift */; };
+		E1FA00E62FA7000000000001 /* RecordingDevicePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E42FA7000000000001 /* RecordingDevicePolicy.swift */; };
 		E1FA0AE02FA7000000000003 /* RecorderIndicatorModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA0AE02FA7000000000001 /* RecorderIndicatorModel.swift */; };
 		E1FA0AE02FA7000000000002 /* RecorderIndicatorModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA0AE02FA7000000000001 /* RecorderIndicatorModel.swift */; };
 		E1FA0AE12FA7000000000003 /* LiveTranscriptFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA0AE12FA7000000000001 /* LiveTranscriptFormatter.swift */; };
@@ -86,6 +88,7 @@
 		E1FA00B12FA7000000000001 /* SoundPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundPlayer.swift; sourceTree = "<group>"; };
 		E1FA00B22FA7000000000001 /* SoundSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundSettings.swift; sourceTree = "<group>"; };
 		E1FA00B32FA7000000000001 /* SoundManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundManager.swift; sourceTree = "<group>"; };
+		E1FA00E42FA7000000000001 /* RecordingDevicePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingDevicePolicy.swift; sourceTree = "<group>"; };
 		E1FA0AE02FA7000000000001 /* RecorderIndicatorModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderIndicatorModel.swift; sourceTree = "<group>"; };
 		E1FA0AE12FA7000000000001 /* LiveTranscriptFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranscriptFormatter.swift; sourceTree = "<group>"; };
 		E1FA0AE22FA7000000000001 /* PartialTranscriptThrottle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartialTranscriptThrottle.swift; sourceTree = "<group>"; };
@@ -212,6 +215,7 @@
 				E1FA00B12FA7000000000001 /* SoundPlayer.swift */,
 				E1FA00B22FA7000000000001 /* SoundSettings.swift */,
 				E1FA00B32FA7000000000001 /* SoundManager.swift */,
+				E1FA00E42FA7000000000001 /* RecordingDevicePolicy.swift */,
 				E1FA0AE02FA7000000000001 /* RecorderIndicatorModel.swift */,
 				E1FA0AE12FA7000000000001 /* LiveTranscriptFormatter.swift */,
 				E1FA0AE22FA7000000000001 /* PartialTranscriptThrottle.swift */,
@@ -400,6 +404,7 @@
 				E1FA00C12FA7000000000001 /* SoundPlayer.swift in Sources */,
 				E1FA00C22FA7000000000001 /* SoundSettings.swift in Sources */,
 				E1FA00C32FA7000000000001 /* SoundManager.swift in Sources */,
+				E1FA00E52FA7000000000001 /* RecordingDevicePolicy.swift in Sources */,
 				E1FA00F02FA7000000000001 /* AudioOutputProcesses.swift in Sources */,
 				E1FA00F12FA7000000000001 /* MediaApplications.swift in Sources */,
 				E1FA00F22FA7000000000001 /* AudioLevelMeter.swift in Sources */,
@@ -422,6 +427,7 @@
 				E1FA00D12FA7000000000001 /* SoundPlayer.swift in Sources */,
 				E1FA00D22FA7000000000001 /* SoundSettings.swift in Sources */,
 				E1FA00D32FA7000000000001 /* SoundManager.swift in Sources */,
+				E1FA00E62FA7000000000001 /* RecordingDevicePolicy.swift in Sources */,
 				E1FA01002FA7000000000001 /* AudioOutputProcesses.swift in Sources */,
 				E1FA01012FA7000000000001 /* MediaApplications.swift in Sources */,
 				E1FA01022FA7000000000001 /* AudioLevelMeter.swift in Sources */,
