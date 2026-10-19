@@ -28,6 +28,14 @@
 		E1FA00D22FA7000000000001 /* SoundSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B22FA7000000000001 /* SoundSettings.swift */; };
 		E1FA00C32FA7000000000001 /* SoundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B32FA7000000000001 /* SoundManager.swift */; };
 		E1FA00D32FA7000000000001 /* SoundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B32FA7000000000001 /* SoundManager.swift */; };
+		E1FA00F02FA7000000000001 /* AudioOutputProcesses.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E02FA7000000000001 /* AudioOutputProcesses.swift */; };
+		E1FA01002FA7000000000001 /* AudioOutputProcesses.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E02FA7000000000001 /* AudioOutputProcesses.swift */; };
+		E1FA00F12FA7000000000001 /* MediaApplications.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E12FA7000000000001 /* MediaApplications.swift */; };
+		E1FA01012FA7000000000001 /* MediaApplications.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E12FA7000000000001 /* MediaApplications.swift */; };
+		E1FA00F22FA7000000000001 /* AudioLevelMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E22FA7000000000001 /* AudioLevelMeter.swift */; };
+		E1FA01022FA7000000000001 /* AudioLevelMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E22FA7000000000001 /* AudioLevelMeter.swift */; };
+		E1FA00F32FA7000000000001 /* PlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E32FA7000000000001 /* PlaybackController.swift */; };
+		E1FA01032FA7000000000001 /* PlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E32FA7000000000001 /* PlaybackController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -67,6 +75,10 @@
 		E1FA00B12FA7000000000001 /* SoundPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundPlayer.swift; sourceTree = "<group>"; };
 		E1FA00B22FA7000000000001 /* SoundSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundSettings.swift; sourceTree = "<group>"; };
 		E1FA00B32FA7000000000001 /* SoundManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundManager.swift; sourceTree = "<group>"; };
+		E1FA00E02FA7000000000001 /* AudioOutputProcesses.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioOutputProcesses.swift; sourceTree = "<group>"; };
+		E1FA00E12FA7000000000001 /* MediaApplications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaApplications.swift; sourceTree = "<group>"; };
+		E1FA00E22FA7000000000001 /* AudioLevelMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioLevelMeter.swift; sourceTree = "<group>"; };
+		E1FA00E32FA7000000000001 /* PlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -184,6 +196,10 @@
 				E1FA00B12FA7000000000001 /* SoundPlayer.swift */,
 				E1FA00B22FA7000000000001 /* SoundSettings.swift */,
 				E1FA00B32FA7000000000001 /* SoundManager.swift */,
+				E1FA00E02FA7000000000001 /* AudioOutputProcesses.swift */,
+				E1FA00E12FA7000000000001 /* MediaApplications.swift */,
+				E1FA00E22FA7000000000001 /* AudioLevelMeter.swift */,
+				E1FA00E32FA7000000000001 /* PlaybackController.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -358,6 +374,10 @@
 				E1FA00C12FA7000000000001 /* SoundPlayer.swift in Sources */,
 				E1FA00C22FA7000000000001 /* SoundSettings.swift in Sources */,
 				E1FA00C32FA7000000000001 /* SoundManager.swift in Sources */,
+				E1FA00F02FA7000000000001 /* AudioOutputProcesses.swift in Sources */,
+				E1FA00F12FA7000000000001 /* MediaApplications.swift in Sources */,
+				E1FA00F22FA7000000000001 /* AudioLevelMeter.swift in Sources */,
+				E1FA00F32FA7000000000001 /* PlaybackController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -370,6 +390,10 @@
 				E1FA00D12FA7000000000001 /* SoundPlayer.swift in Sources */,
 				E1FA00D22FA7000000000001 /* SoundSettings.swift in Sources */,
 				E1FA00D32FA7000000000001 /* SoundManager.swift in Sources */,
+				E1FA01002FA7000000000001 /* AudioOutputProcesses.swift in Sources */,
+				E1FA01012FA7000000000001 /* MediaApplications.swift in Sources */,
+				E1FA01022FA7000000000001 /* AudioLevelMeter.swift in Sources */,
+				E1FA01032FA7000000000001 /* PlaybackController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

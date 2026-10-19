@@ -12,14 +12,19 @@ import SwiftUI
 ///
 /// - Every press, the first one, the undo and the resume, needs a fresh read of the audio processes that shows
 ///   no call (`MediaApplications`): never touch media while a call app or a microphone user is active.
-/// - The first press happens only when a known player is playing.
+/// - The first press happens only when a known player is playing. With the optional level check on, it also
+///   needs sound in the players' audio: a player paused a moment ago still has its stream open, with silence.
 /// - A press is undone only when a player that was not playing starts right after it, no process that was
 ///   playing has gone silent, and nothing else says what started it. When Pnoe cannot tell, it does nothing.
 /// - Once Pnoe has paused something it presses again when the recording ends, whatever else happened in
 ///   between, unless the user or another app changed playback meanwhile.
 @MainActor
 class PlaybackController: ObservableObject {
-    static let shared = PlaybackController()
+    static let pauseMediaKey = "isPauseMediaEnabled"
+    static let levelCheckKey = "isMediaLevelCheckEnabled"
+    /// Set once a level check has heard sound, which proves the tap works (permission granted). Until then a
+    /// "silent" reading is not believed: without the permission a tap can deliver silence.
+    static let levelCheckVerifiedKey = "isMediaLevelCheckVerified"
 
     /// A pause Pnoe started and still has to undo.
     private struct OwnedPause {
@@ -55,6 +60,12 @@ class PlaybackController: ObservableObject {
     private let mediaApplications: MediaApplications
     private let readAudioProcesses: @Sendable () async -> [AudioProcess]
     private let pressKey: @MainActor () -> Void
+    private let resumptionDelay: @MainActor () -> Double
+    private let levelMeter: AudioLevelMeasuring?
+    private let defaults: UserDefaults
+    /// How long the level check listens. Long enough for a few audio buffers, short enough to add little to the
+    /// start of a recording.
+    private let levelWindow: TimeInterval = 0.15
 
     private var ownedPause: OwnedPause?
     private var monitorTask: Task<Void, Never>?
@@ -64,21 +75,35 @@ class PlaybackController: ObservableObject {
     /// How long the quit path waits for a fresh read of the audio processes before it gives up and presses nothing.
     private let quitReadTimeout: TimeInterval = 0.2
 
-    @Published var isPauseMediaEnabled: Bool = UserDefaults.standard.bool(forKey: "isPauseMediaEnabled") {
+    @Published var isPauseMediaEnabled: Bool {
         didSet {
-            UserDefaults.standard.set(isPauseMediaEnabled, forKey: "isPauseMediaEnabled")
+            defaults.set(isPauseMediaEnabled, forKey: Self.pauseMediaKey)
             // A pause Pnoe already started is still undone when the recording ends, whatever the toggle says.
         }
+    }
+
+    /// Off by default. Listens to the players' audio before pausing, so music that was paused a moment ago is not
+    /// started again. Needs the System Audio Recording permission, which macOS asks for the first time it runs.
+    @Published var isLevelCheckEnabled: Bool {
+        didSet { defaults.set(isLevelCheckEnabled, forKey: Self.levelCheckKey) }
     }
 
     init(
         mediaApplications: MediaApplications = .standard,
         readAudioProcesses: @escaping @Sendable () async -> [AudioProcess] = { await AudioOutputProcesses.snapshot() },
-        pressKey: @escaping @MainActor () -> Void = { PlaybackController.sendMediaPlayPauseKey() }
+        pressKey: @escaping @MainActor () -> Void = { PlaybackController.sendMediaPlayPauseKey() },
+        resumptionDelay: @escaping @MainActor () -> Double = { 0 },
+        levelMeter: AudioLevelMeasuring? = nil,
+        defaults: UserDefaults = .standard
     ) {
         self.mediaApplications = mediaApplications
         self.readAudioProcesses = readAudioProcesses
         self.pressKey = pressKey
+        self.resumptionDelay = resumptionDelay
+        self.levelMeter = levelMeter
+        self.defaults = defaults
+        self.isPauseMediaEnabled = defaults.bool(forKey: Self.pauseMediaKey)
+        self.isLevelCheckEnabled = defaults.bool(forKey: Self.levelCheckKey)
 
         // Delivered on the posting thread (the main thread when the app terminates) and before it returns, so
         // the quit path has run before the process exits.
@@ -107,9 +132,13 @@ class PlaybackController: ObservableObject {
 
     func pauseMedia(sessionID: UUID) async {
         guard canStartPause(sessionID: sessionID), ownedPause == nil else { return }
-        guard await isKnownPlayerPlayingAlone() else { return }
+        guard let playing = await knownPlayersPlayingAlone() else { return }
 
         try? await Task.sleep(for: .milliseconds(50))
+        guard canStartPause(sessionID: sessionID), ownedPause == nil else { return }
+
+        // Players that still hold their stream open after a pause are told from playing ones by their samples.
+        guard await levelCheckAllowsPause(for: playing) else { return }
         guard canStartPause(sessionID: sessionID), ownedPause == nil else { return }
 
         // Read again right before the key press: the audio may have stopped, or a call started, during the delay.
@@ -129,10 +158,29 @@ class PlaybackController: ObservableObject {
         !Task.isCancelled && !isQuitting && isPauseMediaEnabled && sessionID == recordingSessionID
     }
 
-    /// A known player is playing and no call is going on.
-    private func isKnownPlayerPlayingAlone() async -> Bool {
-        let activity = await currentActivity()
-        return !activity.isCallActive && !activity.playingProcessIDs.isEmpty
+    /// The known players that have output running, when there are some and no call is going on.
+    private func knownPlayersPlayingAlone() async -> [AudioProcess]? {
+        let processes = await readAudioProcesses()
+        let activity = mediaApplications.activity(in: processes)
+        guard !activity.isCallActive, !activity.playingProcessIDs.isEmpty else { return nil }
+        return processes.filter { activity.playingProcessIDs.contains($0.pid) }
+    }
+
+    /// With the level check on, a press needs sound in the players' audio. Whenever the check cannot say
+    /// (it is off, the tap failed, no samples came, or silence has never been told from a missing permission)
+    /// the output flag decides, as it did before the check existed.
+    private func levelCheckAllowsPause(for players: [AudioProcess]) async -> Bool {
+        guard isLevelCheckEnabled, let levelMeter else { return true }
+        let reading = await levelMeter.measure(processes: players, window: levelWindow)
+        switch reading {
+        case .sound:
+            defaults.set(true, forKey: Self.levelCheckVerifiedKey)
+            return true
+        case .silent:
+            return !defaults.bool(forKey: Self.levelCheckVerifiedKey)
+        case .unavailable:
+            return true
+        }
     }
 
     // MARK: - Resuming
@@ -143,7 +191,7 @@ class PlaybackController: ObservableObject {
 
         guard await settle(pauseID, sessionID: sessionID) else { return }
 
-        let delay = MediaController.shared.audioResumptionDelay
+        let delay = resumptionDelay()
         if delay > 0 {
             guard (try? await Task.sleep(for: .seconds(delay))) != nil else { return }
             // Everything is read again after the wait: the state may have changed during it.

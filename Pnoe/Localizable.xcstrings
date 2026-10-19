@@ -18787,6 +18787,50 @@
         }
       }
     },
+    "Check Audio Level Before Pausing" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audiopegel vor dem Pausieren prüfen"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vérifier le niveau audio avant la pause"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂停前检查音频电平"
+          }
+        }
+      }
+    },
+    "Does not start music you just paused. Needs the System Audio Recording permission." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Startet Musik, die du gerade pausiert hast, nicht neu. Benötigt die Berechtigung „Systemaudio-Aufnahme“."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ne relance pas une musique que vous venez de mettre en pause. Nécessite l’autorisation « Enregistrement audio du système »."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不会重新播放你刚暂停的音乐。需要“系统音频录制”权限。"
+          }
+        }
+      }
+    },
     "Pause Media While Recording" : {
       "localizations" : {
         "de" : {
