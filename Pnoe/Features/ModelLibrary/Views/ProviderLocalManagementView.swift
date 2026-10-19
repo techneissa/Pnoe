@@ -272,7 +272,7 @@ private struct LocalProviderDisclosureRow<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.smooth(duration: 0.18)) {
+                Motion.animate(.disclosure) {
                     isExpanded.toggle()
                 }
             } label: {
@@ -329,7 +329,7 @@ private struct LocalProviderDisclosureRow<Content: View>: View {
                     .padding(.horizontal, 14)
                     .padding(.top, 12)
                     .padding(.bottom, 14)
-                    .transition(.opacity)
+                    .motionFade()
             }
         }
     }

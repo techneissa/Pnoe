@@ -32,7 +32,7 @@ struct OnboardingExperienceIntroCard: View {
         .offset(y: isVisible ? 0 : 10)
         .onAppear {
             isVisible = false
-            withAnimation(.easeInOut(duration: 0.3).delay(0.08)) {
+            Motion.animate(.screen) {
                 isVisible = true
             }
         }

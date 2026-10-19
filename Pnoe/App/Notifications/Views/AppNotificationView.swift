@@ -44,6 +44,8 @@ struct AppNotificationView: View {
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(type.iconColor)
                     .frame(width: 20, height: 20)
+                    .motionBounce(when: type == .success)
+                    .motionWiggle(when: type == .error || type == .warning)
 
                 // Single message text
                 Text(title)
@@ -121,7 +123,7 @@ struct AppNotificationView: View {
                     Rectangle()
                         .fill(type.iconColor.opacity(0.8))
                         .frame(width: geometry.size.width * max(0, progress), height: 2)
-                        .animation(.linear(duration: 0.1), value: progress)
+                        .motion(.progress, value: progress)
                 }
                 .frame(height: 2)
             }

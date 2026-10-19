@@ -15,15 +15,18 @@ struct SaveIconButton: View {
                 saveFile(as: .text, extension: "md")
             }
         } label: {
-            Image(systemName: saved ? "checkmark" : "square.and.arrow.down")
+            Image(systemName: Motion.copySymbol(copied: saved, idle: "square.and.arrow.down"))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(saved ? AppTheme.Status.positive : .secondary)
+                .motionSymbolReplace(value: saved)
+                .motionBounce(when: saved)
                 .frame(width: 28, height: 28)
                 .background(AppTheme.Surface.control.opacity(0.9))
                 .clipShape(Circle())
         }
         .focusEffectDisabled()
         .buttonStyle(.plain)
+        .motionHover(cornerRadius: 14)
         .help("Save to file")
     }
 
@@ -38,9 +41,9 @@ struct SaveIconButton: View {
             do {
                 let content = fileExtension == "md" ? formatAsMarkdown(textToSave) : textToSave
                 try content.write(to: url, atomically: true, encoding: .utf8)
-                withAnimation { saved = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    withAnimation { saved = false }
+                Motion.animate(.copy) { saved = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + Motion.copiedHold) {
+                    Motion.animate(.copy) { saved = false }
                 }
             } catch {
                 print("Failed to save file: \(error.localizedDescription)")

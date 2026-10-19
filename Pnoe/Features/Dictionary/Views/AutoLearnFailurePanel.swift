@@ -25,6 +25,7 @@ struct AutoLearnFailurePanel: View {
                     } icon: {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
+                            .motionWiggle(when: true)
                     }
                 }
 

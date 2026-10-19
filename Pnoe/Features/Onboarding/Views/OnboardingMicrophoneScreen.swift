@@ -160,7 +160,7 @@ struct OnboardingMicrophoneScreen: View {
     }
 
     private func refreshMicrophones(selectingIfNeeded: Bool) {
-        withAnimation(.easeInOut(duration: 0.2)) {
+        Motion.animate(.reveal) {
             refreshIconRotation += 360
         }
 

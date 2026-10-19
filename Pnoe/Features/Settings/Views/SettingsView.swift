@@ -114,7 +114,7 @@ struct SettingsView: View {
                             }
                             .controlSize(.small)
                             Button {
-                                withAnimation { recordingShortcutManager.secondaryRecordingShortcut = .none }
+                                Motion.animate(.reveal) { recordingShortcutManager.secondaryRecordingShortcut = .none }
                             } label: {
                                 Image(systemName: "minus.circle.fill")
                                     .foregroundColor(.secondary)
@@ -127,7 +127,7 @@ struct SettingsView: View {
 
                 if recordingShortcutManager.secondaryRecordingShortcut == .none {
                     Button("Add Second Shortcut") {
-                        withAnimation { recordingShortcutManager.secondaryRecordingShortcut = .custom }
+                        Motion.animate(.reveal) { recordingShortcutManager.secondaryRecordingShortcut = .custom }
                     }
                     .focusEffectDisabled()
                 }

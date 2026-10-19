@@ -111,10 +111,8 @@ final class PersistentQuickPanel: NSPanel {
             y: currentFrame.maxY - size.height
         )
 
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.18
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            animator().setFrame(NSRect(origin: origin, size: size), display: true)
+        Motion.animateWindow(.panel) { _ in
+            self.animator().setFrame(NSRect(origin: origin, size: size), display: true)
         }
     }
 

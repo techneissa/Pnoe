@@ -18,9 +18,19 @@ struct WhisperKitModelRow<Ratings: View>: View {
     let onCancel: () -> Void
     let onDelete: () -> Void
     let onShowInFinder: () -> Void
+    /// The last download of this model failed: the button reads Retry until the next attempt starts.
+    var downloadFailed = false
     @ViewBuilder var ratings: Ratings
 
+    @State private var justFinished = false
+
     private var isDownloading: Bool { progress != nil }
+
+    private var phase: MotionPhase {
+        if isDownloading { return .running }
+        if downloadFailed && !isInstalled { return .failed }
+        return .idle
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
@@ -74,12 +84,18 @@ struct WhisperKitModelRow<Ratings: View>: View {
     private var actions: some View {
         HStack(spacing: 8) {
             if isInstalled && !isDownloading {
-                Label("Downloaded", systemImage: "checkmark.circle")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.quaternary, in: Capsule())
+                Label {
+                    Text("Downloaded")
+                } icon: {
+                    Image(systemName: "checkmark.circle")
+                        .motionBounce(when: justFinished)
+                }
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.quaternary, in: Capsule())
+                .motionFade()
 
                 Menu {
                     Button(role: .destructive, action: onDelete) {
@@ -97,8 +113,11 @@ struct WhisperKitModelRow<Ratings: View>: View {
             } else {
                 Button(action: isDownloading ? onCancel : onDownload) {
                     HStack(spacing: 4) {
-                        Text(isDownloading ? "Cancel" : "Download")
-                        Image(systemName: isDownloading ? "xmark.circle" : "arrow.down.circle")
+                        Text(isDownloading ? "Cancel" : (phase == .failed ? "Retry" : "Download"))
+                        Image(
+                            systemName: Motion.symbol(for: phase, idle: "arrow.down.circle", running: "xmark.circle")
+                        )
+                        .motionJobSymbol(phase)
                     }
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white)
@@ -107,8 +126,14 @@ struct WhisperKitModelRow<Ratings: View>: View {
                     .background(Capsule().fill(isDownloading ? Color.red : Color.accentColor))
                 }
                 .buttonStyle(.plain)
+                .motionHover(cornerRadius: 14)
             }
         }
         .focusEffectDisabled()
+        .motion(.reveal, value: isInstalled && !isDownloading)
+        .onChange(of: isDownloading) { wasDownloading, nowDownloading in
+            if wasDownloading && !nowDownloading && isInstalled { justFinished = true }
+            if !isInstalled { justFinished = false }
+        }
     }
 }

@@ -607,14 +607,14 @@ struct DashboardContent: View {
         HStack(alignment: .center, spacing: 12) {
             Button(action: copySystemInfo) {
                 footerActionLabel(
-                    icon: isSystemInfoCopied ? "checkmark" : "doc.on.doc",
+                    icon: Motion.copySymbol(copied: isSystemInfoCopied),
                     title: isSystemInfoCopied ? "Copied!" : "Copy System Info",
                     color: isSystemInfoCopied ? AppTheme.Sidebar.success : AppTheme.Sidebar.fallback
                 )
             }
             .buttonStyle(.plain)
             .fixedSize(horizontal: true, vertical: true)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSystemInfoCopied)
+            .motion(.copy, value: isSystemInfoCopied)
         }
         .focusEffectDisabled()
     }
@@ -637,12 +637,12 @@ struct DashboardContent: View {
     private func copySystemInfo() {
         SystemInfoService.shared.copySystemInfoToClipboard()
 
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        Motion.animate(.copy) {
             isSystemInfoCopied = true
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Motion.copiedHold) {
+            Motion.animate(.copy) {
                 isSystemInfoCopied = false
             }
         }

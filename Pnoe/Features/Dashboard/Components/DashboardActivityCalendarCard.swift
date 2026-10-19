@@ -6,7 +6,6 @@ struct DashboardActivityCalendarCard: View {
     private static let cellSpacing: CGFloat = 5
     private static let hoverCoordinateSpace = "dashboardActivityCalendar"
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hoveredPoint: DashboardProductivityPoint?
     @State private var hoverLocation: CGPoint?
 
@@ -53,13 +52,13 @@ struct DashboardActivityCalendarCard: View {
                         if let hoveredPoint, let hoverLocation {
                             DashboardActivityCalendarTooltip(point: hoveredPoint)
                                 .position(tooltipPosition(for: hoverLocation, in: geometry.size))
-                                .transition(.opacity)
+                                .motionFade()
                         }
                     }
                     .allowsHitTesting(false)
                 }
                 .coordinateSpace(name: Self.hoverCoordinateSpace)
-                .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hoveredPoint?.id)
+                .motion(.hover, value: hoveredPoint?.id)
 
             Divider()
 

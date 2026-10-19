@@ -28,6 +28,7 @@ struct SnippetsSectionView: View {
                         .font(.system(size: 13))
                 }
                 .buttonStyle(.borderless)
+                .motionHover(cornerRadius: 6)
                 .help("Add snippet")
             }
 
@@ -55,11 +56,13 @@ struct SnippetsSectionView: View {
                     LazyVStack(spacing: 0) {
                         ForEach(rows) { row in
                             SnippetRow(row: row, onEdit: { onEdit(row) }, onDelete: { onDelete(row) })
+                                .motionFade()
                             if row.id != rows.last?.id {
                                 Divider()
                             }
                         }
                     }
+                    .motion(.reveal, value: rows)
                 }
                 .padding(.top, 4)
             }
@@ -95,6 +98,7 @@ private struct SnippetRow: View {
                         .foregroundStyle(.primary)
                 }
                 .buttonStyle(.borderless)
+                .motionHover(cornerRadius: 6)
                 .help("Edit snippet")
                 .accessibilityLabel("Edit snippet \(row.trigger)")
 
@@ -104,11 +108,13 @@ private struct SnippetRow: View {
                         .foregroundStyle(.primary)
                 }
                 .buttonStyle(.borderless)
+                .motionHover(cornerRadius: 6)
                 .help("Remove snippet")
                 .accessibilityLabel("Remove snippet \(row.trigger)")
             }
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 4)
+        .motionHover(cornerRadius: 6)
     }
 }

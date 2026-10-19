@@ -88,7 +88,7 @@ final class OnboardingFlowController {
     }
 
     func goToExperiencePracticePhase() {
-        withAnimation(.easeInOut(duration: 0.28)) {
+        Motion.animate(.screen) {
             coordinator.isExperienceInIntroPhase = false
         }
     }
@@ -96,7 +96,7 @@ final class OnboardingFlowController {
     func goToExperienceIntroPhase() {
         guard !coordinator.shouldSkipCurrentExperienceIntro else { return }
 
-        withAnimation(.easeInOut(duration: 0.28)) {
+        Motion.animate(.screen) {
             coordinator.isExperienceInIntroPhase = true
         }
     }

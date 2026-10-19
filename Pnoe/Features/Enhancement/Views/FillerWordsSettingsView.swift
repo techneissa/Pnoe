@@ -20,7 +20,7 @@ struct FillerWordChip: View {
             }
             .buttonStyle(.borderless)
             .onHover { hover in
-                withAnimation(.easeInOut(duration: 0.2)) {
+                Motion.animate(.hover) {
                     isHovered = hover
                 }
             }
@@ -51,7 +51,7 @@ struct FillerWordsSettingsSection: View {
                 FlowLayout(spacing: 6) {
                     ForEach(fillerWordManager.fillerWords, id: \.self) { word in
                         FillerWordChip(word: word) {
-                            withAnimation(.easeInOut(duration: 0.2)) {
+                            Motion.animate(.reveal) {
                                 fillerWordManager.removeWord(word)
                             }
                         }
@@ -133,7 +133,7 @@ struct FillerWordsSettingsSection: View {
             return
         }
 
-        withAnimation(.easeInOut(duration: 0.2)) {
+        Motion.animate(.panel) {
             closeAddWordPopover()
         }
     }

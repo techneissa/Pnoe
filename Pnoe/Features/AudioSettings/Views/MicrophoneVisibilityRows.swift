@@ -14,9 +14,11 @@ struct MicrophoneVisibilityRows: View {
                 Text(Self.allHiddenNotice(allHiddenFallback))
             } icon: {
                 Image(systemName: "exclamationmark.triangle.fill")
+                    .motionWiggle(when: true)
             }
             .font(.callout)
             .foregroundStyle(.secondary)
+            .motionFade()
         }
 
         if rows.isEmpty {
@@ -25,16 +27,22 @@ struct MicrophoneVisibilityRows: View {
         } else {
             ForEach(rows) { row in
                 Toggle(isOn: Binding(get: { row.isHidden }, set: { setHidden(row, $0) })) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(row.name)
-                            .lineLimit(1)
-                        if !row.isConnected {
-                            Text("Not connected")
-                                .font(.caption)
+                    HStack(spacing: 8) {
+                        Image(systemName: Motion.toggleSymbol(isOn: row.isHidden, on: "eye.slash", off: "eye"))
+                            .frame(width: 18)
+                            .motionSymbolReplace(value: row.isHidden)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(row.name)
+                                .lineLimit(1)
+                            if !row.isConnected {
+                                Text("Not connected")
+                                    .font(.caption)
+                            }
                         }
                     }
                     .foregroundStyle(row.isHidden ? .secondary : .primary)
                     .opacity(row.isHidden ? 0.6 : 1)
+                    .motion(.change, value: row.isHidden)
                 }
             }
         }

@@ -124,7 +124,11 @@ struct TranscriptionModelDownloadCard: View {
         Button(action: isDownloading ? onCancel : onDownload) {
             HStack(spacing: 6) {
                 Text(downloadButtonTitle)
-                Image(systemName: isDownloading ? "xmark.circle" : "arrow.down.circle")
+                Image(
+                            systemName: Motion.symbol(
+                                for: isDownloading ? .running : .idle, idle: "arrow.down.circle", running: "xmark.circle")
+                        )
+                        .motionJobSymbol(isDownloading ? .running : .idle)
             }
             .font(.system(size: 12, weight: .semibold))
             .foregroundColor(
@@ -139,6 +143,7 @@ struct TranscriptionModelDownloadCard: View {
         }
         .focusEffectDisabled()
         .buttonStyle(.plain)
+        .motionHover(cornerRadius: 14)
     }
 
     private var statusBadge: some View {

@@ -25,7 +25,7 @@ struct ExpandableSettingsRow<Content: View>: View {
         self.label = label
         self.infoMessage = infoMessage
         self.infoURL = infoURL
-        self.expandedContentTransition = .opacity.combined(with: .move(edge: .top))
+        self.expandedContentTransition = .motionPanel(edge: .top)
         self.content = content
     }
 
@@ -39,7 +39,7 @@ struct ExpandableSettingsRow<Content: View>: View {
         self.label = title
         self.infoMessage = nil
         self.infoURL = nil
-        self.expandedContentTransition = .opacity
+        self.expandedContentTransition = .motionFade
         self.content = content
     }
 
@@ -67,11 +67,13 @@ struct ExpandableSettingsRow<Content: View>: View {
                     .foregroundColor(.secondary)
                     .rotationEffect(.degrees(rowIsEnabled && isExpanded ? 90 : 0))
                     .opacity(rowIsEnabled ? 1 : 0.4)
+                    .motion(.disclosure, value: isExpanded)
             }
             .contentShape(Rectangle())
+            .motionHover(cornerRadius: 8, outset: 6, suppressed: !rowIsEnabled)
             .onTapGesture {
                 guard !isHandlingToggleChange, rowIsEnabled else { return }
-                withAnimation(.easeInOut(duration: 0.2)) {
+                Motion.animate(.disclosure) {
                     isExpanded.toggle()
                 }
             }
@@ -89,11 +91,11 @@ struct ExpandableSettingsRow<Content: View>: View {
             guard isEnabled != nil else { return }
             isHandlingToggleChange = true
             if newValue {
-                withAnimation(.easeInOut(duration: 0.2)) {
+                Motion.animate(.disclosure) {
                     isExpanded = true
                 }
             } else {
-                withAnimation(.easeInOut(duration: 0.2)) {
+                Motion.animate(.disclosure) {
                     isExpanded = false
                 }
             }

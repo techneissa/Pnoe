@@ -24,6 +24,7 @@ struct FluidAudioModelCardView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             actionSection
+                .motion(.reveal, value: isDownloaded)
         }
         .padding(16)
         .background(AppMaterialCardBackground())
@@ -113,7 +114,11 @@ struct FluidAudioModelCardView: View {
                 }) {
                     HStack(spacing: 4) {
                         Text(LocalizedStringKey(isDownloading ? "Cancel" : "Download"))
-                        Image(systemName: isDownloading ? "xmark.circle" : "arrow.down.circle")
+                        Image(
+                            systemName: Motion.symbol(
+                                for: isDownloading ? .running : .idle, idle: "arrow.down.circle", running: "xmark.circle")
+                        )
+                        .motionJobSymbol(isDownloading ? .running : .idle)
                     }
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.white)
@@ -124,6 +129,7 @@ struct FluidAudioModelCardView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .motionHover(cornerRadius: 14)
             }
 
             if isDownloaded && !isDownloading {
