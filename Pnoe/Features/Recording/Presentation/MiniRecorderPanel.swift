@@ -2,7 +2,9 @@ import AppKit
 import os
 
 final class MiniRecorderPanel: NSPanel {
-    override var canBecomeKey: Bool { true }
+    /// Set while the assistant panel's text field needs the keyboard; see `RecorderKeyWindowPolicy`.
+    var acceptsKeyboardInput = false
+    override var canBecomeKey: Bool { acceptsKeyboardInput }
 
     private let logger = Logger(subsystem: "com.techneissa.pnoe", category: "MiniRecorderPanel")
 
@@ -31,19 +33,28 @@ final class MiniRecorderPanel: NSPanel {
 
     /// Returns `nil` when there is no screen at all, so callers can skip showing the panel
     /// instead of placing it at the global origin.
-    static func calculateWindowMetrics() -> NSRect? {
-        let width: CGFloat = 540
-        let height: CGFloat = 430
-
-        guard let screen = RecorderScreenResolver.resolve() else { return nil }
-
+    ///
+    /// `compact` is the idle indicator that stays on screen between dictations: it is only as
+    /// large as the control bar, so the transparent host never covers other apps' content.
+    static func calculateWindowMetrics(
+        compact: Bool = false,
+        settings: RecorderIndicatorSettings = .current
+    ) -> NSRect? {
         // Host stays large enough for assistant output; SwiftUI controls the visible mini width.
+        let width: CGFloat = compact ? 200 : 540
+        let height: CGFloat = compact ? 48 : 430
+
+        guard let screen = RecorderScreenResolver.resolve(settings: settings) else { return nil }
+
         let padding: CGFloat = 24
 
         let visibleFrame = screen.visibleFrame
         let centerX = visibleFrame.midX
         let xPosition = centerX - (width / 2)
-        let yPosition = visibleFrame.minY + padding
+        let yPosition =
+            settings.miniPlacement == .top
+            ? visibleFrame.maxY - height - padding
+            : visibleFrame.minY + padding
 
         return NSRect(
             x: xPosition,
@@ -54,8 +65,8 @@ final class MiniRecorderPanel: NSPanel {
     }
 
     @discardableResult
-    func show() -> Bool {
-        guard let metrics = MiniRecorderPanel.calculateWindowMetrics() else {
+    func show(compact: Bool = false) -> Bool {
+        guard let metrics = MiniRecorderPanel.calculateWindowMetrics(compact: compact) else {
             logger.error("Mini panel show skipped: no screen available")
             return false
         }
