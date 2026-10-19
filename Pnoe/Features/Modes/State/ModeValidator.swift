@@ -74,7 +74,7 @@ struct ModeValidator {
         if config.isAIEnhancementEnabled,
             let providerName = config.selectedAIProvider,
             let provider = AIProvider(rawValue: providerName),
-            provider.supportsCustomModelID,
+            provider.supportsCustomModelID || provider == .builtIn,
             config.selectedAIModel?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
         {
             errors.append(.missingEnhancementModel)

@@ -44,6 +44,14 @@ struct GuardedCleanup {
         return GuardedCleanup(runtime: runtime, spec: RuntimeModelSpec(identifier: modelName))
     }
 
+    /// The Built-in engine: the same pipeline, prompt and fallback over the XPC service. `modelID` is the id of
+    /// an installed model (`BuiltInModels`); a model that is gone gives a spec without a file, which the runtime
+    /// refuses, so the take pastes the plain transcript like any other runtime error.
+    static func makeBuiltIn(modelID: String, engine: BuiltInEngine = .shared) async -> GuardedCleanup {
+        let spec = await engine.spec(forModelID: modelID) ?? RuntimeModelSpec(identifier: modelID)
+        return GuardedCleanup(runtime: engine.runtime, spec: spec)
+    }
+
     func clean(_ text: String, vocabulary: [String] = []) async -> Result {
         // Snippet placeholders travel through the formatter as protected terms and come back unchanged.
         let snippets = SnippetKeeper(text)

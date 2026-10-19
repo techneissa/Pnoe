@@ -217,7 +217,7 @@ enum ModeRuntimeResolver {
             guard let provider = AIProvider(rawValue: providerName) else {
                 return nil
             }
-            return aiService.connectedProviders.contains(provider) ? provider : nil
+            return aiService.workflowProviders.contains(provider) ? provider : nil
         }
 
         return aiService.connectedProviders.first

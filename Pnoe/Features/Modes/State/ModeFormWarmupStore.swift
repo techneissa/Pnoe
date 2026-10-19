@@ -24,7 +24,7 @@ struct ModeFormWarmupSnapshot {
         enhancementService: AIEnhancementService,
         transcriptionModelManager: TranscriptionModelManager
     ) {
-        let providers = aiService.connectedProviders
+        let providers = aiService.workflowProviders
         var modelsByProvider: [AIProvider: [String]] = [:]
         var selectedModelsByProvider: [AIProvider: String] = [:]
 

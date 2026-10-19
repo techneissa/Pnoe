@@ -170,6 +170,8 @@ private struct ModelProviderIdentity {
         switch provider {
         case .ollama:
             fallbackSystemImage = "server.rack"
+        case .builtIn:
+            fallbackSystemImage = "cpu"
         case .localCLI:
             fallbackSystemImage = "terminal"
         case .custom:

@@ -385,6 +385,7 @@ struct ConfigurationRow: View {
 
                 if config.isAIEnhancementEnabled,
                     config.selectedAIProvider != AIProvider.localCLI.rawValue,
+                    config.selectedAIProvider != AIProvider.builtIn.rawValue,
                     let modelName = config.selectedAIModel,
                     !modelName.isEmpty
                 {

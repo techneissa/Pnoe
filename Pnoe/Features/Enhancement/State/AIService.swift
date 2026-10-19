@@ -16,6 +16,8 @@ enum AIProvider: String, CaseIterable {
     case speechmatics = "Speechmatics"
     case assemblyAI = "AssemblyAI"
     case ollama = "Ollama"
+    /// The engine inside Pnoe: llama.cpp in an XPC service, running GGUF models already on the Mac.
+    case builtIn = "Built-in"
     case localCLI = "Local CLI"
     case custom = "Custom"
 
@@ -47,7 +49,7 @@ enum AIProvider: String, CaseIterable {
             return "https://api.assemblyai.com/v2/transcript"
         case .ollama:
             return UserDefaults.standard.string(forKey: "ollamaBaseURL") ?? "http://localhost:11434"
-        case .localCLI:
+        case .builtIn, .localCLI:
             return ""
         case .custom:
             return UserDefaults.standard.string(forKey: "customProviderBaseURL") ?? ""
@@ -80,6 +82,8 @@ enum AIProvider: String, CaseIterable {
             return "universal-3-5-pro"
         case .ollama:
             return UserDefaults.standard.string(forKey: "ollamaSelectedModel") ?? "mistral"
+        case .builtIn:
+            return ""
         case .localCLI:
             return "local-cli"
         case .custom:
@@ -151,7 +155,7 @@ enum AIProvider: String, CaseIterable {
             return ["universal-3-5-pro"]
         case .ollama:
             return []
-        case .localCLI:
+        case .builtIn, .localCLI:
             return []
         case .custom:
             return CustomAIProviderManager.shared.availableModelNames
@@ -162,7 +166,7 @@ enum AIProvider: String, CaseIterable {
 
     var requiresAPIKey: Bool {
         switch self {
-        case .ollama, .localCLI:
+        case .ollama, .builtIn, .localCLI:
             return false
         default:
             return true
@@ -263,6 +267,15 @@ class AIService: ObservableObject {
             }
             return false
         }
+    }
+
+    /// What the Workflow editor offers: the connected providers, plus Built-in, which needs nothing connected.
+    var workflowProviders: [AIProvider] {
+        WorkflowProviderList.names(
+            order: AIProvider.allCases.map(\.rawValue),
+            connected: Set(connectedProviders.map(\.rawValue)),
+            builtIn: AIProvider.builtIn.rawValue
+        ).compactMap(AIProvider.init(rawValue:))
     }
 
     var currentModel: String {
