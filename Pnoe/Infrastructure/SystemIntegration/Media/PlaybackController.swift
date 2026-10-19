@@ -10,8 +10,11 @@ import SwiftUI
 /// and the system Play/Pause media key to pause and resume. The key is a toggle that goes to whichever app is
 /// "Now Playing", so it is a pair: one press to pause, one press to put things back.
 ///
-/// - The first press happens only when a known player (`MediaApplications`) is playing and no call is going on.
-/// - If a player that was not playing starts right after the press, the press started it, and is undone.
+/// - Every press, the first one, the undo and the resume, needs a fresh read of the audio processes that shows
+///   no call (`MediaApplications`): never touch media while a call app or a microphone user is active.
+/// - The first press happens only when a known player is playing.
+/// - A press is undone only when a player that was not playing starts right after it, no process that was
+///   playing has gone silent, and nothing else says what started it. When Pnoe cannot tell, it does nothing.
 /// - Once Pnoe has paused something it presses again when the recording ends, whatever else happened in
 ///   between, unless the user or another app changed playback meanwhile.
 @MainActor
@@ -24,12 +27,27 @@ class PlaybackController: ObservableObject {
         /// The known players that had audio running when the key was pressed.
         let playingProcessIDs: Set<pid_t>
         let pressedAt: TimeInterval
-        /// Every process in `playingProcessIDs` has been seen silent after the press.
-        var silenceSeen = false
+        /// The players from `playingProcessIDs` that have been seen silent after the press: the ones the press
+        /// paused. A player that was silent and is playing again was resumed by someone else.
+        var silentProcessIDs: Set<pid_t> = []
     }
 
-    /// How long after the key press a player that was not playing before is read as the key having started it.
-    private let startedPlaybackWindow: TimeInterval = 1.5
+    /// What the latest read of the audio processes says about the pause.
+    private enum Assessment {
+        /// No pause is owned any more, or it is a different one.
+        case gone
+        /// A call is going on: nothing is pressed.
+        case callActive
+        /// A player that was not playing started right after the press, and no paused player has gone silent.
+        case pressStartedPlayer
+        /// Another known player started later, or a player the press paused is playing again.
+        case playbackChangedByOthers
+        case unchanged
+    }
+
+    /// How long after the key press a new player is read as started by the press. Short on purpose: a later
+    /// start is more likely an autoplaying page than the Now Playing app.
+    private let startedPlaybackWindow: TimeInterval = 0.6
     /// How long the monitor watches one pause. A longer recording is still resumed, without the watching.
     private let monitorLifetime: TimeInterval = 30 * 60
     private let pollInterval: Duration = .milliseconds(200)
@@ -39,6 +57,7 @@ class PlaybackController: ObservableObject {
     private let pressKey: @MainActor () -> Void
 
     private var ownedPause: OwnedPause?
+    private var lastActivity: MediaApplications.Activity?
     private var monitorTask: Task<Void, Never>?
     private var recordingSessionID = UUID()
     private var terminationObserver: NSObjectProtocol?
@@ -80,6 +99,8 @@ class PlaybackController: ObservableObject {
         return recordingSessionID
     }
 
+    // MARK: - Pausing
+
     func pauseMedia(sessionID: UUID) async {
         guard canStartPause(sessionID: sessionID), ownedPause == nil else { return }
         guard await isKnownPlayerPlayingAlone() else { return }
@@ -88,7 +109,7 @@ class PlaybackController: ObservableObject {
         guard canStartPause(sessionID: sessionID), ownedPause == nil else { return }
 
         // Read again right before the key press: the audio may have stopped, or a call started, during the delay.
-        let activity = mediaApplications.activity(in: await readAudioProcesses())
+        let activity = await currentActivity()
         guard canStartPause(sessionID: sessionID), ownedPause == nil,
             !activity.isCallActive, !activity.playingProcessIDs.isEmpty
         else { return }
@@ -97,49 +118,8 @@ class PlaybackController: ObservableObject {
         let pause = OwnedPause(playingProcessIDs: activity.playingProcessIDs, pressedAt: Self.now)
         ownedPause = pause
         pressKey()
-        startMonitor(for: pause)
+        startMonitor(for: pause.id)
     }
-
-    func resumeMedia(sessionID: UUID) async {
-        // A pause is undone whatever the toggle says now. A newer recording takes over a pause it inherited.
-        guard let pause = ownedPause, sessionID == recordingSessionID, !Task.isCancelled else { return }
-
-        let activity = mediaApplications.activity(in: await readAudioProcesses())
-        guard canRestore(pause, sessionID: sessionID) else { return }
-
-        // A very short recording: the first press started a player that was not playing, and the monitor has
-        // not undone it yet.
-        if Self.now - pause.pressedAt < startedPlaybackWindow,
-            !activity.playingProcessIDs.subtracting(pause.playingProcessIDs).isEmpty
-        {
-            pressKey()
-            finish(pause)
-            return
-        }
-
-        // Something other than Pnoe changed playback, or a call has started: leave it alone.
-        guard !activity.isCallActive, !playbackChangedByOthers(pause, now: activity) else {
-            finish(pause)
-            return
-        }
-
-        let delay = MediaController.shared.audioResumptionDelay
-        if delay > 0 {
-            guard (try? await Task.sleep(for: .seconds(delay))) != nil else { return }
-            guard canRestore(pause, sessionID: sessionID) else { return }
-            let latest = mediaApplications.activity(in: await readAudioProcesses())
-            guard canRestore(pause, sessionID: sessionID) else { return }
-            guard !latest.isCallActive, !playbackChangedByOthers(pause, now: latest) else {
-                finish(pause)
-                return
-            }
-        }
-
-        pressKey()
-        finish(pause)
-    }
-
-    // MARK: - Starting a pause
 
     private func canStartPause(sessionID: UUID) -> Bool {
         !Task.isCancelled && isPauseMediaEnabled && sessionID == recordingSessionID
@@ -147,71 +127,129 @@ class PlaybackController: ObservableObject {
 
     /// A known player is playing and no call is going on.
     private func isKnownPlayerPlayingAlone() async -> Bool {
-        let activity = mediaApplications.activity(in: await readAudioProcesses())
+        let activity = await currentActivity()
         return !activity.isCallActive && !activity.playingProcessIDs.isEmpty
+    }
+
+    // MARK: - Resuming
+
+    func resumeMedia(sessionID: UUID) async {
+        // A pause is undone whatever the toggle says now. A newer recording takes over a pause it inherited.
+        guard let pauseID = ownedPause?.id, sessionID == recordingSessionID, !Task.isCancelled else { return }
+
+        guard await settle(pauseID, sessionID: sessionID) else { return }
+
+        let delay = MediaController.shared.audioResumptionDelay
+        if delay > 0 {
+            guard (try? await Task.sleep(for: .seconds(delay))) != nil else { return }
+            // Everything is read again after the wait: the state may have changed during it.
+            guard await settle(pauseID, sessionID: sessionID) else { return }
+        }
+
+        pressKey()
+        finish(pauseID)
+    }
+
+    /// Reads the audio processes and decides whether the resume press may happen now. Presses the undo
+    /// itself when the first press started a player. Returns `true` when the resume press may happen.
+    /// A `false` means the pause is finished, or is left to a newer recording after a cancel.
+    private func settle(_ pauseID: UUID, sessionID: UUID) async -> Bool {
+        let activity = await currentActivity()
+        guard !Task.isCancelled, sessionID == recordingSessionID else { return false }
+
+        switch assess(pauseID, activity) {
+        case .gone:
+            return false
+        case .callActive, .playbackChangedByOthers:
+            finish(pauseID)
+            return false
+        case .pressStartedPlayer:
+            pressKey()
+            finish(pauseID)
+            return false
+        case .unchanged:
+            return true
+        }
     }
 
     // MARK: - Watching a pause
 
-    private func canRestore(_ pause: OwnedPause, sessionID: UUID) -> Bool {
-        !Task.isCancelled && sessionID == recordingSessionID && ownedPause?.id == pause.id
-    }
-
-    private func finish(_ pause: OwnedPause) {
-        guard ownedPause?.id == pause.id else { return }
+    private func finish(_ pauseID: UUID) {
+        guard ownedPause?.id == pauseID else { return }
         ownedPause = nil
         monitorTask?.cancel()
         monitorTask = nil
     }
 
-    /// The player that Pnoe paused is playing again after it was silent, or another known player started.
-    private func playbackChangedByOthers(_ pause: OwnedPause, now activity: MediaApplications.Activity) -> Bool {
-        if activity.playingProcessIDs.subtracting(pause.playingProcessIDs).isEmpty == false {
-            return true
+    /// One read of the audio processes, remembered for the quit path.
+    private func currentActivity() async -> MediaApplications.Activity {
+        let activity = mediaApplications.activity(in: await readAudioProcesses())
+        lastActivity = activity
+        return activity
+    }
+
+    /// Folds `activity` into the stored pause, which is read fresh here and never passed around, and says
+    /// what it means. The silence of each paused player is tracked on its own.
+    private func assess(_ pauseID: UUID, _ activity: MediaApplications.Activity) -> Assessment {
+        guard var pause = ownedPause, pause.id == pauseID else { return .gone }
+
+        pause.silentProcessIDs.formUnion(pause.playingProcessIDs.subtracting(activity.playingProcessIDs))
+        ownedPause = pause
+
+        if activity.isCallActive { return .callActive }
+
+        let newPlayers = activity.playingProcessIDs.subtracting(pause.playingProcessIDs)
+        if !newPlayers.isEmpty {
+            let isRightAfterPress = Self.now - pause.pressedAt < startedPlaybackWindow
+            return isRightAfterPress && pause.silentProcessIDs.isEmpty ? .pressStartedPlayer : .playbackChangedByOthers
         }
-        return pause.silenceSeen && !activity.playingProcessIDs.isEmpty
+        if !pause.silentProcessIDs.isDisjoint(with: activity.playingProcessIDs) {
+            return .playbackChangedByOthers
+        }
+        return .unchanged
     }
 
     /// Polls the audio processes off the main actor and keeps the pause up to date: undoes a press that
-    /// started playback, notes when the paused players went silent, and drops the pause when someone else
+    /// started a player, notes which paused players went silent, and drops the pause when someone else
     /// changes playback. It stops when the pause ends, when the recording is resumed, or after
     /// `monitorLifetime`.
-    private func startMonitor(for pause: OwnedPause) {
+    private func startMonitor(for pauseID: UUID) {
         monitorTask?.cancel()
         monitorTask = Task { [weak self] in
+            let startedAt = Self.now
             while !Task.isCancelled {
                 try? await Task.sleep(for: self?.pollInterval ?? .milliseconds(200))
                 guard !Task.isCancelled, let self else { return }
 
-                let activity = self.mediaApplications.activity(in: await self.readAudioProcesses())
-                guard !Task.isCancelled, self.ownedPause?.id == pause.id else { return }
+                let activity = await self.currentActivity()
+                guard !Task.isCancelled else { return }
 
-                if Self.now - pause.pressedAt < self.startedPlaybackWindow {
-                    // A player that was not playing before has started: the press started it. Press again.
-                    if !activity.playingProcessIDs.subtracting(pause.playingProcessIDs).isEmpty {
-                        self.pressKey()
-                        self.finish(pause)
-                        return
-                    }
-                } else if self.playbackChangedByOthers(pause, now: activity) {
-                    self.finish(pause)
+                switch self.assess(pauseID, activity) {
+                case .gone:
                     return
+                case .playbackChangedByOthers:
+                    self.finish(pauseID)
+                    return
+                case .pressStartedPlayer:
+                    self.pressKey()
+                    self.finish(pauseID)
+                    return
+                case .callActive, .unchanged:
+                    break
                 }
-
-                if activity.playingProcessIDs.isDisjoint(with: pause.playingProcessIDs) {
-                    self.ownedPause?.silenceSeen = true
-                }
-                if Self.now - pause.pressedAt > self.monitorLifetime { return }
+                if Self.now - startedAt > self.monitorLifetime { return }
             }
         }
     }
 
-    /// Pnoe is quitting in the middle of a recording: put the media back the way it was.
+    /// Pnoe is quitting in the middle of a recording: put the media back the way it was, unless the last read
+    /// of the audio processes showed a call.
     private func restoreBeforeQuit() {
         monitorTask?.cancel()
         monitorTask = nil
         guard ownedPause != nil else { return }
         ownedPause = nil
+        guard lastActivity?.isCallActive != true else { return }
         pressKey()
     }
 

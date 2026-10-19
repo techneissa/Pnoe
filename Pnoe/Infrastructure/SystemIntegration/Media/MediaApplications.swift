@@ -41,6 +41,16 @@ struct MediaApplications: Sendable {
             "com.webex",
             "Cisco-Systems.Spark",
             "com.skype.skype",
+            "net.whatsapp.WhatsApp",
+            "org.whispersystems.signal-desktop",
+            "ru.keepcoder.Telegram",
+            "org.telegram.desktop",
+            "com.citrixonline.GoToMeeting",
+            "com.bluejeansnet.Blue",
+            "com.viber.osx",
+            "com.tencent.xinWeChat",
+            "com.facebook.archon",
+            "jp.naver.line.mac",
         ]
     )
 
@@ -48,17 +58,22 @@ struct MediaApplications: Sendable {
     struct Activity: Equatable {
         /// Processes of known players that have output running.
         var playingProcessIDs: Set<pid_t> = []
-        /// A known calling app has audio running, or some process has input and output running at once.
-        /// That also catches a call in a browser tab, which no bundle ID can tell apart from a video.
+        /// A call is going on: a known calling app has audio running (output or microphone), a browser or
+        /// player holds the microphone, or some process has input and output running at once. The last two
+        /// catch a call in a browser tab (Meet), which no bundle ID can tell apart from a video.
         var isCallActive = false
     }
 
     func activity(in processes: [AudioProcess]) -> Activity {
         var activity = Activity()
         for process in processes {
-            if matches(process.bundleID, callApps) || (process.isRunningInput && process.isRunningOutput) {
+            let isPlayer = matches(process.bundleID, players)
+            if matches(process.bundleID, callApps)
+                || (process.isRunningInput && process.isRunningOutput)
+                || (process.isRunningInput && isPlayer)
+            {
                 activity.isCallActive = true
-            } else if process.isRunningOutput, matches(process.bundleID, players) {
+            } else if process.isRunningOutput, isPlayer {
                 activity.playingProcessIDs.insert(process.pid)
             }
         }
