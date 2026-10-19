@@ -10,6 +10,7 @@ actor AutoLearnService {
     private let focusObserver = AutoLearnFocusObserver()
     private let pendingQueue = AutoLearnPendingQueue()
     private let reviewProposalStore = AutoLearnReviewProposalStore()
+    private let countStore = CorrectionCountStore(fileURL: CorrectionCountStore.standardFileURL())
 
     private var replacementStore: WordReplacementStore?
     private var reviewer: AutoLearnAIReviewer?
@@ -83,7 +84,7 @@ actor AutoLearnService {
         guard AutoLearnSettings.isEnabled else { return }
         guard reviewTask == nil else { return }
         await cancelReviewTask()
-        await schedulePendingReview()
+        await schedulePendingReview(trigger: .explicit)
     }
 
     func preparePendingReviewForApproval() async {
@@ -391,11 +392,40 @@ actor AutoLearnService {
         else { return }
 
         guard let revision = FinalSnapshotDiffEngine.revision(from: snapshot) else { return }
-        let candidates = CorrectionDiffEngine.candidates(from: revision)
+        let candidates = CorrectionDiffEngine.candidates(from: revision).filter {
+            CorrectionNoiseFilter.isLearnable(
+                heard: $0.heardText,
+                corrected: $0.correctedPairText,
+                pastedText: revision.original
+            )
+        }
         guard !candidates.isEmpty else { return }
 
+        let threshold = AutoLearnSettings.repeatThreshold
+        var repeatedEnough: [DetectedCorrectionCandidate] = []
+        for candidate in candidates {
+            let count: Int
+            do {
+                count = try await countStore.record(
+                    heard: candidate.heardText,
+                    corrected: candidate.correctedPairText
+                )
+            } catch {
+                log(error, message: "Failed to save an Auto Learn correction count")
+                count = 1
+            }
+            if threshold.isReached(by: count) { repeatedEnough.append(candidate) }
+        }
+        guard !repeatedEnough.isEmpty else { return }
+
+        guard AutoLearnSettings.usesAIReview else {
+            await learn(repeatedEnough)
+            return
+        }
+
         do {
-            let insertedCount = try await pendingQueue.enqueue(candidates)
+            let insertedCount = try await pendingQueue.enqueue(repeatedEnough)
+            await resetCounts(of: repeatedEnough)
             if insertedCount > 0 {
                 logger.notice(
                     "Queued \(insertedCount, privacy: .public) Auto Learn candidate(s) for AI review"
@@ -408,9 +438,57 @@ actor AutoLearnService {
         }
     }
 
-    private func schedulePendingReview() async {
+    /// Saves each pair as a word replacement, with no AI review. The corrected text becomes the
+    /// replacement exactly as the user typed it. Vocabulary is left alone: a repeated fix says how
+    /// a word is heard, not that it belongs in the prompt.
+    private func learn(_ candidates: [DetectedCorrectionCandidate]) async {
+        guard let replacementStore else { return }
+        let reviewCandidates = candidates.map {
+            AutoLearnReviewCandidate(
+                candidateID: UUID(),
+                originalText: $0.heardText,
+                correctedText: $0.correctedPairText
+            )
+        }
+        let decisions = reviewCandidates.map {
+            AutoLearnReviewDecision(
+                candidateID: $0.candidateID,
+                learningAction: .addReplacementOnly,
+                incorrectTextToReplace: $0.originalText,
+                correctedVocabularyTerm: $0.correctedText
+            )
+        }
+
+        do {
+            let summary = try await replacementStore.apply(decisions, candidates: reviewCandidates)
+            await resetCounts(of: candidates)
+            guard summary.hasChanges else { return }
+            logger.notice(
+                "Auto Learn saved replacementsCreated=\(summary.createdCount, privacy: .public) replacementsUpdated=\(summary.updatedCount, privacy: .public)"
+            )
+            await MainActor.run {
+                NotificationCenter.default.post(name: .wordReplacementsDidChange, object: nil)
+            }
+            await showLearnedNotification(for: summary)
+        } catch {
+            // The counts stay, so the next repeat tries again.
+            log(error, message: "Failed to save repeated Auto Learn corrections")
+        }
+    }
+
+    private func resetCounts(of candidates: [DetectedCorrectionCandidate]) async {
+        for candidate in candidates {
+            try? await countStore.reset(
+                heard: candidate.heardText,
+                corrected: candidate.correctedPairText
+            )
+        }
+    }
+
+    private func schedulePendingReview(trigger: AutoLearnReviewTrigger = .automatic) async {
         guard reviewTask == nil,
             AutoLearnSettings.isEnabled,
+            trigger.isAllowed(usesAIReview: AutoLearnSettings.usesAIReview),
             replacementStore != nil,
             reviewer != nil
         else {
@@ -688,6 +766,11 @@ actor AutoLearnService {
 
     private func undo(_ correction: AutoLearnAppliedCorrection) async {
         guard let replacementStore else { return }
+        // Undo starts the pair's count again from zero.
+        try? await countStore.reset(
+            heard: correction.incorrectTextToReplace,
+            corrected: correction.correctedVocabularyTerm
+        )
         do {
             try await replacementStore.undo(correction)
             await MainActor.run {

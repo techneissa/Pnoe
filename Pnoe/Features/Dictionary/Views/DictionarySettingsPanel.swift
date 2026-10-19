@@ -14,6 +14,9 @@ struct DictionarySettingsPanel: View {
     @AppStorage(AutoLearnSettings.isEnabledKey) private var isAutoLearnDictionaryEnabled = true
     @AppStorage(AutoLearnSettings.reviewScheduleKey)
     private var reviewScheduleRawValue = AutoLearnReviewSchedule.immediately.rawValue
+    @AppStorage(AutoLearnSettings.repeatThresholdKey)
+    private var repeatThresholdRawValue = AutoLearnRepeatThreshold.default.rawValue
+    @AppStorage(AutoLearnSettings.usesAIReviewKey) private var usesAIReview = false
     @State private var pendingCorrectionCount = 0
     @State private var pendingImport: DictionaryImportPayload?
     @State private var transferAlert: DictionaryTransferAlert?
@@ -39,39 +42,62 @@ struct DictionarySettingsPanel: View {
                         }
 
                     if isAutoLearnDictionaryEnabled {
-                        AutoLearnModelSelectionView()
+                        AutoLearnRepeatThresholdRow(selection: repeatThreshold) {
+                            InfoTip(
+                                "Pnoe adds a correction to the dictionary once you have made the same one this many times: the same heard text changed to the same corrected text. A single fix is often a one-off, so two is a safe start."
+                            )
+                        }
 
-                        LabeledContent {
-                            Picker("", selection: $reviewScheduleRawValue) {
-                                ForEach(AutoLearnReviewSchedule.allCases) { schedule in
-                                    Text(schedule.title).tag(schedule.rawValue)
-                                }
-                            }
-                            .labelsHidden()
-                            .onChange(of: reviewScheduleRawValue) { _, _ in
-                                Task {
-                                    await AutoLearnService.shared.reviewScheduleDidChange()
-                                }
-                            }
-                        } label: {
+                        Toggle(isOn: $usesAIReview) {
                             HStack(spacing: 4) {
-                                Text("Review corrections")
+                                Text("Review with AI")
                                 InfoTip(
-                                    "Choose when saved corrections are sent to your AI provider. Manual review keeps them local until you select Review Now."
+                                    "Off by default. When on, a correction that reached the count above is sent to your AI provider, which decides whether to save it. Without it, Pnoe saves the correction as it is."
                                 )
                             }
                         }
-
-                        LabeledContent("Corrections to review") {
-                            Text("\(pendingCorrectionCount)")
-                                .foregroundStyle(.secondary)
+                        .onChange(of: usesAIReview) { _, _ in
+                            Task {
+                                await AutoLearnService.shared.reviewScheduleDidChange()
+                            }
                         }
 
-                        Button("Review Now") {
-                            onReviewNow()
+                        // Corrections queued before the count existed still need these controls.
+                        if usesAIReview || pendingCorrectionCount > 0 {
+                            AutoLearnModelSelectionView()
+
+                            LabeledContent {
+                                Picker("", selection: $reviewScheduleRawValue) {
+                                    ForEach(AutoLearnReviewSchedule.allCases) { schedule in
+                                        Text(schedule.title).tag(schedule.rawValue)
+                                    }
+                                }
+                                .labelsHidden()
+                                .onChange(of: reviewScheduleRawValue) { _, _ in
+                                    Task {
+                                        await AutoLearnService.shared.reviewScheduleDidChange()
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Text("Review corrections")
+                                    InfoTip(
+                                        "Choose when saved corrections are sent to your AI provider. Manual review keeps them local until you select Review Now."
+                                    )
+                                }
+                            }
+
+                            LabeledContent("Corrections to review") {
+                                Text("\(pendingCorrectionCount)")
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Button("Review Now") {
+                                onReviewNow()
+                            }
+                            .focusEffectDisabled()
+                            .disabled(pendingCorrectionCount == 0)
                         }
-                        .focusEffectDisabled()
-                        .disabled(pendingCorrectionCount == 0)
                     }
                 } header: {
                     AutoLearnSectionHeader()
@@ -136,6 +162,13 @@ struct DictionarySettingsPanel: View {
                 dismissButton: .cancel(Text("OK"))
             )
         }
+    }
+
+    private var repeatThreshold: Binding<AutoLearnRepeatThreshold> {
+        Binding(
+            get: { AutoLearnRepeatThreshold(rawValue: repeatThresholdRawValue) ?? .default },
+            set: { repeatThresholdRawValue = $0.rawValue }
+        )
     }
 
     private var panelHeader: some View {
