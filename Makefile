@@ -139,3 +139,8 @@ help:
 	@echo "  all                Run full build process (default)"
 	@echo "  clean              Remove build artifacts"
 	@echo "  help               Show this help message"
+
+# Formatter package tests (no Xcode project, no whisper framework needed)
+.PHONY: formatter-test
+formatter-test:
+	swift test --package-path Packages/PnoeFormatter
