@@ -139,17 +139,17 @@ class TranscriptionPipeline {
                 text = ParagraphFormatter.format(text)
             }
 
-            // Snippets match after word replacements. Their expansions stay out of the text until
-            // after enhancement, so neither replacements nor the model touch them.
-            let snippets = SnippetProcessor.prepare(
-                text,
-                rules: SnippetService.rules(using: modelContext),
-                applyingReplacements: {
-                    WordReplacementService.shared.applyReplacements(to: $0, using: modelContext)
-                }
-            )
-            text = snippets.textForEnhancement
-            let cleanedText = snippets.expandedText
+            // Whether the answer is shown in the recorder instead of pasted decides what the model is given.
+            let shouldRespondInRecorder =
+                !assistant.isFollowUp
+                && resolvedOutputConfiguration.outputMode == .respond
+                && resolvedEnhancementConfiguration?.isEnabled == true
+                && resolvedEnhancementConfiguration.map { configuration in
+                    enhancementService?.isConfigured(for: configuration) == true
+                } == true
+            let prepared = PreparedTranscript.make(
+                text, modelContext: modelContext, respondInRecorder: shouldRespondInRecorder)
+            let cleanedText = prepared.transcript
 
             let actualDuration = await AudioFileMetadata.duration(for: audioURL)
 
@@ -162,29 +162,12 @@ class TranscriptionPipeline {
             finalText = cleanedText
 
             if !assistant.isFollowUp {
-                let shouldRespondInRecorder =
-                    resolvedOutputConfiguration.outputMode == .respond
-                    && resolvedEnhancementConfiguration?.isEnabled == true
-                    && resolvedEnhancementConfiguration.map { configuration in
-                        enhancementService?.isConfigured(for: configuration) == true
-                    } == true
                 outputForDelivery = resolvedOutputConfiguration
                 responseConfig = shouldRespondInRecorder ? resolvedEnhancementConfiguration : nil
 
-                let isSkipShortEnhancementEnabled = UserDefaults.standard.bool(forKey: "SkipShortEnhancement")
-                let savedThreshold = UserDefaults.standard.integer(forKey: "ShortEnhancementWordThreshold")
-                let shortEnhancementWordThreshold = savedThreshold > 0 ? savedThreshold : 3
-                let shouldSkipEnhancement =
-                    !shouldRespondInRecorder
-                    && (snippets.skipsEnhancement
-                        || (isSkipShortEnhancementEnabled
-                            && WordCounter.count(in: text) <= shortEnhancementWordThreshold))
-
                 if let enhancementService,
                     let resolvedEnhancementConfiguration,
-                    resolvedEnhancementConfiguration.isEnabled,
-                    enhancementService.isConfigured(for: resolvedEnhancementConfiguration),
-                    !shouldSkipEnhancement
+                    enhancementService.runsEnhancement(for: prepared, configuration: resolvedEnhancementConfiguration)
                 {
                     if shouldCancel() {
                         await finishCanceledTranscription()
@@ -192,10 +175,8 @@ class TranscriptionPipeline {
                     }
 
                     onStateChange(.enhancing)
-                    // Deliberate exception: respond mode pastes nothing and the model needs the snippet content, so it gets the expanded text; a paste gets placeholders.
-                    let textForAI = shouldRespondInRecorder ? cleanedText : text
                     if shouldRespondInRecorder {
-                        await assistant.startResponse(textForAI, resolvedEnhancementConfiguration)
+                        await assistant.startResponse(prepared.textForAI, resolvedEnhancementConfiguration)
                     }
 
                     do {
@@ -204,14 +185,11 @@ class TranscriptionPipeline {
                             resolvedEnhancementConfiguration.modelName
                             ?? resolvedEnhancementConfiguration.provider?.defaultModel
                         transcription.promptName = resolvedEnhancementConfiguration.prompt?.title
-                        let enhancementResult = try await enhancementService.enhance(
-                            textForAI,
+                        let (enhancementResult, enhancedText) = try await enhancementService.enhanceTranscript(
+                            prepared,
                             configuration: resolvedEnhancementConfiguration,
                             contextSnapshot: contextSnapshot
                         )
-                        let enhancedText =
-                            shouldRespondInRecorder
-                            ? enhancementResult.text : snippets.finish(enhanced: enhancementResult.text)
                         transcription.enhancedText = enhancedText
                         transcription.promptName =
                             enhancementResult.promptName ?? resolvedEnhancementConfiguration.prompt?.title

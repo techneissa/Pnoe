@@ -57,7 +57,9 @@ public struct FormatterPipeline: Sendable {
 
         // 3. Normalize and protect (spoken forms written out, exact spans swapped for markers).
         let protected = TokenProtector.protect(cleaned, vocabulary: vocabulary)
-        let fallback = protected.normalized
+        // The take as pasted when the model's text is not used: the words as said, written out, with a
+        // capital, "I" and a final period. Spans are protected while the capital goes on, then restored.
+        let fallback = FallbackCleanup.apply(protected, context: context)
 
         // 2. Skip: under 4 words never reach the model. Counted after step 3, so "tom at example dot com"
         // is one word. Formatting runs on the marker text so a path or address never gets a capital.
