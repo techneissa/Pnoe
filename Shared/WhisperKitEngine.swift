@@ -7,6 +7,9 @@ protocol WhisperKitRunner: AnyObject, Sendable {
     /// downloader's layout, so nothing is fetched at load time.
     func load(modelFolder: URL, tokenizerBase: URL) async throws
     func transcribe(audioURL: URL, language: String?, prompt: String?) async throws -> String
+    /// Decodes one rolling window of 16 kHz mono samples for the live line. Quick settings, no
+    /// chunking: the caller keeps the window within one Whisper window.
+    func transcribeLive(samples: [Float], language: String?, prompt: String?) async throws -> WhisperKitLiveResult
     func unload() async
 }
 
@@ -33,6 +36,7 @@ actor WhisperKitEngine {
     private var runner: (any WhisperKitRunner)?
     private var loadedModelName: String?
     private var activeTake: Task<String, Error>?
+    private var activeLive: Task<WhisperKitLiveResult, Error>?
 
     private var isBusy = false
     private var waiters: [(id: UUID, continuation: CheckedContinuation<Void, Error>)] = []
@@ -88,9 +92,38 @@ actor WhisperKitEngine {
         }
     }
 
+    /// Decodes a live window if the engine is idle and the model is already loaded; returns nil
+    /// otherwise. A live window never waits behind a take, a load or another window: it is dropped
+    /// and the next one carries the newer audio. Cancelling the calling task cancels the decode.
+    func transcribeLive(
+        samples: [Float],
+        spec: WhisperKitModelSpec,
+        language: String?,
+        prompt: String?
+    ) async throws -> WhisperKitLiveResult? {
+        try Task.checkCancellation()
+        guard !isBusy, let runner, loadedModelName == spec.name else { return nil }
+        return try await exclusive {
+            let language = Self.languageCode(from: language)
+            let prompt = prompt?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            let decode = Task { try await runner.transcribeLive(samples: samples, language: language, prompt: prompt) }
+            activeLive = decode
+            defer { activeLive = nil }
+
+            let result = try await withTaskCancellationHandler {
+                try await decode.value
+            } onCancel: {
+                decode.cancel()
+            }
+            try Task.checkCancellation()
+            return result
+        }
+    }
+
     /// Stops the running take, waits for the takes and loads ahead of it, then releases the model.
     func unload() async {
         activeTake?.cancel()
+        activeLive?.cancel()
         try? await exclusive(cancellable: false) { await releaseRunner() }
     }
 

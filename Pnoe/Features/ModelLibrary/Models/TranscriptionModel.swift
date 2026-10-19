@@ -142,6 +142,9 @@ struct WhisperKitModel: TranscriptionModel, Sendable {
     let displayName: String
     let description: String
     let provider: ModelProvider = .whisperKit
+    /// Live text comes from rolling-window decodes of the recorder's audio; the final text is a
+    /// full decode of the take (see `WhisperKitStreamingProvider`).
+    let supportsStreaming = true
     let size: String
     let speed: Double
     let accuracy: Double
