@@ -164,7 +164,7 @@ struct ModeView: View {
             switch activePanel {
             case .templatePicker?:
                 WorkflowTemplatePickerView(
-                    options: StarterModeCatalog.templates.map(\.pickerOption),
+                    options: StarterModeCatalog.pickerTemplates.map(\.pickerOption),
                     onSelect: { option in
                         let template = StarterModeCatalog.templates.first { $0.id == option?.id }
                         if let template { seedPrompts(for: template) }

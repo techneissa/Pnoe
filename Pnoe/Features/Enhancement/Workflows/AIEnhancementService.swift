@@ -423,11 +423,6 @@ class AIEnhancementService: ObservableObject {
         }
         let startTime = Date()
         let promptName = configuration.prompt?.title
-        guard GuardedCleanup.canClean(text) else {
-            return AIEnhancementResult(
-                text: text, duration: 0, promptName: promptName, systemMessage: nil, userMessage: nil)
-        }
-
         let modelName = configuration.modelName ?? provider.defaultModel
         let timeout = requestTimeout
         let aiService = self.aiService
@@ -435,13 +430,18 @@ class AIEnhancementService: ObservableObject {
             ollamaBaseURL: provider == .ollama ? provider.baseURL : nil,
             modelName: modelName
         ) { system, turns, deadline in
-            try await aiService.performChatCompletion(
-                provider: provider,
-                modelName: modelName,
-                messages: turns.map { ChatMessage(role: $0.role, content: $0.content) },
-                systemPrompt: system,
-                timeout: min(timeout, deadline)
-            ).text
+            do {
+                let completion = try await aiService.performChatCompletion(
+                    provider: provider,
+                    modelName: modelName,
+                    messages: turns.map { ChatMessage(role: $0.role, content: $0.content) },
+                    systemPrompt: system,
+                    timeout: min(timeout, deadline)
+                )
+                return ChatCompletionRuntime.Completion(text: completion.text, finishReason: completion.finishReason)
+            } catch EnhancementError.outputTruncated {
+                return ChatCompletionRuntime.Completion(text: "", finishReason: "length")
+            }
         }
         let vocabulary = customVocabularyService.words(from: modelContext)
         let result = await cleanup.clean(text, vocabulary: vocabulary)

@@ -4,6 +4,9 @@ import LLMkit
 struct AIChatCompletionResult: Sendable {
     let text: String
     let openRouterCompletion: OpenRouterCompletion?
+
+    /// The provider's finish reason, for the clients that report one (only OpenRouter today).
+    var finishReason: String? { openRouterCompletion?.finishReason }
 }
 
 extension AIService {

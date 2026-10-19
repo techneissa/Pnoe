@@ -2098,24 +2098,24 @@
         }
       }
     },
-    "Fixes punctuation, capitals and fillers but keeps your exact words; if the AI changes more, the plain transcript is pasted." : {
+    "Fixes punctuation, capitals and fillers and aims to keep your words; a result that fails Pnoe's checks is replaced by the plain transcript." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Korrigiert Satzzeichen, Großschreibung und Füllwörter, behält aber deine genauen Worte; ändert die KI mehr, wird stattdessen das unbearbeitete Transkript eingefügt."
+            "value" : "Korrigiert Satzzeichen, Großschreibung und Füllwörter und versucht, deine Worte zu behalten; besteht ein Ergebnis die Prüfungen von Pnoe nicht, wird das unbearbeitete Transkript eingefügt."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Corrige la ponctuation, les majuscules et les mots de remplissage, mais garde vos mots exacts ; si l'IA modifie davantage, la transcription brute est collée."
+            "value" : "Corrige la ponctuation, les majuscules et les mots de remplissage en s'efforçant de garder vos mots ; un résultat qui échoue aux contrôles de Pnoe est remplacé par la transcription brute."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "修正标点、大小写和口头禅，但保留你的原话；如果 AI 改动更多，就粘贴原始转写。"
+            "value" : "修正标点、大小写和口头禅，并尽量保留你的原话；结果未通过 Pnoe 的检查时，会改为粘贴原始转写。"
           }
         }
       }
@@ -2270,6 +2270,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "把你说的话整理成待办清单。"
+          }
+        }
+      }
+    },
+    "Uses Pnoe's built-in cleanup that keeps your words" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nutzt Pnoes integrierte Bereinigung, die deine Worte beibehält"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utilise le nettoyage intégré de Pnoe, qui garde vos mots"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 Pnoe 内置的清理功能，保留你的原话"
           }
         }
       }
@@ -23341,7 +23363,9 @@
         }
       }
     },
-    "Skip" : {},
+    "Skip" : {
+
+    },
     "Skip API Setup" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -23365,7 +23389,9 @@
         }
       }
     },
-    "Skip onboarding" : {},
+    "Skip onboarding" : {
+
+    },
     "Skip short transcriptions" : {
       "localizations" : {
         "de" : {
@@ -23388,7 +23414,9 @@
         }
       }
     },
-    "Skip the remaining onboarding steps" : {},
+    "Skip the remaining onboarding steps" : {
+
+    },
     "Skipped %lld duplicate, conflicting, invalid, or cyclic entries." : {
       "localizations" : {
         "de" : {

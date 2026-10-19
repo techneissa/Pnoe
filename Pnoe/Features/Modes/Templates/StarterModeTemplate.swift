@@ -188,6 +188,12 @@ enum StarterModeCatalog {
         StarterModeTemplate(.emailReply, .emailReply),
     ]
 
+    /// The templates the New Workflow picker offers. Enhancement stays in the catalog for onboarding and
+    /// for workflows already created from it, but Cleaned Text replaces it in the picker.
+    static var pickerTemplates: [StarterModeTemplate] {
+        templates.filter { $0.kind != .enhance }
+    }
+
     static var ids: Set<UUID> {
         Set(templates.map(\.id))
     }

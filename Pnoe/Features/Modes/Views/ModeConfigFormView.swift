@@ -418,6 +418,11 @@ struct ModeConfigFormView: View {
                 if let provider = configuredSelectedAIProvider {
                     aiModelPicker(for: provider)
                     promptPicker
+                    if draft.selectedPromptId == PromptTemplates.cleanedTextPromptId {
+                        Text("Uses Pnoe's built-in cleanup that keeps your words")
+                            .font(.callout)
+                            .foregroundColor(.secondary)
+                    }
                     if draft.selectedPromptId == PromptTemplates.translationPromptId {
                         translationLanguagePicker
                     }
@@ -528,7 +533,7 @@ struct ModeConfigFormView: View {
                 .labelsHidden()
             }
 
-            if let selectedPrompt {
+            if let selectedPrompt, selectedPrompt.id != PromptTemplates.cleanedTextPromptId {
                 Button {
                     openPromptEditor(.edit(selectedPrompt))
                 } label: {

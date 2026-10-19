@@ -14,10 +14,6 @@ final class WorkflowPickerPreviewTests: XCTestCase {
             summary: "Fast transcription with no AI enhancement.",
             detail: "Use this when you want the quickest possible voice-to-text result."),
         WorkflowTemplateOption(
-            id: UUID(), title: "Enhancement", icon: "sparkles",
-            summary: "Clean up dictated text while preserving your meaning.",
-            detail: "Use this for everyday writing when you want grammar, flow, and light formatting improved."),
-        WorkflowTemplateOption(
             id: UUID(), title: "Email", icon: "envelope.fill",
             summary: "Turn a rough thought into a clean email.",
             detail: "Use this after selecting relevant text or opening the related window."),
@@ -82,7 +78,7 @@ final class WorkflowPickerPreviewTests: XCTestCase {
     }
 
     func testRenderTemplateInfoPopover() throws {
-        let option = Self.options[2]
+        let option = Self.options[1]
         let view = VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Image(systemName: option.icon).frame(width: 28, height: 28)

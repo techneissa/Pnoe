@@ -15,6 +15,7 @@ final class WorkflowTemplateCatalogTests: XCTestCase {
             XCTAssertFalse(template.symbol.isEmpty, template.title)
             XCTAssertTrue(template.summary.hasSuffix("."), template.title)
             XCTAssertEqual(template.summary.filter { $0 == "." }.count, 1, "\(template.title): one sentence")
+            XCTAssertFalse(template.summary.contains("exact"), "\(template.title): no claim the checks cannot back")
             let option = template.pickerOption
             XCTAssertEqual(option.title, template.title)
             XCTAssertEqual(option.icon, template.symbol)
@@ -120,16 +121,74 @@ final class CleanedTextGuardTests: XCTestCase {
         XCTAssertTrue(result.text.contains("src/app/main.swift"))
     }
 
-    func testATakeWithSnippetPlaceholdersSkipsTheModel() {
-        XCTAssertFalse(GuardedCleanup.canClean("send my ⟦snippet-0⟧ to Sam"))
-        XCTAssertTrue(GuardedCleanup.canClean(take))
+    func testSnippetExpansionsSurviveVerbatimWhileTheRestOfTheTakeIsCleaned() async {
+        let expansion = "alex.morgan+pnoe@example.com"
+        let prepared = SnippetProcessor.prepare(
+            "send it to my email please um thanks",
+            rules: [SnippetRule(trigger: "my email", expansion: expansion)],
+            applyingReplacements: { $0 })
+        XCTAssertEqual(prepared.textForEnhancement, "send it to ⟦snippet-0⟧ please um thanks")
+
+        // The model sees a marker where the snippet was and the filler is already gone.
+        let cleanup = GuardedCleanup(
+            runtime: FakeRuntime { request in
+                XCTAssertFalse(request.suffix.last?.content.contains("snippet") ?? true)
+                XCTAssertTrue(request.suffix.last?.content.contains("⟦1⟧") == true)
+                return GenerationResult(text: "Send it to ⟦1⟧, please. Thanks.")
+            }, spec: spec)
+        let result = await cleanup.clean(prepared.textForEnhancement)
+        XCTAssertNil(result.fallbackReason)
+        XCTAssertEqual(prepared.finish(enhanced: result.text), "Send it to \(expansion), please. Thanks.")
+    }
+
+    func testSnippetPlaceholdersAlsoSurviveTheRawFallback() async {
+        let prepared = SnippetProcessor.prepare(
+            "send it to my email please um thanks",
+            rules: [SnippetRule(trigger: "my email", expansion: "alex@example.com")],
+            applyingReplacements: { $0 })
+        let cleanup = GuardedCleanup(runtime: FakeRuntime(throwing: .crashed), spec: spec)
+        let result = await cleanup.clean(prepared.textForEnhancement)
+        XCTAssertEqual(result.fallbackReason, FallbackReason.runtimeCrashed.rawValue)
+        XCTAssertEqual(prepared.finish(enhanced: result.text), "send it to alex@example.com please thanks")
+    }
+
+    func testSeveralSnippetsKeepTheirOwnExpansion() async {
+        let prepared = SnippetProcessor.prepare(
+            "email me at my email or call my number when you can please",
+            rules: [
+                SnippetRule(trigger: "my email", expansion: "a@example.com"),
+                SnippetRule(trigger: "my number", expansion: "555 0100"),
+            ],
+            applyingReplacements: { $0 })
+        let cleanup = GuardedCleanup(runtime: FakeRuntime(throwing: .crashed), spec: spec)
+        let result = await cleanup.clean(prepared.textForEnhancement)
+        XCTAssertTrue(prepared.finish(enhanced: result.text).contains("a@example.com"))
+        XCTAssertTrue(prepared.finish(enhanced: result.text).contains("555 0100"))
+    }
+
+    func testAReplyThatHitTheLengthLimitPastesTheRawText() async {
+        let runtime = ChatCompletionRuntime { _, _, _ in
+            ChatCompletionRuntime.Completion(text: "Please open ⟦1⟧ and fix the login bug before the demo.", finishReason: "length")
+        }
+        let result = await GuardedCleanup(runtime: runtime, spec: spec).clean(take)
+        XCTAssertEqual(result.fallbackReason, FallbackReason.truncated.rawValue)
+        XCTAssertTrue(result.text.contains("src/app/main.swift"))
+    }
+
+    func testEveryProvidersLengthWordCountsAsCutOffAndNormalEndsDoNot() {
+        for reason in ["length", "max_tokens", "MAX_TOKENS", "max_output_tokens"] {
+            XCTAssertTrue(ChatCompletionRuntime.Completion(text: "x", finishReason: reason).wasCutOff, reason)
+        }
+        for reason in ["stop", "end_turn", "STOP", nil] {
+            XCTAssertFalse(ChatCompletionRuntime.Completion(text: "x", finishReason: reason).wasCutOff, reason ?? "nil")
+        }
     }
 
     func testTheChatCompletionAdapterSendsTheSystemTurnFirstAndTheTranscriptLast() async throws {
         let seen = Box()
         let runtime = ChatCompletionRuntime { system, turns, _ in
             await seen.set(system: system, turns: turns)
-            return "Please open ⟦1⟧ and fix the login bug before the demo."
+            return ChatCompletionRuntime.Completion(text: "Please open ⟦1⟧ and fix the login bug before the demo.")
         }
         let result = await GuardedCleanup(runtime: runtime, spec: spec).clean(take)
         XCTAssertEqual(result.text, "Please open src/app/main.swift and fix the login bug before the demo.")
@@ -154,6 +213,13 @@ final class RewriteOutputSanitizerTests: XCTestCase {
         XCTAssertEqual(
             RewriteOutputSanitizer.sanitize("```\nBonjour à tous.\n```", input: "hello everyone"),
             "Bonjour à tous.")
+    }
+
+    func testARejectedReplyPastesTheTranscriptNeverTheModelsText() {
+        let transcript = "call sam and send the file"
+        XCTAssertEqual(RewriteOutputSanitizer.sanitize("", input: transcript), transcript)
+        XCTAssertEqual(RewriteOutputSanitizer.sanitize("```\n```", input: transcript), transcript)
+        XCTAssertEqual(RewriteOutputSanitizer.sanitize("{\"unexpected\": \"shape\", \"other\": 1}", input: transcript), transcript)
     }
 
     func testAnUnchangedRewriteIsNotHeldToTheSpeakersWords() {

@@ -40,7 +40,7 @@ enum LocalWorkflowTemplate: String, CaseIterable, Identifiable {
     var summary: String {
         switch self {
         case .cleanedText:
-            "Fixes punctuation, capitals and fillers but keeps your exact words; if the AI changes more, the plain transcript is pasted."
+            "Fixes punctuation, capitals and fillers and aims to keep your words; a result that fails Pnoe's checks is replaced by the plain transcript."
         case .checklist: "Turns what you say into a checklist of to-dos."
         case .meetingNotes: "Turns a spoken recap into short notes with decisions and action items."
         case .summary: "Boils what you say down to the main points."
