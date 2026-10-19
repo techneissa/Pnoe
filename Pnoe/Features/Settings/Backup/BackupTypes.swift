@@ -101,6 +101,8 @@ struct GeneralBackup: Codable {
     let autoLearnReviewSchedule: String?
     let autoLearnProvider: String?
     let autoLearnModel: String?
+    let autoLearnRepeatThreshold: Int?
+    let autoLearnUsesAIReview: Bool?
 }
 
 struct WordBackup: Codable {
