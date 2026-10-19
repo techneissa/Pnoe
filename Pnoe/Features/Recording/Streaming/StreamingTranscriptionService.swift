@@ -125,6 +125,7 @@ class StreamingTranscriptionService {
     private var committedSegments: [String] = []
     private let modelContext: ModelContext
     private let fluidAudioService: FluidAudioTranscriptionService?
+    private let whisperKitService: WhisperKitTranscriptionService?
     private var onPartialTranscript: ((String) -> Void)?
     private let metrics = StreamingMetrics()
     private var stopStartedAt: Date?
@@ -133,10 +134,12 @@ class StreamingTranscriptionService {
 
     init(
         modelContext: ModelContext, fluidAudioService: FluidAudioTranscriptionService? = nil,
+        whisperKitService: WhisperKitTranscriptionService? = nil,
         onPartialTranscript: ((String) -> Void)? = nil
     ) {
         self.modelContext = modelContext
         self.fluidAudioService = fluidAudioService
+        self.whisperKitService = whisperKitService
         self.onPartialTranscript = onPartialTranscript
     }
 
@@ -163,7 +166,7 @@ class StreamingTranscriptionService {
         firstPartialLogged = false
         firstCommitLogged = false
 
-        let provider = createProvider(for: model)
+        let provider = try createProvider(for: model, context: context)
         self.provider = provider
 
         let selectedLanguage = context.language ?? "auto"
@@ -304,7 +307,16 @@ class StreamingTranscriptionService {
 
     // MARK: - Private
 
-    private func createProvider(for model: any TranscriptionModel) -> StreamingTranscriptionProvider {
+    private func createProvider(
+        for model: any TranscriptionModel, context: TranscriptionRequestContext
+    ) throws -> StreamingTranscriptionProvider {
+        if model.provider == .whisperKit {
+            guard let whisperKitService, let whisperKitModel = model as? WhisperKitModel else {
+                throw StreamingTranscriptionError.connectionFailed("WhisperKit is not available for \(model.displayName)")
+            }
+            return WhisperKitStreamingProvider(
+                service: whisperKitService, model: whisperKitModel, prompt: context.prompt)
+        }
         if model.provider == .fluidAudio {
             if FluidAudioModelManager.isNemotronModel(named: model.name) {
                 return FluidAudioNemotronStreamingProvider()

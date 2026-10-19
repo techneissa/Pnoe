@@ -13,6 +13,10 @@ private final class FakeRunner: WhisperKitRunner, @unchecked Sendable {
     private(set) var maxTakesRunning = 0
     private(set) var takesRunningAtUnload: [Int] = []
     private(set) var cancelledTakes = 0
+    private(set) var liveRequests: [(samples: Int, language: String?, prompt: String?)] = []
+    private(set) var cancelledLives = 0
+    var liveReply = WhisperKitLiveResult(
+        segments: [WhisperKitLiveSegment(text: " live words", start: 0, end: 1)], language: "en")
     var reply = "  hello world \n"
     var failLoad = false
     var loadDelay: Duration = .zero
@@ -48,6 +52,24 @@ private final class FakeRunner: WhisperKitRunner, @unchecked Sendable {
             }
         }
         return reply
+    }
+
+    func transcribeLive(samples: [Float], language: String?, prompt: String?) async throws -> WhisperKitLiveResult {
+        lock.withLock {
+            liveRequests.append((samples.count, language, prompt))
+            takesRunning += 1
+            maxTakesRunning = max(maxTakesRunning, takesRunning)
+        }
+        defer { lock.withLock { takesRunning -= 1 } }
+        if mode == .blocksUntilCancelled {
+            do {
+                try await Task.sleep(for: .seconds(60))
+            } catch {
+                lock.withLock { cancelledLives += 1 }
+                throw error
+            }
+        }
+        return liveReply
     }
 
     func unload() async {
@@ -419,4 +441,166 @@ final class WhisperKitEngineTests: XCTestCase {
         XCTAssertTrue(threwCancellation)
         XCTAssertTrue(box.made.isEmpty)
     }
+
+    // MARK: Live windows
+
+    func testALiveWindowRunsOnTheLoadedModelWithTheBareLanguageAndPrompt() async throws {
+        let spec = try installed(WhisperKitCatalog.small)
+        let box = RunnerBox()
+        let engine = makeEngine(box)
+        try await engine.load(spec)
+
+        let result = try await engine.transcribeLive(
+            samples: [Float](repeating: 0.1, count: 16_000), spec: spec, language: "en-US", prompt: "  Pnoe  ")
+
+        XCTAssertEqual(result?.segments.map(\.text), [" live words"])
+        let live = try XCTUnwrap(box.made[0].liveRequests.first)
+        XCTAssertEqual(live.samples, 16_000)
+        XCTAssertEqual(live.language, "en")
+        XCTAssertEqual(live.prompt, "Pnoe")
+        XCTAssertEqual(box.made.count, 1)
+    }
+
+    func testALiveWindowIsDroppedWhenNoModelIsLoaded() async throws {
+        let spec = try installed(WhisperKitCatalog.small)
+        let box = RunnerBox()
+        let engine = makeEngine(box)
+
+        let result = try await engine.transcribeLive(samples: [0.1], spec: spec, language: nil, prompt: nil)
+
+        XCTAssertNil(result)
+        XCTAssertTrue(box.made.isEmpty, "a live window must not load the model")
+    }
+
+    func testALiveWindowIsDroppedWhileATakeRuns() async throws {
+        let spec = try installed(WhisperKitCatalog.small)
+        let box = RunnerBox()
+        box.mode = .blocksUntilCancelled
+        let engine = makeEngine(box)
+        try await engine.load(spec)
+
+        let take = Task { try await engine.transcribe(audioURL: audio, spec: spec, language: nil, prompt: nil) }
+        try await waitUntil("take started") { box.made.first?.startedTakes == 1 }
+
+        let result = try await engine.transcribeLive(samples: [0.1], spec: spec, language: nil, prompt: nil)
+
+        XCTAssertNil(result)
+        XCTAssertTrue(box.made[0].liveRequests.isEmpty)
+        take.cancel()
+        _ = await take.result
+    }
+
+    func testALiveWindowIsDroppedWhileAnotherLiveWindowRuns() async throws {
+        let spec = try installed(WhisperKitCatalog.small)
+        let box = RunnerBox()
+        box.mode = .blocksUntilCancelled
+        let engine = makeEngine(box)
+        try await engine.load(spec)
+
+        let first = Task { try await engine.transcribeLive(samples: [0.1], spec: spec, language: nil, prompt: nil) }
+        try await waitUntil("live started") { box.made.first?.liveRequests.count == 1 }
+
+        let second = try await engine.transcribeLive(samples: [0.1], spec: spec, language: nil, prompt: nil)
+
+        XCTAssertNil(second)
+        XCTAssertEqual(box.made[0].liveRequests.count, 1)
+        first.cancel()
+        _ = await first.result
+    }
+
+    func testATakeWaitsForARunningLiveWindowAndNeverOverlapsIt() async throws {
+        let spec = try installed(WhisperKitCatalog.small)
+        let box = RunnerBox()
+        box.mode = .blocksUntilCancelled
+        let engine = makeEngine(box)
+        try await engine.load(spec)
+
+        let live = Task { try await engine.transcribeLive(samples: [0.1], spec: spec, language: nil, prompt: nil) }
+        try await waitUntil("live started") { box.made.first?.liveRequests.count == 1 }
+        let take = Task { try await engine.transcribe(audioURL: audio, spec: spec, language: nil, prompt: nil) }
+        try await Task.sleep(for: .milliseconds(30))
+        XCTAssertEqual(box.made[0].startedTakes, 0, "the take must wait for the live window")
+
+        // Cancelling the live window (what the live session does at stop) lets the take through.
+        box.made[0].mode = .instant
+        live.cancel()
+        _ = await live.result
+        let text = try await take.value
+
+        XCTAssertEqual(text, "hello world")
+        XCTAssertEqual(box.made[0].maxTakesRunning, 1)
+    }
+
+    func testCancellingALiveWindowStopsItAndFreesTheEngine() async throws {
+        let spec = try installed(WhisperKitCatalog.small)
+        let box = RunnerBox()
+        box.mode = .blocksUntilCancelled
+        let engine = makeEngine(box)
+        try await engine.load(spec)
+
+        let live = Task { try await engine.transcribeLive(samples: [0.1], spec: spec, language: nil, prompt: nil) }
+        try await waitUntil("live started") { box.made.first?.liveRequests.count == 1 }
+        live.cancel()
+
+        do {
+            _ = try await live.value
+            XCTFail("expected cancellation")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
+        XCTAssertEqual(box.made[0].cancelledLives, 1)
+        box.made[0].mode = .instant
+        let text = try await engine.transcribe(audioURL: audio, spec: spec, language: nil, prompt: nil)
+        XCTAssertEqual(text, "hello world")
+    }
+
+    func testUnloadCancelsARunningLiveWindowBeforeReleasingTheModel() async throws {
+        let spec = try installed(WhisperKitCatalog.small)
+        let box = RunnerBox()
+        box.mode = .blocksUntilCancelled
+        let engine = makeEngine(box)
+        try await engine.load(spec)
+
+        let live = Task { try await engine.transcribeLive(samples: [0.1], spec: spec, language: nil, prompt: nil) }
+        try await waitUntil("live started") { box.made.first?.liveRequests.count == 1 }
+        await engine.unload()
+        _ = await live.result
+
+        XCTAssertEqual(box.made[0].cancelledLives, 1)
+        XCTAssertEqual(box.made[0].unloadCount, 1)
+        XCTAssertEqual(box.made[0].takesRunningAtUnload, [0])
+    }
+
+    func testAfterTheLiveSessionStopsTheFinalDecodeRunsOnceAndAlone() async throws {
+        let spec = try installed(WhisperKitCatalog.small)
+        let box = RunnerBox()
+        let engine = makeEngine(box)
+        try await engine.load(spec)
+
+        let partials = LivePartials()
+        let session = WhisperKitLiveSession(
+            decoder: WhisperKitEngineLiveDecoder(engine: engine, spec: spec), language: "en", prompt: nil,
+            onPartial: { partials.add($0) })
+        await session.append([Float](repeating: 0.1, count: 32_000))
+        await session.start(interval: .milliseconds(10))
+        try await waitUntil("a live window ran") { box.made.first?.liveRequests.count == 1 }
+        await session.stop()
+        let liveWindows = box.made[0].liveRequests.count
+
+        let text = try await engine.transcribe(audioURL: audio, spec: spec, language: "en", prompt: nil)
+
+        XCTAssertEqual(text, "hello world")
+        XCTAssertEqual(box.made[0].requests.count, 1, "the final decode runs once")
+        XCTAssertEqual(box.made[0].liveRequests.count, liveWindows, "no live window after stop")
+        XCTAssertEqual(box.made[0].maxTakesRunning, 1, "a live window and the final decode never overlap")
+        XCTAssertEqual(partials.all.first, "live words")
+        XCTAssertEqual(box.made.count, 1)
+    }
+}
+
+private final class LivePartials: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String] = []
+    func add(_ text: String) { lock.withLock { values.append(text) } }
+    var all: [String] { lock.withLock { values } }
 }
