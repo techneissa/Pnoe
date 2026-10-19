@@ -2,9 +2,10 @@ import FormatterCore
 import FormatterModels
 import Foundation
 
-/// The models the Built-in engine can run: GGUF files already on the Mac (the Hugging Face cache, LM Studio's
-/// folder, Ollama's model store with Ollama not running, files the user chose) and the optional Gemma 4 E2B
-/// that Pnoe downloads. Listing reads folders and never copies, moves or loads anything.
+/// The models the Built-in engine can run: GGUF files (llama.cpp) and MLX folders (MLX) already on the Mac
+/// (the Hugging Face cache, LM Studio's folder, Ollama's model store with Ollama not running, files and folders
+/// the user chose) and the optional Gemma 4 E2B that Pnoe downloads. Listing reads folders and never copies,
+/// moves or loads anything. A model's spec names its engine, which routes it to the llama.cpp or the MLX service.
 enum BuiltInModels {
     /// The name the Workflow editor shows for this provider, and the raw value of the app's provider.
     static let providerName = "Built-in"
@@ -22,7 +23,7 @@ enum BuiltInModels {
     ) async -> [FormatterModelEntry] {
         var configuration = catalog
         configuration.userChosenPaths = chosenFiles
-        var entries = await FormatterModelCatalog(configuration: configuration).installedGGUFModels()
+        var entries = await FormatterModelCatalog(configuration: configuration).installedFileModels()
         if let url = artifact.installedModelFileURL {
             let downloaded = FormatterModelEntry(
                 id: downloadedID(for: artifact),
@@ -51,7 +52,7 @@ enum BuiltInModels {
         if modelID == downloadedID(for: artifact) { return artifact.installedModelFileURL != nil }
         var configuration = catalog
         configuration.userChosenPaths = chosenFiles
-        return FormatterModelCatalog(configuration: configuration).installedGGUFModelsNow().contains { $0.id == modelID }
+        return FormatterModelCatalog(configuration: configuration).installedFileModelsNow().contains { $0.id == modelID }
     }
 
     /// The runtime spec for a stored model id, or nil when that model is gone (a file deleted, a drive unplugged).
@@ -71,6 +72,9 @@ enum BuiltInModels {
     static let contextLength = 4096
 
     // MARK: Text for the picker
+
+    /// The badge on an MLX model.
+    static let mlxLabel = "MLX"
 
     static func sourceLabel(_ source: FormatterModelSource) -> String {
         switch source {
@@ -94,13 +98,14 @@ enum BuiltInModels {
         return String(name[..<range.lowerBound])
     }
 
-    /// "3.1 GB · Q4_K_M · Hugging Face"
+    /// "3.1 GB · Q4_K_M · Hugging Face" (an MLX model: "2.0 GB · 4bit · MLX · Hugging Face")
     static func detail(of entry: FormatterModelEntry) -> String {
         var parts: [String] = []
         if let size = entry.sizeBytes {
             parts.append(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
         }
         if let quantization = entry.quantization { parts.append(quantization) }
+        if entry.kind == .mlx { parts.append(mlxLabel) }
         parts.append(sourceLabel(entry.source))
         return parts.joined(separator: " · ")
     }
@@ -110,7 +115,8 @@ enum BuiltInModels {
     /// A workflow set to Built-in with no model yet starts on Gemma 4 E2B (the one Pnoe downloads, else any
     /// installed copy of it, since the prompt and the guards are tuned on it), else the smallest installed
     /// Gemma or Qwen instruct model, else nothing (the user picks). Base, code, vision and math variants and
-    /// very small files are skipped, as for Ollama.
+    /// very small files are skipped, as for Ollama. Only GGUF files are suggested: an MLX model is never
+    /// preselected, the user picks it.
     static func suggested(from entries: [FormatterModelEntry]) -> FormatterModelEntry? {
         if let downloaded = entries.first(where: { $0.source == .downloaded }) { return downloaded }
         if let gemma = entries.filter(isGemma4E2B).min(by: { ($0.sizeBytes ?? .max) < ($1.sizeBytes ?? .max) }) { return gemma }

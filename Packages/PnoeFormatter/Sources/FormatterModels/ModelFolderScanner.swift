@@ -117,7 +117,7 @@ struct ModelFolderScanner {
             sizeBytes: sizes.reduce(0, +),
             source: options.source,
             quantization: quantization,
-            spec: RuntimeModelSpec(modelURL: root)
+            spec: RuntimeModelSpec(modelURL: root, backend: .mlx)
         )
     }
 

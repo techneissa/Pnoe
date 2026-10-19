@@ -13,6 +13,8 @@ struct BuiltInModelRow: Identifiable, Equatable {
     /// "3.1 GB", nil when the size is unknown.
     let sizeText: String?
     let source: FormatterModelSource
+    /// `.mlx` rows carry an "MLX" badge next to the quantization; everything else is a GGUF file.
+    let kind: FormatterModelKind
 
     init(entry: FormatterModelEntry) {
         id = entry.id
@@ -20,28 +22,50 @@ struct BuiltInModelRow: Identifiable, Equatable {
         quantization = entry.quantization
         sizeText = entry.sizeBytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }
         source = entry.source
+        kind = entry.kind
     }
 
-    init(id: String, name: String, quantization: String?, sizeText: String?, source: FormatterModelSource) {
+    init(
+        id: String, name: String, quantization: String?, sizeText: String?, source: FormatterModelSource,
+        kind: FormatterModelKind = .gguf
+    ) {
         self.id = id
         self.name = name
         self.quantization = quantization
         self.sizeText = sizeText
         self.source = source
+        self.kind = kind
     }
 
     var sourceLabel: String { BuiltInModels.sourceLabel(source) }
-}
+    var isMLX: Bool { kind == .mlx }
 
-/// What the search field matches: the name, the quantization and the source, every word of the query.
-enum BuiltInModelSearch {
-    static func filter(_ rows: [BuiltInModelRow], query: String) -> [BuiltInModelRow] {
-        rows.filter { SearchWords.matches([$0.name, $0.quantization ?? "", $0.sourceLabel].joined(separator: " "), query: query) }
+    /// What the search field matches: the name, the quantization, the engine and the source.
+    var searchText: String {
+        [name, quantization ?? "", isMLX ? BuiltInModels.mlxLabel : "", sourceLabel].joined(separator: " ")
     }
 }
 
-/// Symbols and system colours for the sources and the quantizations.
+/// What the search field matches: the name, the quantization, the engine and the source, every word of the query.
+enum BuiltInModelSearch {
+    static func filter(_ rows: [BuiltInModelRow], query: String) -> [BuiltInModelRow] {
+        rows.filter { SearchWords.matches($0.searchText, query: query) }
+    }
+}
+
+/// Symbols, logos and system colours for the sources and the quantizations.
 enum BuiltInModelStyle {
+    /// The logo asset of a source that has one (Simple Icons, CC0: `provider-*` in the asset catalog); the others
+    /// keep an SF Symbol.
+    static func logo(for source: FormatterModelSource) -> String? {
+        switch source {
+        case .ollama, .ollamaStore: "provider-ollama"
+        case .huggingFaceCache: "provider-huggingface"
+        case .lmStudio: "provider-lmstudio"
+        case .userChosen, .downloaded: nil
+        }
+    }
+
     static func symbol(for source: FormatterModelSource) -> String {
         switch source {
         case .huggingFaceCache: "face.smiling"
@@ -65,11 +89,43 @@ enum BuiltInModelStyle {
     /// Smaller bit widths are lighter and rougher, the 8-bit and 16-bit files are the closest to the original.
     static func tint(forQuantization quantization: String) -> Color {
         let upper = quantization.uppercased()
+        // MLX names its width in bits: 4bit, 8bit.
+        if let bits = Int(upper.replacingOccurrences(of: "BIT", with: "")) {
+            switch bits {
+            case ..<4: return .orange
+            case 4: return .blue
+            case 5, 6: return .teal
+            default: return .green
+            }
+        }
         if upper.hasPrefix("IQ") { return .purple }
         if upper.hasPrefix("Q2") || upper.hasPrefix("Q3") { return .orange }
         if upper.hasPrefix("Q4") { return .blue }
         if upper.hasPrefix("Q5") || upper.hasPrefix("Q6") { return .teal }
         return .green
+    }
+}
+
+/// A source's icon at the size of the SF Symbol it replaces: its logo as a template in the source's tint, or the
+/// symbol for File and Downloaded.
+struct BuiltInSourceIcon: View {
+    /// Where the logos are looked up. The app's main bundle; a test that renders offscreen points it at the app.
+    nonisolated(unsafe) static var logoBundle: Bundle = .main
+
+    let source: FormatterModelSource
+
+    var body: some View {
+        if let logo = BuiltInModelStyle.logo(for: source) {
+            Image(logo, bundle: Self.logoBundle)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 11, height: 11)
+                .foregroundStyle(BuiltInModelStyle.tint(for: source))
+        } else {
+            Image(systemName: BuiltInModelStyle.symbol(for: source))
+                .foregroundStyle(BuiltInModelStyle.tint(for: source))
+        }
     }
 }
 
@@ -85,6 +141,19 @@ struct BuiltInQuantizationBadge: View {
             .padding(.vertical, 1.5)
             .background(tint.opacity(0.15), in: Capsule())
             .fixedSize()
+    }
+}
+
+/// MLX's wordmark next to the quantization: this model runs on MLX, not llama.cpp. The official logo (ml-explore/mlx,
+/// MIT) in its own colours, a light and a dark file, at the height of a badge's text so the row keeps its height.
+struct BuiltInMLXBadge: View {
+    var body: some View {
+        Image("provider-mlx", bundle: BuiltInSourceIcon.logoBundle)
+            .renderingMode(.original)
+            .resizable()
+            .scaledToFit()
+            .frame(height: 10)
+            .accessibilityLabel(BuiltInModels.mlxLabel)
     }
 }
 
@@ -105,6 +174,9 @@ struct BuiltInModelRowLabel: View {
                 if let quantization = row.quantization {
                     BuiltInQuantizationBadge(quantization: quantization)
                 }
+                if row.isMLX {
+                    BuiltInMLXBadge()
+                }
                 if showsCheckmark {
                     Spacer(minLength: 4)
                     // A quiet circle that becomes a check mark on the chosen row.
@@ -122,8 +194,7 @@ struct BuiltInModelRowLabel: View {
                     }
                 }
                 HStack(spacing: 3) {
-                    Image(systemName: BuiltInModelStyle.symbol(for: row.source))
-                        .foregroundStyle(BuiltInModelStyle.tint(for: row.source))
+                    BuiltInSourceIcon(source: row.source)
                     Text(row.sourceLabel)
                 }
             }
@@ -148,7 +219,7 @@ struct BuiltInModelPopoverContent: View {
             items: rows,
             selectedID: selectedID,
             initialQuery: initialQuery,
-            searchText: { [$0.name, $0.quantization ?? "", $0.sourceLabel].joined(separator: " ") },
+            searchText: { $0.searchText },
             emptyText: rows.isEmpty ? "No models found" : nil,
             onSelect: onSelect,
             onClose: onClose,
@@ -239,6 +310,24 @@ extension FormatterModelDownloadState {
     }
 }
 
+/// A grouped Form puts a `LabeledContent` label on the first baseline of its content, which leaves the label at the
+/// top of a row whose content is taller than one line (the two-line model button). This style centres the label
+/// against the content instead; label font, colour, row padding and trailing alignment are the Form's own, so
+/// one-line rows look the same as before. Use it for rows with taller content.
+struct CenteredLabelContentStyle: LabeledContentStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .center) {
+            configuration.label
+            Spacer(minLength: 8)
+            configuration.content
+        }
+    }
+}
+
+extension LabeledContentStyle where Self == CenteredLabelContentStyle {
+    static var centeredLabel: CenteredLabelContentStyle { CenteredLabelContentStyle() }
+}
+
 /// The Built-in engine's rows in the Workflow editor, after "AI Provider": the model picker fed by installed
 /// models, "Choose file…", and the optional download. It holds no state of its own so it can be rendered
 /// with sample rows; `BuiltInEngineSection` wires it to the real list and store.
@@ -256,9 +345,10 @@ struct BuiltInEngineSectionContent: View {
         LabeledContent("AI Model") {
             BuiltInModelPicker(rows: rows, selection: $selection, isLoading: isLoading)
         }
+        .labeledContentStyle(.centeredLabel)
 
-        LabeledContent("Model file") {
-            Button("Choose file…", action: onChooseFile)
+        LabeledContent("Model file or folder") {
+            Button("Choose file or folder…", action: onChooseFile)
                 .focusEffectDisabled()
         }
 
@@ -459,10 +549,11 @@ struct BuiltInEngineSection: View {
 
     private func chooseFile() {
         let panel = NSOpenPanel()
-        panel.message = String(localized: "Choose a GGUF model file")
+        panel.message = String(localized: "Choose a GGUF model file or an MLX model folder")
         panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        if let gguf = UTType(filenameExtension: "gguf") { panel.allowedContentTypes = [gguf] }
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        if let gguf = UTType(filenameExtension: "gguf") { panel.allowedContentTypes = [gguf, .folder] }
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task {
             await models.addChosenFile(url)

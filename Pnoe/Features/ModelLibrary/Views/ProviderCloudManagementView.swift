@@ -131,6 +131,8 @@ struct ProviderDescriptor: Identifiable {
             return "provider-assemblyai"
         case "xai":
             return "provider-xai"
+        case "ollama":
+            return "provider-ollama"
         case "cartesia":
             return "provider-cartesia"
         default:

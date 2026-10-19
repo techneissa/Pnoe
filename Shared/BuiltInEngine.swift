@@ -14,9 +14,9 @@ enum BuiltInEngineError: Error, Equatable {
     case failed(String)
 }
 
-/// The Built-in engine as the app uses it: one long-lived runtime that talks to the embedded XPC service,
-/// shared by every workflow so the model stays loaded between takes. The runtime is `XPCFormatterRuntime`;
-/// tests pass a `FakeRuntime`.
+/// The Built-in engine as the app uses it: one long-lived runtime that talks to the embedded XPC services (llama.cpp
+/// and MLX), shared by every workflow so the model stays loaded between takes. The runtime is a
+/// `RoutingFormatterRuntime` over two `XPCFormatterRuntime`s; tests pass a `FakeRuntime`.
 final class BuiltInEngine: @unchecked Sendable {
     /// The engine every workflow uses. The first use starts the memory-pressure watch and the unload at quit.
     static let shared: BuiltInEngine = {
@@ -53,12 +53,20 @@ final class BuiltInEngine: @unchecked Sendable {
         self.catalog = catalog
     }
 
-    private static func makeServiceRuntime() -> XPCFormatterRuntime {
+    /// Two embedded services behind one runtime: GGUF files go to the llama.cpp service, MLX folders to the MLX
+    /// service (`spec.backend`). Each service is its own process with its own idle timer, crash count and
+    /// unload, so an MLX crash never reaches llama.cpp or the app, and neither engine is linked into the other.
+    private static func makeServiceRuntime() -> RoutingFormatterRuntime {
         var configuration = XPCFormatterRuntime.Configuration()
         // A cold start loads about 3 GB. A take that would wait longer than this pastes the plain transcript,
         // and the load goes on in the service for the next take.
         configuration.maxPrepareWait = .seconds(12)
-        return XPCFormatterRuntime(configuration: configuration)
+        return RoutingFormatterRuntime(
+            backends: [
+                .llama: XPCFormatterRuntime(endpoint: .service(), id: .llama, configuration: configuration),
+                .mlx: XPCFormatterRuntime(endpoint: .mlxService, id: .mlx, configuration: configuration),
+            ],
+            fallback: .llama)
     }
 
     // MARK: Models

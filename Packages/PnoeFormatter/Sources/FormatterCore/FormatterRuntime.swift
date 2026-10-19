@@ -36,16 +36,24 @@ public struct RuntimeModelSpec: Sendable, Equatable {
     /// The server, for runtimes that talk HTTP.
     public var endpoint: URL?
     public var contextLength: Int
+    /// Which engine loads the model: `.mlx` for an MLX folder. Nil is the file-based default (llama.cpp), so every
+    /// spec made before MLX existed keeps its meaning. A router in front of several runtimes reads this.
+    public var backend: FormatterRuntimeID?
 
-    public init(identifier: String, modelURL: URL? = nil, endpoint: URL? = nil, contextLength: Int = 4096) {
+    public init(
+        identifier: String, modelURL: URL? = nil, endpoint: URL? = nil, contextLength: Int = 4096,
+        backend: FormatterRuntimeID? = nil
+    ) {
         self.identifier = identifier
         self.modelURL = modelURL
         self.endpoint = endpoint
         self.contextLength = contextLength
+        self.backend = backend
     }
 
-    public init(modelURL: URL, contextLength: Int = 4096) {
-        self.init(identifier: modelURL.lastPathComponent, modelURL: modelURL, contextLength: contextLength)
+    public init(modelURL: URL, contextLength: Int = 4096, backend: FormatterRuntimeID? = nil) {
+        self.init(
+            identifier: modelURL.lastPathComponent, modelURL: modelURL, contextLength: contextLength, backend: backend)
     }
 }
 

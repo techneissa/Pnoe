@@ -64,3 +64,7 @@ Select the `Pnoe` scheme. Run builds `Pnoe Dev.app`; Archive uses Release, which
 - Run `make whisper` if the framework is missing.
 - If several Apple Development identities exist, set `LOCAL_CODESIGN_IDENTITY` explicitly.
 - For additional help, open a [GitHub issue](https://github.com/techneissa/Pnoe/issues).
+
+## The Built-in engine's services
+
+The Built-in AI engine runs in two XPC services embedded in the app, so a model crash never takes down dictation: `PnoeFormatterXPC` (llama.cpp, GGUF files) and `PnoeFormatterMLXXPC` (MLX folders). Each links only its own engine. MLX needs its Metal library, which only `xcodebuild` can build (SwiftPM on the command line cannot), so build with `make build`, `make local` or Xcode; the first build compiles MLX and takes a few minutes. `make formatter-test` needs neither engine. Each service has its own entitlements file; `make local` passes `PNOE_XPC_ENTITLEMENTS` and `PNOE_MLX_XPC_ENTITLEMENTS` for them.

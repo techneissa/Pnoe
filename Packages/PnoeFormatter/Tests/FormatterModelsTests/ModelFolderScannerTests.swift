@@ -80,6 +80,17 @@ struct ModelFolderScannerTests {
         #expect(entry.sizeBytes == 160)
         #expect(entry.quantization == "4bit")
         #expect(entry.spec.modelURL?.lastPathComponent == "abc123")
+        // The spec says which engine loads it, so the Built-in engine routes it to the MLX service.
+        #expect(entry.spec.backend == .mlx)
+    }
+
+    @Test("a GGUF file's spec names no backend, so it stays on the default engine")
+    func ggufHasNoBackend() throws {
+        let cache = try TemporaryDirectory()
+        try snapshot(in: cache, repo: "unsloth/gemma-4-E2B-it-GGUF", files: ["gemma-4-E2B-it-Q4_K_M.gguf": 100])
+        let entry = try #require(HuggingFaceCacheScanner(hubDirectory: cache.url).scan().first)
+        #expect(entry.kind == .gguf)
+        #expect(entry.spec.backend == nil)
     }
 
     @Test("MLX rule: another org needs an MLX or bit-width name and a quantization entry in config.json")

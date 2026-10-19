@@ -27,6 +27,9 @@ public actor XPCFormatterRuntime: FormatterRuntime {
             Endpoint { NSXPCConnection(serviceName: name) }
         }
 
+        /// The MLX service: the same protocol and behaviour, its own process.
+        public static var mlxService: Endpoint { service(named: mlxFormatterXPCServiceName) }
+
         public static func listener(_ endpoint: NSXPCListenerEndpoint) -> Endpoint {
             Endpoint { NSXPCConnection(listenerEndpoint: endpoint) }
         }
@@ -48,7 +51,7 @@ public actor XPCFormatterRuntime: FormatterRuntime {
         public init() {}
     }
 
-    public nonisolated let id: FormatterRuntimeID = .llama
+    public nonisolated let id: FormatterRuntimeID
 
     private let endpoint: Endpoint
     private let configuration: Configuration
@@ -70,8 +73,14 @@ public actor XPCFormatterRuntime: FormatterRuntime {
         var model: String { spec.modelURL?.path ?? spec.identifier }
     }
 
-    public init(endpoint: Endpoint = .service(), configuration: Configuration = Configuration()) {
+    /// `id` names the engine behind the endpoint (`.llama` for the llama.cpp service, `.mlx` for the MLX one);
+    /// everything else is the same for both, so each service gets its own instance of this runtime and with it
+    /// its own idle timer, crash count and shutdown.
+    public init(
+        endpoint: Endpoint = .service(), id: FormatterRuntimeID = .llama, configuration: Configuration = Configuration()
+    ) {
         self.endpoint = endpoint
+        self.id = id
         self.configuration = configuration
     }
 
@@ -276,7 +285,7 @@ public actor XPCFormatterRuntime: FormatterRuntime {
         let model = connectionModel
         let recent = (crashes[model] ?? []).filter { now - $0 < configuration.crashWindow } + [now]
         crashes[model] = recent
-        logger.error("Formatter service ended unexpectedly (\(recent.count, privacy: .public) in the window)")
+        logger.error("Formatter service \(self.id.rawValue, privacy: .public) ended unexpectedly (\(recent.count, privacy: .public) in the window)")
     }
 
     private struct LoadTimedOut: Error {}
@@ -319,7 +328,7 @@ public actor XPCFormatterRuntime: FormatterRuntime {
 
     private func idleTimerFired(_ token: UUID) async {
         guard idleToken == token, requestsInFlight == 0, loading == nil else { return }
-        logger.info("Formatter service idle, unloading")
+        logger.info("Formatter service \(self.id.rawValue, privacy: .public) idle, unloading")
         await unload()
     }
 

@@ -66,9 +66,7 @@ final class BuiltInModelListingTests: XCTestCase {
         try mac.write("pub/Qwen3-4B-GGUF/Qwen3-4B-Q8_0.gguf", under: mac.lmStudio)
         try mac.addOllamaModel("gemma3", tag: "4b")
         let chosen = try mac.write("mine/custom-Q5_K_M.gguf")
-        // An MLX folder and a plain text file are not models for this engine.
-        try mac.write("pub/mlx-4bit/config.json", #"{"quantization":{"bits":4}}"#, under: mac.lmStudio)
-        try mac.write("pub/mlx-4bit/model.safetensors", "x", under: mac.lmStudio)
+        // A plain text file is not a model for this engine.
         try mac.write("pub/notes/README.md", "x", under: mac.lmStudio)
 
         let entries = await BuiltInModels.installed(chosenFiles: [chosen], artifact: mac.artifact, catalog: mac.configuration)
@@ -77,6 +75,81 @@ final class BuiltInModelListingTests: XCTestCase {
         XCTAssertEqual(entries.count, 4)
         XCTAssertTrue(entries.allSatisfy { $0.kind == .gguf && $0.spec.modelURL != nil })
         XCTAssertTrue(entries.contains { $0.displayName == "gemma3:4b" && $0.source == .ollamaStore })
+    }
+
+    func testMLXFoldersAreListedNextToTheGGUFFilesWithTheirOwnEngine() async throws {
+        let mac = try FakeMac()
+        try mac.addHuggingFaceModel()
+        // An MLX build in the Hugging Face cache, one in LM Studio's folder and a folder the user chose.
+        let config = #"{"model_type":"gemma4","quantization":{"group_size":64,"bits":4}}"#
+        try mac.write("models--mlx-community--gemma-4-e2b-it-4bit/snapshots/r1/config.json", config, under: mac.hub)
+        try mac.write("models--mlx-community--gemma-4-e2b-it-4bit/snapshots/r1/model.safetensors", "weights", under: mac.hub)
+        try mac.write("models--mlx-community--gemma-4-e2b-it-4bit/refs/main", "r1", under: mac.hub)
+        try mac.write("mlx-community/Qwen3-4B-4bit/config.json", config, under: mac.lmStudio)
+        try mac.write("mlx-community/Qwen3-4B-4bit/model.safetensors", "weights", under: mac.lmStudio)
+        let chosenFolder = try mac.write("mine/my-mlx/config.json", "{}").deletingLastPathComponent()
+        try mac.write("mine/my-mlx/model.safetensors", "weights")
+
+        let entries = await BuiltInModels.installed(chosenFiles: [chosenFolder], artifact: mac.artifact, catalog: mac.configuration)
+        let mlx = entries.filter { $0.kind == .mlx }
+        XCTAssertEqual(Set(mlx.map(\.source)), [.huggingFaceCache, .lmStudio, .userChosen])
+        XCTAssertEqual(mlx.count, 3)
+        XCTAssertEqual(entries.filter { $0.kind == .gguf }.count, 1)
+        // The spec carries the engine: a folder is routed to the MLX service, a file to llama.cpp.
+        XCTAssertTrue(mlx.allSatisfy { $0.spec.backend == .mlx })
+        XCTAssertTrue(entries.filter { $0.kind == .gguf }.allSatisfy { $0.spec.backend == nil })
+
+        let id = try XCTUnwrap(mlx.first { $0.source == .lmStudio }?.id)
+        let spec = await BuiltInModels.spec(forID: id, chosenFiles: [chosenFolder], artifact: mac.artifact, catalog: mac.configuration)
+        XCTAssertEqual(spec?.backend, .mlx)
+        XCTAssertEqual(spec?.contextLength, BuiltInModels.contextLength)
+        XCTAssertTrue(BuiltInModels.isInstalled(modelID: id, chosenFiles: [chosenFolder], artifact: mac.artifact, catalog: mac.configuration))
+    }
+
+    func testAnMLXModelIsNeverPreselected() async throws {
+        let mac = try FakeMac()
+        let config = #"{"quantization":{"bits":4}}"#
+        try mac.write("mlx-community/gemma-4-e2b-it-4bit/config.json", config, under: mac.lmStudio)
+        try mac.write("mlx-community/gemma-4-e2b-it-4bit/model.safetensors", "weights", under: mac.lmStudio)
+        let entries = await BuiltInModels.installed(chosenFiles: [], artifact: mac.artifact, catalog: mac.configuration)
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertNil(BuiltInModels.suggested(from: entries))
+        XCTAssertNil(BuiltInModels.selection(stored: nil, installed: entries))
+    }
+
+    func testTheEngineRoutesAGGUFAndAnMLXModelToTheirOwnService() async throws {
+        let mac = try FakeMac()
+        try mac.addHuggingFaceModel()
+        let config = #"{"quantization":{"bits":4}}"#
+        try mac.write("mlx-community/gemma-4-e2b-it-4bit/config.json", config, under: mac.lmStudio)
+        try mac.write("mlx-community/gemma-4-e2b-it-4bit/model.safetensors", "weights", under: mac.lmStudio)
+        let entries = await BuiltInModels.installed(chosenFiles: [], artifact: mac.artifact, catalog: mac.configuration)
+        let gguf = try XCTUnwrap(entries.first { $0.kind == .gguf })
+        let mlxEntry = try XCTUnwrap(entries.first { $0.kind == .mlx })
+
+        let llama = FakeRuntime(id: .llama, handler: { _ in GenerationResult(text: "llama") })
+        let mlx = FakeRuntime(id: .mlx, handler: { _ in GenerationResult(text: "mlx") })
+        let engine = BuiltInEngine(
+            runtime: RoutingFormatterRuntime(backends: [.llama: llama, .mlx: mlx], fallback: .llama),
+            chosenFiles: { [] }, artifact: { mac.artifact }, catalog: { mac.configuration })
+
+        let viaMLX = try await engine.complete(system: "rules", user: "hello", modelID: mlxEntry.id, timeout: 5)
+        XCTAssertEqual(viaMLX, "mlx")
+        let viaLlama = try await engine.complete(system: "rules", user: "hello", modelID: gguf.id, timeout: 5)
+        XCTAssertEqual(viaLlama, "llama")
+        let mlxPrepares = await mlx.prepareCalls
+        let llamaPrepares = await llama.prepareCalls
+        XCTAssertEqual(mlxPrepares.count, 1)
+        XCTAssertEqual(mlxPrepares.first?.0.modelURL, mlxEntry.spec.modelURL)
+        XCTAssertEqual(llamaPrepares.count, 1)
+        XCTAssertEqual(llamaPrepares.first?.0.modelURL, gguf.spec.modelURL)
+
+        // A memory-pressure or quit unload frees both services.
+        await engine.unload()
+        let mlxUnloads = await mlx.unloadCount
+        let llamaUnloads = await llama.unloadCount
+        XCTAssertEqual(mlxUnloads, 1)
+        XCTAssertEqual(llamaUnloads, 1)
     }
 
     func testTheDownloadedModelIsListedFirstOnceItIsInstalled() async throws {
@@ -412,6 +485,55 @@ final class BuiltInPickerTextTests: XCTestCase {
         XCTAssertEqual(names("ollama q4"), ["gemma3:4b-it"])
         XCTAssertEqual(names("gemma hugging"), ["gemma-4-E2B-it"])
         XCTAssertEqual(names("nothing like this"), [])
+    }
+
+    private func mlxEntry(
+        _ name: String, bits: String = "4bit", source: FormatterModelSource = .huggingFaceCache
+    ) -> FormatterModelEntry {
+        FormatterModelEntry(
+            id: "\(source.rawValue):\(name)", displayName: name, kind: .mlx, sizeBytes: 2_000_000_000, source: source,
+            quantization: bits, spec: RuntimeModelSpec(modelURL: URL(fileURLWithPath: "/m/\(name)"), backend: .mlx))
+    }
+
+    func testAnMLXModelHasAnMLXBadgeAndIsFoundBySearchingForIt() {
+        let rows = [
+            BuiltInModelRow(entry: entry("gemma-4-E2B-it-Q4_K_M", quantization: "Q4_K_M")),
+            BuiltInModelRow(entry: mlxEntry("gemma-4-e2b-it-4bit")),
+            BuiltInModelRow(entry: mlxEntry("Qwen3-4B-8bit", bits: "8bit", source: .lmStudio)),
+        ]
+        XCTAssertEqual(rows.map(\.isMLX), [false, true, true])
+        // The badge carries the engine and the quantization badge the bit width, so the name loses the suffix.
+        XCTAssertEqual(rows[1].name, "gemma-4-e2b-it")
+        XCTAssertEqual(rows[1].quantization, "4bit")
+        func names(_ query: String) -> [String] { BuiltInModelSearch.filter(rows, query: query).map(\.name) }
+        XCTAssertEqual(names("mlx"), ["gemma-4-e2b-it", "Qwen3-4B"])
+        XCTAssertEqual(names("mlx lm studio"), ["Qwen3-4B"])
+        XCTAssertEqual(names("8bit"), ["Qwen3-4B"])
+        XCTAssertEqual(names("gemma"), ["gemma-4-E2B-it", "gemma-4-e2b-it"])
+    }
+
+    func testAnMLXModelsDetailLineNamesTheEngine() {
+        XCTAssertEqual(
+            BuiltInModels.detail(of: mlxEntry("gemma-4-e2b-it-4bit")), "2 GB · 4bit · MLX · Hugging Face")
+    }
+
+    func testSourcesWithALogoUseItAndTheOthersKeepTheirSymbol() {
+        XCTAssertEqual(BuiltInModelStyle.logo(for: .ollama), "provider-ollama")
+        XCTAssertEqual(BuiltInModelStyle.logo(for: .ollamaStore), "provider-ollama")
+        XCTAssertEqual(BuiltInModelStyle.logo(for: .huggingFaceCache), "provider-huggingface")
+        XCTAssertEqual(BuiltInModelStyle.logo(for: .lmStudio), "provider-lmstudio")
+        XCTAssertNil(BuiltInModelStyle.logo(for: .userChosen))
+        XCTAssertNil(BuiltInModelStyle.logo(for: .downloaded))
+    }
+
+    func testPlaygroundListsAnMLXModelNextToTheGGUFOnes() {
+        let rows = [
+            BuiltInModelRow(entry: entry("gemma-4-E2B-it-Q4_K_M", quantization: "Q4_K_M")),
+            BuiltInModelRow(entry: mlxEntry("gemma-4-e2b-it-4bit")),
+        ]
+        XCTAssertEqual(
+            PlaygroundModelOptions.builtIn(rows, providerName: "Built-in").map(\.label),
+            ["Built-in · gemma-4-E2B-it", "Built-in · gemma-4-e2b-it"])
     }
 
     func testPlaygroundListsBuiltInModelsByNameAndTheWorkflowsOwnChoiceTakesTheName() {

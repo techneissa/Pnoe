@@ -38,8 +38,10 @@ final class Loopback: @unchecked Sendable {
     private nonisolated(unsafe) static var alive: [Loopback] = []
     private static let aliveLock = NSLock()
 
-    func client(_ configuration: XPCFormatterRuntime.Configuration = .init()) -> XPCFormatterRuntime {
-        XPCFormatterRuntime(endpoint: .listener(listener.endpoint), configuration: configuration)
+    func client(
+        _ configuration: XPCFormatterRuntime.Configuration = .init(), id: FormatterRuntimeID = .llama
+    ) -> XPCFormatterRuntime {
+        XPCFormatterRuntime(endpoint: .listener(listener.endpoint), id: id, configuration: configuration)
     }
 
     /// The next `count` connections are refused, like a client that reaches a service still exiting.
