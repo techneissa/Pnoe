@@ -5,14 +5,12 @@ import os
 
 /// Reads the level of some processes' audio through CoreAudio process taps (macOS 14.2 and later).
 ///
-/// A tap listens without changing what the user hears (`muteBehavior` is `.unmuted`), for the players and for
-/// Pnoe's own start sound alike. The first tap makes macOS ask for the System Audio Recording permission, which is
+/// A tap listens without changing what the user hears (`muteBehavior` is `.unmuted`). The first tap makes macOS ask for the System Audio Recording permission, which is
 /// why `PlaybackController` asks for it when the user turns pausing media on. Each tap lives for one listening
 /// session and is private to Pnoe: no other app sees it.
 ///
 /// The tap, the private aggregate device that carries it and the IO callback follow Apple's "Capturing system audio
-/// with Core Audio taps" documentation. One tap and one aggregate device per group of processes keeps the players'
-/// samples and Pnoe's own apart without relying on the order of buffers in a shared callback.
+/// with Core Audio taps" documentation. One tap and one aggregate device carry the players' mix.
 final class ProcessTapLevelMeter: AudioLevelMeasuring {
     private static let logger = Logger(subsystem: "com.techneissa.pnoe", category: "ProcessTapLevelMeter")
     private let queue = DispatchQueue(label: "com.techneissa.pnoe.level-meter", qos: .userInitiated)
@@ -72,18 +70,15 @@ final class ProcessTapLevelMeter: AudioLevelMeasuring {
         return (preflight, request)
     }()
 
-    func measure(processes: [AudioProcess], includingOwnProcess: Bool, window: TimeInterval) async
-        -> AudioLevelMeasurement
-    {
-        let unavailable = AudioLevelMeasurement.unavailable(includingOwn: includingOwnProcess)
+    func measure(processes: [AudioProcess], window: TimeInterval) async -> AudioLevelMeasurement {
         let objectIDs = processes.map(\.objectID).filter { $0 != 0 }
-        guard !objectIDs.isEmpty else { return unavailable }
+        guard !objectIDs.isEmpty else { return .skipped }
         guard
             isMeasuring.withLock({ busy -> Bool in
                 defer { busy = true }
                 return !busy
             })
-        else { return unavailable }
+        else { return .skipped }
 
         return await withCheckedContinuation { continuation in
             let resumed = OSAllocatedUnfairLock(initialState: false)
@@ -95,66 +90,31 @@ final class ProcessTapLevelMeter: AudioLevelMeasuring {
                 if first { continuation.resume(returning: measurement) }
             }
             queue.async { [isMeasuring] in
-                let measurement = Self.listen(
-                    to: objectIDs, includingOwnProcess: includingOwnProcess, window: window)
+                let measurement = Self.listen(to: objectIDs, window: window)
                 isMeasuring.withLock { $0 = false }
                 resumeOnce(measurement)
             }
             DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + window + deadlineMargin) {
-                resumeOnce(unavailable)
+                resumeOnce(.skipped)
             }
         }
     }
 
-    /// Blocks the private queue until `ListeningPlan` is satisfied or `window` is over. Every tap it creates is
-    /// destroyed before it returns.
-    private static func listen(
-        to processObjectIDs: [AudioObjectID], includingOwnProcess: Bool, window: TimeInterval
-    ) -> AudioLevelMeasurement {
-        guard let players = TapListener(processObjectIDs: processObjectIDs) else {
-            return .unavailable(includingOwn: includingOwnProcess)
-        }
+    /// Blocks the private queue until `ListeningPlan` is satisfied or `window` is over. The tap it creates is
+    /// destroyed before it returns. No tap is `.unavailable`; a tap that delivered no samples is `.skipped`.
+    private static func listen(to processObjectIDs: [AudioObjectID], window: TimeInterval) -> AudioLevelMeasurement {
+        guard let players = TapListener(processObjectIDs: processObjectIDs) else { return .unavailable }
         defer { players.stop() }
 
-        var own: TapListener?
-        defer { own?.stop() }
-
         let started = ProcessInfo.processInfo.systemUptime
-        var lastOwnAttempt = -Double.infinity
         while true {
             let elapsed = ProcessInfo.processInfo.systemUptime - started
-
-            // Pnoe has a process object only once it has an audio stream open, which the start sound may be
-            // about to create, so the lookup is retried while the window lasts.
-            if includingOwnProcess, own == nil, elapsed - lastOwnAttempt >= 0.05 {
-                lastOwnAttempt = elapsed
-                if let object = processObject(forPID: ProcessInfo.processInfo.processIdentifier) {
-                    own = TapListener(processObjectIDs: [object])
-                }
-            }
-
-            let playersReading = players.reading
-            let ownReading: AudioLevelReading? = includingOwnProcess ? (own?.reading ?? .unavailable) : nil
-            if ListeningPlan.isDone(elapsed: elapsed, window: window, players: playersReading, own: ownReading) {
-                return AudioLevelMeasurement(players: playersReading, own: ownReading)
+            let reading = players.reading
+            if ListeningPlan.isDone(elapsed: elapsed, window: window, players: reading) {
+                return AudioLevelMeasurement(players: reading == .unavailable ? .skipped : reading)
             }
             Thread.sleep(forTimeInterval: 0.01)
         }
-    }
-
-    private static func processObject(forPID pid: pid_t) -> AudioObjectID? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyTranslatePIDToProcessObject,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var qualifier = pid
-        var object = AudioObjectID(kAudioObjectUnknown)
-        var size = UInt32(MemoryLayout<AudioObjectID>.size)
-        let status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject), &address,
-            UInt32(MemoryLayout<pid_t>.size), &qualifier, &size, &object)
-        return status == noErr && object != kAudioObjectUnknown ? object : nil
     }
 
     /// One tap on some processes, the private aggregate device that carries it, and a running peak of its samples.

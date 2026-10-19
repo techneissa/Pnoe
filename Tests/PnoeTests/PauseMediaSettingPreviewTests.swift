@@ -10,9 +10,7 @@ import os
 @MainActor
 final class PauseMediaSettingPreviewTests: XCTestCase {
     private struct DenyingMeter: AudioLevelMeasuring {
-        func measure(processes: [AudioProcess], includingOwnProcess: Bool, window: TimeInterval) async
-            -> AudioLevelMeasurement
-        { .unavailable(includingOwn: false) }
+        func measure(processes: [AudioProcess], window: TimeInterval) async -> AudioLevelMeasurement { .unavailable }
         func hasPermission() async -> Bool { false }
         func requestPermission() async -> Bool { false }
     }

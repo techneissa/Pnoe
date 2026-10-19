@@ -63,17 +63,17 @@ class PlaybackController: ObservableObject {
     private let levelMeter: AudioLevelMeasuring?
     private let defaults: UserDefaults
     private let clock: @MainActor () -> TimeInterval
-    /// The longest a level check may take from its start, the permission prompt included. Past it the output flag
-    /// decides.
+    /// The longest a level check may take from its start, the permission prompt included. Past it the
+    /// measurement counts as skipped: nothing is pressed for this recording.
     private let levelDeadline: TimeInterval
-    /// How long the level check listens to the players alone: long enough for a few audio buffers, short enough to
+    /// How long the level check listens: long enough for a few audio buffers, short enough to
     /// add little to the start of a recording.
     private let levelWindow: TimeInterval = ListeningPlan.minimumWindow
-    /// How old a listening session started before the start sound may be and still count for a pause.
+    /// How old a listening session started with the start sound may be and still count for a pause.
     private let probeFreshness: TimeInterval = 3
 
-    /// A listening session started when the start sound was played, so that it overlaps the sound however long the
-    /// recording takes to start.
+    /// A listening session started when the start sound was played, so the pause does not wait for it however long
+    /// the recording takes to start.
     private struct LevelProbe {
         let startedAt: TimeInterval
         let task: Task<ProbeResult, Never>
@@ -224,8 +224,8 @@ class PlaybackController: ObservableObject {
     }
 
     /// Call right before Pnoe plays its start sound. With pausing on, this starts listening to the players
-    /// and to Pnoe's own audio at once, so the start sound is inside the listening window however long the recording
-    /// takes to start. `pauseMedia` uses the result. Does nothing when pausing is off, and makes no
+    /// at once, so the pause does not wait for the listening however long the recording takes to start.
+    /// `pauseMedia` uses the result. Does nothing when pausing is off, and makes no
     /// tap when no known player is playing.
     func beginLevelProbe() {
         pendingProbe?.task.cancel()
@@ -235,7 +235,10 @@ class PlaybackController: ObservableObject {
         pendingProbe = LevelProbe(
             startedAt: clock(),
             task: Task { [weak self] in
-                guard let self, let players = await self.knownPlayersPlayingAlone() else {
+                // The same preflight as the pause: no tap is made without the permission.
+                guard let self, await self.permissionIsGranted(),
+                    let players = await self.knownPlayersPlayingAlone()
+                else {
                     return ProbeResult(measurement: nil, playerPIDs: [])
                 }
                 let measurement = await self.measureWithDeadline(levelMeter, players)
@@ -244,8 +247,8 @@ class PlaybackController: ObservableObject {
         )
     }
 
-    /// A press needs sound in the players' audio. A tap that fails or delivers nothing turns pausing off: the
-    /// output flag alone never decides.
+    /// A press needs sound in the players' audio; the output flag alone never decides. A tap that cannot be made
+    /// turns pausing off. A measurement that is busy, late or empty skips the press for this recording only.
     private func levelCheckAllowsPause(for players: [AudioProcess]) async -> Bool {
         guard let levelMeter else { return false }
 
@@ -265,10 +268,12 @@ class PlaybackController: ObservableObject {
             measurement = await measureWithDeadline(levelMeter, players)
         }
 
-        switch measurement?.players ?? .unavailable {
+        switch measurement?.players ?? .skipped {
         case .sound:
             return true
         case .silent:
+            return false
+        case .skipped:
             return false
         case .unavailable:
             switchOffForMissingPermission()
@@ -283,7 +288,6 @@ class PlaybackController: ObservableObject {
     ) async -> AudioLevelMeasurement {
         let window = levelWindow
         let deadline = levelDeadline
-        let unavailable = AudioLevelMeasurement.unavailable(includingOwn: false)
         return await withCheckedContinuation { continuation in
             let resumed = OSAllocatedUnfairLock(initialState: false)
             let resumeOnce: @Sendable (AudioLevelMeasurement) -> Void = { measurement in
@@ -294,12 +298,11 @@ class PlaybackController: ObservableObject {
                 if first { continuation.resume(returning: measurement) }
             }
             Task.detached {
-                resumeOnce(
-                    await meter.measure(processes: players, includingOwnProcess: false, window: window))
+                resumeOnce(await meter.measure(processes: players, window: window))
             }
             Task.detached {
                 try? await Task.sleep(for: .seconds(deadline))
-                resumeOnce(unavailable)
+                resumeOnce(.skipped)
             }
         }
     }
