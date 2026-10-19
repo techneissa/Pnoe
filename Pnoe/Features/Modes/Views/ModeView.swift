@@ -59,19 +59,27 @@ struct ModeView: View {
     @EnvironmentObject private var transcriptionModelManager: TranscriptionModelManager
     @State private var activePanel: PanelType?
     @State private var panelID = UUID()
+    @State private var playgroundModel: WorkflowPlaygroundModel?
 
     private enum PanelType {
         case templatePicker
         case configuration(ConfigurationMode, StarterModeTemplate?)
         case settings
+        case playground
     }
 
     private var isPanelOpen: Bool {
         activePanel != nil
     }
 
+    private var isPlaygroundOpen: Bool {
+        if case .playground? = activePanel { return true }
+        return false
+    }
+
     private var headerControls: some View {
         HStack(spacing: 8) {
+            playgroundButton
             addModeButton
             settingsButton
         }
@@ -83,6 +91,15 @@ struct ModeView: View {
             help: "Add a new workflow"
         ) {
             openTemplatePicker()
+        }
+    }
+
+    private var playgroundButton: some View {
+        AppIconButton(
+            systemName: "flask.fill",
+            help: "Try a workflow on a sample"
+        ) {
+            openPlayground()
         }
     }
 
@@ -159,7 +176,7 @@ struct ModeView: View {
             isPresented: .init(
                 get: { isPanelOpen },
                 set: { if !$0 { closePanel() } }
-            ), dismissOnExitCommand: false
+            ), width: isPlaygroundOpen ? 720 : 400, dismissOnExitCommand: false
         ) {
             switch activePanel {
             case .templatePicker?:
@@ -178,6 +195,10 @@ struct ModeView: View {
                     .id(panelID)
             case .settings?:
                 ModeSettingsPanelView(modeManager: modeManager, onDismiss: closePanel)
+            case .playground?:
+                if let playgroundModel {
+                    WorkflowPlaygroundView(model: playgroundModel, onDismiss: closePanel)
+                }
             case nil:
                 EmptyView()
             }
@@ -210,7 +231,42 @@ struct ModeView: View {
     }
 
     private func closePanel() {
+        playgroundModel?.cancel()
         activePanel = nil
+    }
+
+    private func openPlayground() {
+        playgroundModel = makePlaygroundModel()
+        activePanel = .playground
+    }
+
+    /// The Playground lists the workflows that use AI and runs one on a typed sample through the same
+    /// enhancement call a dictation uses, with no pasted-in context and nothing pasted out.
+    private func makePlaygroundModel() -> WorkflowPlaygroundModel {
+        let configurations = modeManager.configurations
+        let workflows: [PlaygroundWorkflow] = configurations.compactMap { config in
+            guard config.isAIEnhancementEnabled else { return nil }
+            let promptId = config.selectedPrompt.flatMap(UUID.init(uuidString:))
+            return PlaygroundWorkflow(
+                id: config.id, name: config.name,
+                template: LocalWorkflowTemplate.template(forPromptId: promptId))
+        }
+        let enhancementService = enhancementService
+        let aiService = aiService
+        return WorkflowPlaygroundModel(workflows: workflows, store: .standard()) { text, workflow in
+            guard let config = modeManager.getConfiguration(with: workflow.id) else {
+                throw EnhancementError.notConfigured
+            }
+            let runtime = ModeRuntimeResolver.currentEnhancementConfiguration(
+                mode: config, enhancementService: enhancementService, aiService: aiService)
+            do {
+                let result = try await enhancementService.enhance(text, configuration: runtime)
+                return PlaygroundOutcome(
+                    output: result.text, duration: result.duration, fallbackReason: result.fallbackReason)
+            } catch {
+                throw PlaygroundRunError(message: EnhancementFailureFormatter.description(for: error))
+            }
+        }
     }
 
     private func openSettingsPanel() {
@@ -227,4 +283,10 @@ struct SectionHeader: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, 8)
     }
+}
+
+/// A failed Playground run, worded for the screen.
+private struct PlaygroundRunError: LocalizedError {
+    let message: String
+    var errorDescription: String? { message }
 }

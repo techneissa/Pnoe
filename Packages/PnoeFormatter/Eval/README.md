@@ -31,6 +31,18 @@ swift run --package-path Packages/PnoeFormatter pnoe-format-eval --backend llama
 
 The `ollama` and `llama-server` backends call a local server, so run them on a quiet Mac. They send temperature 0 and a token cap from the request, and write `results/<run>.json` and `<run>.md`. `--help` lists the options.
 
+## Your own pairs
+
+The app's Workflows page has a flask button, "Try a workflow on a sample". "Save as example" there keeps a pair, as it is or edited into what it should have been, in `~/Library/Application Support/com.techneissa.Pnoe/playground-examples.jsonl` (never uploaded; the panel can list, delete and export it). Each line is a case in the format above (`context` plain, `kind` format, tags `personal` and `workflow:<template>`) plus `workflow`, `output` and `created`, which the harness ignores.
+
+```sh
+swift run --package-path Packages/PnoeFormatter pnoe-format-eval --backend ollama --model gemma4:e2b \
+  --extra-testset "$HOME/Library/Application Support/com.techneissa.Pnoe/playground-examples.jsonl"   # built-in set plus yours
+... --extra-testset <file> --only-extra                                                                 # yours alone
+```
+
+Only pairs from Cleaned Text (`workflow:cleanedText`) are scored; pairs from other workflows are left out and counted, since the scorers judge faithfulness to the words. Lines that do not parse are skipped and counted. An id that is also in `testset.jsonl` is an error.
+
 ## Scores
 
 All in code, no model judge. Each is computed for the full pipeline (what the user gets) and, on a live backend, for the model's own text before the guards.

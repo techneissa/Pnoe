@@ -13,6 +13,9 @@ Usage: pnoe-format-eval --backend replay|ollama|llama-server [options]
 Options:
   --model <name>        Ollama tag, or the model name sent to llama-server.
   --endpoint <url>      Server URL (defaults: http://localhost:11434, http://127.0.0.1:8080).
+  --extra-testset <file>  Also score the pairs in this JSONL file (the format of testset.jsonl), such as the file
+                        the app's Workflow playground saves. Lines it cannot read are skipped and counted.
+  --only-extra          With --extra-testset, score only those pairs and leave out the built-in set.
   --data-dir <dir>      The Eval folder with testset.jsonl (default: found from the working directory).
   --out-dir <dir>       Where results go (default: <data-dir>/results).
   --run <name>          Run name, the result file name (default: <backend>[-<model>]-<timestamp>).
@@ -31,6 +34,8 @@ struct Options {
     var model: String?
     var endpoint: URL?
     var dataDir: String?
+    var extraTestset: String?
+    var onlyExtra = false
     var outDir: String?
     var run: String?
     var ids: Set<String>?
@@ -61,6 +66,8 @@ func parse(_ args: [String]) -> Options {
         case "--endpoint":
             guard let url = URL(string: value(arg)), url.scheme != nil else { fail("--endpoint needs a URL") }
             options.endpoint = url
+        case "--extra-testset": options.extraTestset = value(arg)
+        case "--only-extra": options.onlyExtra = true
         case "--data-dir": options.dataDir = value(arg)
         case "--out-dir": options.outDir = value(arg)
         case "--run": options.run = value(arg)
@@ -99,10 +106,19 @@ func slug(_ text: String) -> String {
 
 let options = parse(Array(CommandLine.arguments.dropFirst()))
 guard ["replay", "ollama", "llama-server"].contains(options.backend) else { fail("pick a backend\n\n\(usage)") }
+if options.onlyExtra && options.extraTestset == nil { fail("--only-extra needs --extra-testset <file>") }
 
 do {
     let data = try EvalData.locate(explicit: options.dataDir)
-    var cases = try TestSet.load(from: data.testsetURL)
+    var cases = options.onlyExtra ? [] : try TestSet.load(from: data.testsetURL)
+    if let extraPath = options.extraTestset {
+        let personal = try PersonalSet.load(from: URL(fileURLWithPath: extraPath))
+        cases = try PersonalSet.merge(cases, with: personal.cases)
+        var notes = ["\(personal.cases.count) pairs from \(extraPath)"]
+        if personal.skippedOtherWorkflows > 0 { notes.append("\(personal.skippedOtherWorkflows) from other workflows left out") }
+        if personal.unreadableLines > 0 { notes.append("\(personal.unreadableLines) unreadable lines skipped") }
+        FileHandle.standardError.write(Data((notes.joined(separator: ", ") + "\n").utf8))
+    }
     if let ids = options.ids { cases = cases.filter { ids.contains($0.id) } }
     if let context = options.context { cases = cases.filter { $0.context == context } }
     if let limit = options.limit { cases = Array(cases.prefix(limit)) }
