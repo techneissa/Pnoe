@@ -12,6 +12,7 @@
 		E161D4A12F41ECB90086F83D /* CloudKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E161D4A02F41ECB90086F83D /* CloudKit.framework */; };
 		E1701E75305E77220098872B /* LLMkit in Frameworks */ = {isa = PBXBuildFile; productRef = E1701E74305E77220098872B /* LLMkit */; };
 		E1AF669B3031B7AA006D50FA /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = E1AF669A3031B7AA006D50FA /* FluidAudio */; };
+		E1AF67003031B7AA006D5001 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = E1AF67003031B7AA006D5002 /* WhisperKit */; };
 		E1C0A0022FA8000000000001 /* TranscribeCpp in Frameworks */ = {isa = PBXBuildFile; productRef = E1C0A0012FA8000000000001 /* TranscribeCpp */; };
 		E1DD1EE12FA1D7D30020AF3B /* Zip in Frameworks */ = {isa = PBXBuildFile; productRef = E1DD1EE02FA1D7D30020AF3B /* Zip */; };
 		E1F350112F1D10D600790A2C /* whisper.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E1A0BD052EB1E7B800266859 /* whisper.xcframework */; };
@@ -105,6 +106,7 @@
 				E161D4A12F41ECB90086F83D /* CloudKit.framework in Frameworks */,
 				E1C0A0022FA8000000000001 /* TranscribeCpp in Frameworks */,
 				E1AF669B3031B7AA006D50FA /* FluidAudio in Frameworks */,
+				E1AF67003031B7AA006D5001 /* WhisperKit in Frameworks */,
 				E1DD1EE12FA1D7D30020AF3B /* Zip in Frameworks */,
 				E1701E75305E77220098872B /* LLMkit in Frameworks */,
 				E13461ED2FD1CCCD005B6A81 /* MarkdownUI in Frameworks */,
@@ -204,6 +206,7 @@
 				E1F511032FA3B47000F00001 /* SelectedTextKit */,
 				E13461EC2FD1CCCD005B6A81 /* MarkdownUI */,
 				E1AF669A3031B7AA006D50FA /* FluidAudio */,
+				E1AF67003031B7AA006D5002 /* WhisperKit */,
 				E1701E74305E77220098872B /* LLMkit */,
 				E1FC0A1030A0000000000001 /* FormatterCore */,
 				E1FC0A1030A0000000000002 /* FormatterModels */,
@@ -304,6 +307,7 @@
 				E13461EB2FD1CCCD005B6A81 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 				E1C0A0002FA8000000000001 /* XCRemoteSwiftPackageReference "Transcribe-cpp-swift" */,
 				E1AF66993031B7AA006D50FA /* XCRemoteSwiftPackageReference "FluidAudio" */,
+				E1AF67003031B7AA006D5003 /* XCRemoteSwiftPackageReference "WhisperKit" */,
 				E1701E73305E77220098872B /* XCRemoteSwiftPackageReference "LLMkit" */,
 				E1FC0A1030C0000000000001 /* XCLocalSwiftPackageReference "Packages/PnoeFormatter" */,
 			);
@@ -727,6 +731,14 @@
 				version = "0.2.0-dev.856d7c1";
 			};
 		};
+		E1AF67003031B7AA006D5003 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
+			requirement = {
+				kind = exactVersion;
+				version = 1.1.1;
+			};
+		};
 		E1ECEC142E44590200DFFBA8 /* XCRemoteSwiftPackageReference "Zip" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/marmelroy/Zip";
@@ -770,6 +782,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E1C0A0002FA8000000000001 /* XCRemoteSwiftPackageReference "Transcribe-cpp-swift" */;
 			productName = TranscribeCpp;
+		};
+		E1AF67003031B7AA006D5002 /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1AF67003031B7AA006D5003 /* XCRemoteSwiftPackageReference "WhisperKit" */;
+			productName = WhisperKit;
 		};
 		E1DD1EE02FA1D7D30020AF3B /* Zip */ = {
 			isa = XCSwiftPackageProductDependency;

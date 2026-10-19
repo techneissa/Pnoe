@@ -48,13 +48,7 @@ struct AudioSetupView: View {
             Section {
                 Toggle("Mute Audio While Recording", isOn: $mediaController.isSystemMuteEnabled)
 
-                Toggle("Pause Media While Recording", isOn: $playbackController.isPauseMediaEnabled)
-
-                Toggle("Check Audio Level Before Pausing", isOn: $playbackController.isLevelCheckEnabled)
-                    .disabled(!playbackController.isPauseMediaEnabled)
-                Text("Does not start music you just paused. Needs the System Audio Recording permission. With the start sound off, switch this off and on again if you revoke it.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                PauseMediaSettingRows(playbackController: playbackController)
 
                 LabeledContent("Resume Delay") {
                     resumeDelayMenu
