@@ -230,7 +230,7 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
                 await cancelRecording()
             case .idle:
                 if engine.assistantSession.canSendFollowUp {
-                    SoundManager.shared.play(.start)
+                    playStartSound()
                     await engine.toggleRecord(
                         modeId: modeId,
                         isAssistantFollowUp: true
@@ -242,10 +242,16 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
                 await dismissRecorderPanel()
             }
         } else {
-            SoundManager.shared.play(.start)
+            playStartSound()
             isRecorderPanelVisible = true
             await engine.toggleRecord(modeId: modeId)
         }
+    }
+
+    /// The level check listens from the moment the start sound is played, so the sound is in its window.
+    private func playStartSound() {
+        PlaybackController.shared.beginLevelProbe()
+        SoundManager.shared.play(.start)
     }
 
     func finishRecordingAndSend() async {

@@ -137,6 +137,7 @@ enum AppDefaults {
             "isSystemMuteEnabled": true,
             "audioResumptionDelay": 0.0,
             "isPauseMediaEnabled": false,
+            "isMediaLevelCheckEnabled": false,
 
             // Recording & Transcription
             "IsTextFormattingEnabled": true,
