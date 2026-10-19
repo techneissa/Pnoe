@@ -249,10 +249,11 @@ public enum WordDiffGuard {
 
     // MARK: Currency
 
-    /// A unit word the speaker can say after an amount, and the symbol it may become.
+    /// A unit word the speaker can say after an amount, and the symbol it may become. "pound" is left out on
+    /// purpose: it is also a weight ("3 pounds of rice"), so a `£` on it is always invented.
     private static let spokenUnits: [String: Character] = [
         "dollar": "$", "dollars": "$", "buck": "$", "bucks": "$",
-        "pound": "£", "pounds": "£", "euro": "€", "euros": "€", "yen": "¥",
+        "euro": "€", "euros": "€", "yen": "¥",
     ]
 
     private static func isCurrencySymbol(_ character: Character) -> Bool {
@@ -266,7 +267,7 @@ public enum WordDiffGuard {
 
     /// Every currency symbol in the output must sit on an amount, and the input must give that same symbol
     /// that same amount: written with the symbol, or said with its unit word right after the amount
-    /// ("twelve thousand five hundred dollars" becomes `$12,500`, "3 pounds" becomes `£3`). A symbol with no
+    /// ("twelve thousand five hundred dollars" becomes `$12,500`). A symbol with no
     /// amount, on another amount, or for another currency is invented, whatever else the input carries.
     static func hasInventedCurrency(input: String, output: String) -> Bool {
         let outputChars = Array(output)

@@ -253,13 +253,11 @@ struct WordDiffGuardCurrencyTests {
     @Test func aSymbolForAnotherCurrencyThanSpokenIsInvented() {
         #expect(check("the total of 12,500 dollars is high", "The total of €12,500 is high.") == .inventedCurrency)
         #expect(check("the total of 12,500 euros is high", "The total of $12,500 is high.") == .inventedCurrency)
-        #expect(check("the total of 12,500 pounds is high", "The total of €12,500 is high.") == .inventedCurrency)
         #expect(check("the total of 12,500 euros is high", "The total of £12,500 is high.") == .inventedCurrency)
     }
 
     @Test func eachSpokenCurrencyMayBecomeItsOwnSymbol() {
         #expect(check("the total of 12,500 euros is high", "The total of €12,500 is high.") == nil)
-        #expect(check("the total of 12,500 pounds is high", "The total of £12,500 is high.") == nil)
         #expect(check("the total of 12,500 yen is high", "The total of ¥12,500 is high.") == nil)
     }
 
@@ -273,8 +271,18 @@ struct WordDiffGuardCurrencyTests {
     @Test func aWrittenSymbolDoesNotExcuseASymbolOnAnotherAmount() {
         let input = "the fee is $40 and the tip is 3 pounds"
         #expect(check(input, "the fee is $40 and the tip is $3") == .inventedCurrency)
-        #expect(check(input, "the fee is $40 and the tip is £3") == nil)
         #expect(check("the fee is $40 and the tip is 3", "the fee is $40 and the tip is $3") == .inventedCurrency)
+    }
+
+    // "pound" is also a weight, so it never turns into a symbol.
+    @Test func poundsStayAWordAndNeverBecomeSterling() {
+        #expect(check("buy 3 pounds of rice and some beans", "Buy £3 of rice and some beans.", .chat) == .inventedCurrency)
+        // On a take this short the dropped "pounds" trips an earlier rule; either way it is rejected.
+        #expect(check("3 pounds of rice", "£3 of rice", .notes) != nil)
+        #expect(check("the total of 12,500 pounds is high", "The total of £12,500 is high.") == .inventedCurrency)
+        #expect(check("buy 3 pounds of rice and some beans", "Buy 3 pounds of rice and some beans.", .chat) == nil)
+        // A £ the speaker wrote is still fine.
+        #expect(check("the tip is £3 today", "The tip is £3 today.", .chat) == nil)
     }
 
     @Test func currencySymbolsBeyondTheCommonFourAreRecognised() {
