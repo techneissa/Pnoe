@@ -124,7 +124,7 @@ class Recorder: NSObject, ObservableObject {
         guard self.playbackSessionID == playbackSessionID else { return }
         onAudioChunk = nil
 
-        resetAudioMeter()
+        resetLevelSampling()
 
         audioRestorationTask?.cancel()
         audioRestorationTask = Task {
@@ -196,8 +196,7 @@ class Recorder: NSObject, ObservableObject {
     /// Takes a level every 1/30 s while recording. The audio thread already stores its decibel
     /// reading in an atomic; this only reads it, so the real-time path does nothing new.
     private func startLevelSampling() {
-        resetAudioMeter()
-        levelSamplingTimer?.invalidate()
+        resetLevelSampling()
         let timer = Timer(timeInterval: 1 / RecorderLevelMetrics.samplesPerSecond, repeats: true) { [weak self] timer in
             MainActor.assumeIsolated {
                 if let self { self.sampleLevel() } else { timer.invalidate() }
@@ -214,7 +213,7 @@ class Recorder: NSObject, ObservableObject {
         levelHistory.append(smoothedLevel)
     }
 
-    private func resetAudioMeter() {
+    private func resetLevelSampling() {
         levelSamplingTimer?.invalidate()
         levelSamplingTimer = nil
         smoothedLevel = 0
@@ -224,6 +223,7 @@ class Recorder: NSObject, ObservableObject {
     // MARK: - Cleanup
 
     deinit {
+        levelSamplingTimer?.invalidate()
         audioMuteTask?.cancel()
         mediaPauseTask?.cancel()
         audioRestorationTask?.cancel()
