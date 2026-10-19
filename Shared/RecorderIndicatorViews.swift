@@ -145,57 +145,119 @@ struct NotchShape: Shape {
     }
 }
 
+/// The live input level while recording: Bars or Wave, drawn from the recorder's level history
+/// with one `Canvas`. With Reduce Motion on it is a single level bar that does not scroll.
 struct AudioVisualizer: View {
-    let audioMeterProvider: () -> AudioMeter
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    let levelHistoryProvider: () -> LevelHistory
     let color: Color
-    let isActive: Bool
+    let display: RecorderLevelDisplay
+    /// Replaces the system Reduce Motion setting. The environment value cannot be set from outside,
+    /// so offscreen renders use this to draw the Reduce Motion form.
+    let reduceMotionOverride: Bool?
 
-    private let barCount = 15
-    private let barWidth: CGFloat = 3
-    private let barSpacing: CGFloat = 2
-    private let minHeight: CGFloat = 4
-    private let maxHeight: CGFloat = 28
+    // 30 bars come to 74 pt, the width the Notch layout leaves beside its edge padding.
+    static let barWidth: CGFloat = 1.5
+    static let barSpacing: CGFloat = 1
+    static let minHeight: CGFloat = 4
+    static let maxHeight: CGFloat = 28
+    static let width = CGFloat(RecorderLevelMetrics.barCount) * (barWidth + barSpacing) - barSpacing
 
-    private let phases: [Double]
-
-    init(audioMeterProvider: @escaping () -> AudioMeter, color: Color, isActive: Bool) {
-        self.audioMeterProvider = audioMeterProvider
+    init(
+        levelHistoryProvider: @escaping () -> LevelHistory,
+        color: Color,
+        display: RecorderLevelDisplay = .bars,
+        reduceMotionOverride: Bool? = nil
+    ) {
+        self.levelHistoryProvider = levelHistoryProvider
         self.color = color
-        self.isActive = isActive
-        self.phases = (0..<barCount).map { Double($0) * 0.4 }
+        self.display = display
+        self.reduceMotionOverride = reduceMotionOverride
     }
 
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 0.016)) { context in
-            let audioMeter = audioMeterProvider()
+    private var reducesMotion: Bool { reduceMotionOverride ?? systemReduceMotion }
 
-            HStack(spacing: barSpacing) {
-                ForEach(0..<barCount, id: \.self) { index in
-                    RoundedRectangle(cornerRadius: barWidth / 2)
-                        .fill(color.opacity(0.85))
-                        .frame(
-                            width: barWidth,
-                            height: barHeight(
-                                for: index,
-                                at: context.date,
-                                audioMeter: audioMeter
-                            )
-                        )
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / RecorderLevelMetrics.samplesPerSecond)) { _ in
+            let history = levelHistoryProvider()
+            Canvas { context, size in
+                if reducesMotion {
+                    Self.drawMeter(history: history, color: color, in: &context, size: size)
+                } else {
+                    switch display {
+                    case .bars: Self.drawBars(history: history, color: color, in: &context, size: size)
+                    case .wave: Self.drawWave(history: history, color: color, in: &context, size: size)
+                    }
                 }
             }
+            .frame(width: Self.width, height: Self.maxHeight)
+        }
+        .accessibilityHidden(true)
+    }
+
+    private static func drawBars(
+        history: LevelHistory, color: Color, in context: inout GraphicsContext, size: CGSize
+    ) {
+        let heights = LevelDisplayGeometry.barHeights(
+            history: history, barCount: RecorderLevelMetrics.barCount, minHeight: minHeight, maxHeight: maxHeight)
+        for (index, height) in heights.enumerated() {
+            let rect = CGRect(
+                x: CGFloat(index) * (barWidth + barSpacing), y: (size.height - height) / 2,
+                width: barWidth, height: height)
+            context.fill(
+                Path(roundedRect: rect, cornerRadius: barWidth / 2), with: .color(color.opacity(0.85)))
         }
     }
 
-    private func barHeight(for index: Int, at date: Date, audioMeter: AudioMeter) -> CGFloat {
-        guard isActive else { return minHeight }
+    private static func drawWave(
+        history: LevelHistory, color: Color, in context: inout GraphicsContext, size: CGSize
+    ) {
+        let halves = LevelDisplayGeometry.waveHalfHeights(
+            history: history, pointCount: RecorderLevelMetrics.waveSampleCount,
+            minHalfHeight: minHeight / 2, maxHalfHeight: maxHeight / 2)
+        guard halves.count > 1 else { return }
+        let midY = size.height / 2
+        let step = size.width / CGFloat(halves.count - 1)
+        let top = halves.enumerated().map { CGPoint(x: CGFloat($0.offset) * step, y: midY - $0.element) }
+        let bottom = halves.enumerated().map { CGPoint(x: CGFloat($0.offset) * step, y: midY + $0.element) }
 
-        let time = date.timeIntervalSince1970
-        let amplitude = max(0, min(1, pow(audioMeter.averagePower, 0.7)))  // boosted for visibility
-        let wave = sin(time * 8 + phases[index]) * 0.5 + 0.5
-        let centerDistance = abs(Double(index) - Double(barCount) / 2) / Double(barCount / 2)
-        let centerBoost = 1.0 - (centerDistance * 0.4)
+        var path = Path()
+        path.move(to: top[0])
+        addSmoothedEdge(to: &path, points: top)
+        path.addLine(to: bottom[bottom.count - 1])
+        addSmoothedEdge(to: &path, points: bottom.reversed())
+        path.closeSubpath()
 
-        return max(minHeight, minHeight + CGFloat(amplitude * wave * centerBoost) * (maxHeight - minHeight))
+        // Older levels fade out toward the leading edge.
+        context.fill(
+            path,
+            with: .linearGradient(
+                Gradient(colors: [color.opacity(0.15), color.opacity(0.9)]),
+                startPoint: CGPoint(x: 0, y: midY), endPoint: CGPoint(x: size.width, y: midY)))
+    }
+
+    /// Continues `path` through `points` with quadratic curves that pass through the midpoints
+    /// between neighbours, which rounds the corners without overshooting the data.
+    private static func addSmoothedEdge(to path: inout Path, points: [CGPoint]) {
+        guard points.count > 1 else { return }
+        for index in 1..<points.count {
+            let previous = points[index - 1]
+            let current = points[index]
+            let mid = CGPoint(x: (previous.x + current.x) / 2, y: (previous.y + current.y) / 2)
+            path.addQuadCurve(to: mid, control: previous)
+        }
+        path.addLine(to: points[points.count - 1])
+    }
+
+    private static func drawMeter(
+        history: LevelHistory, color: Color, in context: inout GraphicsContext, size: CGSize
+    ) {
+        let thickness: CGFloat = 6
+        let track = CGRect(x: 0, y: (size.height - thickness) / 2, width: size.width, height: thickness)
+        context.fill(Path(roundedRect: track, cornerRadius: thickness / 2), with: .color(color.opacity(0.2)))
+        let fraction = LevelDisplayGeometry.meterFraction(history: history)
+        let filled = CGRect(x: 0, y: track.minY, width: max(thickness, size.width * fraction), height: thickness)
+        context.fill(Path(roundedRect: filled, cornerRadius: thickness / 2), with: .color(color.opacity(0.85)))
     }
 }
 
@@ -505,16 +567,19 @@ struct LiveTranscriptView: View {
 struct RecorderStatusDisplay: View {
     @Environment(\.recorderPalette) private var palette
     let currentState: RecordingState
-    let audioMeterProvider: () -> AudioMeter
+    let levelHistoryProvider: () -> LevelHistory
+    let levelDisplay: RecorderLevelDisplay
     let menuBarHeight: CGFloat?
 
     init(
         currentState: RecordingState,
-        audioMeterProvider: @escaping () -> AudioMeter,
+        levelHistoryProvider: @escaping () -> LevelHistory,
+        levelDisplay: RecorderLevelDisplay = .bars,
         menuBarHeight: CGFloat? = nil
     ) {
         self.currentState = currentState
-        self.audioMeterProvider = audioMeterProvider
+        self.levelHistoryProvider = levelHistoryProvider
+        self.levelDisplay = levelDisplay
         self.menuBarHeight = menuBarHeight
     }
 
@@ -526,9 +591,9 @@ struct RecorderStatusDisplay: View {
                 ProcessingStatusDisplay(mode: .transcribing, color: palette.ink).transition(.opacity)
             } else if currentState == .recording {
                 AudioVisualizer(
-                    audioMeterProvider: audioMeterProvider,
+                    levelHistoryProvider: levelHistoryProvider,
                     color: palette.ink,
-                    isActive: true
+                    display: levelDisplay
                 )
                     .scaleEffect(y: menuBarHeight != nil ? min(1.0, (menuBarHeight! - 8) / 25) : 1.0, anchor: .center)
                     .transition(.opacity)
