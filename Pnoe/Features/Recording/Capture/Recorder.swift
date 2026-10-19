@@ -251,8 +251,3 @@ class Recorder: NSObject, ObservableObject {
         recorder?.teardown()
     }
 }
-
-struct AudioMeter: Equatable {
-    let averagePower: Double
-    let peakPower: Double
-}

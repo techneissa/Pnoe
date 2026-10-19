@@ -92,9 +92,14 @@ class PnoeEngine: NSObject, ObservableObject {
         }
     }
 
-    @Published var recordingState: RecordingState = .idle
+    @Published var recordingState: RecordingState = .idle {
+        didSet {
+            if recordingState != .starting && recordingState != .recording { expectsPartialTranscript = false }
+        }
+    }
     @Published var shouldCancelRecording = false
     @Published var partialTranscript: String = ""
+    @Published private(set) var expectsPartialTranscript = false
     var currentSession: TranscriptionSession?
     private var currentSessionTranscriptionConfiguration: TranscriptionRuntimeConfiguration?
     private var activeRecordingStartID: UUID?
@@ -322,17 +327,23 @@ class PnoeEngine: NSObject, ObservableObject {
                             }
 
                             if self.serviceRegistry.shouldUseRealtimeTranscription(for: transcriptionConfiguration) {
+                                // The preview is the only consumer of partials, so it is throttled
+                                // here and the transcription path only hands over a string.
+                                let relay = PartialTranscriptRelay { [weak self] partial in
+                                    guard let self,
+                                        self.activeRecordingStartID == startID,
+                                        self.recordingState == .recording
+                                    else {
+                                        return
+                                    }
+                                    self.partialTranscript = partial
+                                }
+                                self.expectsPartialTranscript = true
                                 let session = self.serviceRegistry.createSession(
                                     for: transcriptionConfiguration,
-                                    onPartialTranscript: { [weak self] partial in
+                                    onPartialTranscript: { partial in
                                         Task { @MainActor in
-                                            guard let self,
-                                                self.activeRecordingStartID == startID,
-                                                self.recordingState == .recording
-                                            else {
-                                                return
-                                            }
-                                            self.partialTranscript = partial
+                                            relay.submit(partial)
                                         }
                                     }
                                 )
@@ -354,6 +365,7 @@ class PnoeEngine: NSObject, ObservableObject {
                                     self.recorder.onAudioChunk = nil
                                 }
                             } else {
+                                self.expectsPartialTranscript = false
                                 self.currentSession = nil
                                 self.currentSessionTranscriptionConfiguration = nil
                                 self.recorder.onAudioChunk = nil

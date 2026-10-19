@@ -8,10 +8,6 @@ enum CleanupSettingsKeys {
     static let lastAutomaticAudioCleanupDate = "AudioCleanupLastAutomaticCleanupDate"
 }
 
-enum RecorderDisplaySettingsKeys {
-    static let showLiveTranscript = "ShowLiveTranscript"
-}
-
 enum CloudTranscriptionSettings {
     static let timeoutKey = "CloudTranscriptionTimeout"
     static let defaultTimeout = 30
@@ -146,6 +142,11 @@ enum AppDefaults {
             "AppendTrailingSpace": true,
             "RecorderType": "mini",
             RecorderDisplaySettingsKeys.showLiveTranscript: true,
+            RecorderDisplaySettingsKeys.liveTranscriptSize: LiveTranscriptSize.medium.rawValue,
+            RecorderDisplaySettingsKeys.theme: RecorderTheme.dark.rawValue,
+            RecorderDisplaySettingsKeys.display: RecorderDisplaySelection.active.storedValue,
+            RecorderDisplaySettingsKeys.miniPlacement: MiniRecorderPlacement.bottom.rawValue,
+            RecorderDisplaySettingsKeys.visibility: RecorderVisibility.whileRecording.rawValue,
             CloudTranscriptionSettings.timeoutKey: CloudTranscriptionSettings.defaultTimeout,
             AutoLearnSettings.isEnabledKey: true,
             AutoLearnSettings.reviewScheduleKey: AutoLearnReviewSchedule.immediately.rawValue,
