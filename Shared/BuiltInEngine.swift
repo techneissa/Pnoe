@@ -1,3 +1,4 @@
+import AppKit
 import Dispatch
 import FormatterCore
 import FormatterModels
@@ -17,8 +18,18 @@ enum BuiltInEngineError: Error, Equatable {
 /// shared by every workflow so the model stays loaded between takes. The runtime is `XPCFormatterRuntime`;
 /// tests pass a `FakeRuntime`.
 final class BuiltInEngine: @unchecked Sendable {
-    /// The engine every workflow uses.
-    static let shared = BuiltInEngine(runtime: BuiltInEngine.makeServiceRuntime())
+    /// The engine every workflow uses. The first use starts the memory-pressure watch and the unload at quit.
+    static let shared: BuiltInEngine = {
+        let engine = BuiltInEngine(runtime: BuiltInEngine.makeServiceRuntime())
+        engine.unloadOnMemoryPressure()
+        engine.unloadAtTermination()
+        started = engine
+        return engine
+    }()
+
+    /// The shared engine once something has used it; nil before. Code that only wants to free the model must
+    /// not be the thing that starts the engine.
+    private(set) nonisolated(unsafe) static var started: BuiltInEngine?
 
     let runtime: any FormatterRuntime
     private let chosenFiles: @Sendable () -> [URL]
@@ -69,14 +80,17 @@ final class BuiltInEngine: @unchecked Sendable {
     /// One system prompt and one user message, answered in full: the workflows that rewrite the text (Checklist,
     /// Summary and the others) go through here. Cleaned Text goes through `GuardedCleanup` instead.
     func complete(system: String, user: String, modelID: String, timeout: TimeInterval) async throws -> String {
+        // One deadline for loading the model and generating.
+        let deadline = ContinuousClock.now + .seconds(timeout)
         guard let spec = await spec(forModelID: modelID) else { throw BuiltInEngineError.modelMissing }
         let prefix = PromptPrefix(messages: [ChatMessage(role: .system, content: system)])
         do {
-            try await runtime.prepare(spec, prefix: prefix)
+            try await runtime.prepare(spec, prefix: prefix, deadline: deadline)
             let request = GenerationRequest(
                 suffix: [ChatMessage(role: .user, content: user)],
                 maxTokens: 2048,
-                deadline: .now + .seconds(timeout)
+                deadline: deadline,
+                prefixKey: prefix.key
             )
             let result = try await runtime.generate(request)
             switch result.stopReason {
@@ -98,7 +112,48 @@ final class BuiltInEngine: @unchecked Sendable {
         }
     }
 
+    // MARK: Preload
+
+    /// Starts loading the model of the workflow that is about to record, so the first take after an unload does
+    /// not fall back. Only for a workflow that has AI on and uses Built-in. It never waits: the caller gets the
+    /// task back (tests await it) and recording goes on. A load that fails or is refused is left for the take to
+    /// find, which falls back as it does without a preload.
+    @discardableResult
+    func preloadIfUsed(isEnabled: Bool, providerName: String?, modelID: String?) -> Task<Void, Never>? {
+        guard isEnabled, providerName == BuiltInModels.providerName, let modelID, !modelID.isEmpty else { return nil }
+        let runtime = self.runtime
+        return Task.detached(priority: .utility) { [self] in
+            guard let spec = await spec(forModelID: modelID),
+                let pipeline = try? FormatterPipeline.bundled(runtime: runtime)
+            else { return }
+            // The Cleaned Text prefix: a Cleaned Text take finds it ready, and any other template replaces only
+            // the cached prefix, not the loaded model.
+            try? await runtime.prepare(spec, prefix: pipeline.prefix, deadline: .now + .seconds(120))
+        }
+    }
+
     // MARK: Memory
+
+    /// Frees the model when no workflow uses Built-in any more. Does nothing before the engine has been used.
+    static func unloadIfUnused(workflows: [BuiltInUsage.Workflow]) {
+        guard let engine = started, !BuiltInUsage.isUsed(by: workflows) else { return }
+        Task { await engine.unload() }
+    }
+
+    /// Frees the model, and with it the service process, when the app quits.
+    func unloadAtTermination() {
+        let runtime = self.runtime
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: nil
+        ) { _ in
+            let done = DispatchSemaphore(value: 0)
+            Task {
+                await runtime.unload()
+                done.signal()
+            }
+            _ = done.wait(timeout: .now() + 1)
+        }
+    }
 
     /// Frees the model when the system is short of memory. The next take loads it again.
     func unloadOnMemoryPressure() {

@@ -10,13 +10,15 @@ final class Loopback: @unchecked Sendable {
     private let lock = NSLock()
     private var connections: [NSXPCConnection] = []
     private let lastClosed = Counter()
+    private let rejecting = Counter()
 
     var lastConnectionClosedCount: Int { lastClosed.value }
 
     init(runtime: any FormatterRuntime) {
         let closed = lastClosed
         delegate = FormatterXPCListenerDelegate(runtime: runtime, onLastConnectionClosed: { closed.increment() })
-        let tracking = TrackingDelegate(wrapping: delegate) { [weak self] connection in
+        let rejecting = self.rejecting
+        let tracking = TrackingDelegate(wrapping: delegate, shouldReject: { rejecting.decrementIfPositive() }) { [weak self] connection in
             self?.lock.lock()
             self?.connections.append(connection)
             self?.lock.unlock()
@@ -40,6 +42,9 @@ final class Loopback: @unchecked Sendable {
         XPCFormatterRuntime(endpoint: .listener(listener.endpoint), configuration: configuration)
     }
 
+    /// The next `count` connections are refused, like a client that reaches a service still exiting.
+    func rejectNextConnections(_ count: Int) { for _ in 0..<count { rejecting.increment() } }
+
     /// Ends every server-side connection the way a dying service does: the client sees an interruption.
     func killService() {
         lock.lock()
@@ -55,18 +60,31 @@ final class Counter: @unchecked Sendable {
     private var count = 0
     var value: Int { lock.lock(); defer { lock.unlock() }; return count }
     func increment() { lock.lock(); count += 1; lock.unlock() }
+    func decrementIfPositive() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard count > 0 else { return false }
+        count -= 1
+        return true
+    }
 }
 
 private final class TrackingDelegate: NSObject, NSXPCListenerDelegate, @unchecked Sendable {
     private let inner: FormatterXPCListenerDelegate
     private let onConnection: @Sendable (NSXPCConnection) -> Void
+    private let shouldReject: @Sendable () -> Bool
 
-    init(wrapping inner: FormatterXPCListenerDelegate, onConnection: @escaping @Sendable (NSXPCConnection) -> Void) {
+    init(
+        wrapping inner: FormatterXPCListenerDelegate, shouldReject: @escaping @Sendable () -> Bool,
+        onConnection: @escaping @Sendable (NSXPCConnection) -> Void
+    ) {
         self.inner = inner
+        self.shouldReject = shouldReject
         self.onConnection = onConnection
     }
 
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
+        if shouldReject() { return false }
         onConnection(newConnection)
         return inner.listener(listener, shouldAcceptNewConnection: newConnection)
     }
@@ -80,6 +98,10 @@ actor ScriptedRuntime: FormatterRuntime {
     var requests: [GenerationRequest] = []
     var cancelled: [UUID] = []
     var unloadCount = 0
+    var currentPrefix: PromptPrefix?
+    /// For each request: the key of the prefix that was current when it ran.
+    var generatedUnder: [UUID: String] = [:]
+    var generateDelay: Duration = .zero
     private var gate: CheckedContinuation<Void, Never>?
     private var holdGenerate = false
     private var started: CheckedContinuation<Void, Never>?
@@ -90,6 +112,7 @@ actor ScriptedRuntime: FormatterRuntime {
 
     func release() { gate?.resume(); gate = nil }
     func clearRequests() { requests = []; cancelled = [] }
+    func setGenerateDelay(_ delay: Duration) { generateDelay = delay }
     func setPrepareDelay(_ delay: Duration) { prepareDelay = delay }
     func setReply(_ result: GenerationResult) { reply = result }
     func setError(_ error: FormatterRuntimeError?) { self.error = error }
@@ -100,10 +123,13 @@ actor ScriptedRuntime: FormatterRuntime {
         prepareCalls.append((spec, prefix))
         if prepareDelay > .zero { try await Task.sleep(for: prepareDelay) }
         if let error { throw error }
+        currentPrefix = prefix
     }
 
     func generate(_ request: GenerationRequest) async throws -> GenerationResult {
         requests.append(request)
+        generatedUnder[request.id] = currentPrefix?.key
+        if generateDelay > .zero { try await Task.sleep(for: generateDelay) }
         onGenerateStart?()
         if let error { throw error }
         if holdGenerate {

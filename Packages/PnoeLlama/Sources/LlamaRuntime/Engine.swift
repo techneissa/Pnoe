@@ -205,7 +205,8 @@ final class Engine {
         case .gemma4:
             return ChatTemplate.renderGemma4(messages, addGenerationPrompt: addGenerationPrompt, bos: bos)
         case .native(let templateString):
-            return try applyNativeTemplate(templateString, messages: messages, addGenerationPrompt: addGenerationPrompt)
+            let rendered = try applyNativeTemplate(templateString, messages: messages, addGenerationPrompt: addGenerationPrompt)
+            return ChatTemplate.closingThinking(rendered, template: templateString, addGenerationPrompt: addGenerationPrompt)
         }
     }
 

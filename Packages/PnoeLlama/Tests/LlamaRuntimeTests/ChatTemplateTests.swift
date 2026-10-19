@@ -64,4 +64,27 @@ struct ChatTemplateTests {
         #expect(ChatTemplate.gemma4.rendersBeginningOfSequence)
         #expect(!ChatTemplate.native("x").rendersBeginningOfSequence)
     }
+
+    @Test("a template that supports thinking gets the empty think block after the generation prompt, once")
+    func closesThinking() {
+        let qwen = "{%- if enable_thinking is defined %}<think>{%- endif %}<|im_start|>"
+        let prompt = "<|im_start|>user\nhi<|im_end|>\n<|im_start|>assistant\n"
+        let closed = ChatTemplate.closingThinking(prompt, template: qwen, addGenerationPrompt: true)
+        #expect(closed == prompt + "<think>\n\n</think>\n\n")
+        #expect(ChatTemplate.closingThinking(closed, template: qwen, addGenerationPrompt: true) == closed)
+        // No generation prompt (the cached prefix), or a template without thinking: unchanged.
+        #expect(ChatTemplate.closingThinking(prompt, template: qwen, addGenerationPrompt: false) == prompt)
+        #expect(ChatTemplate.closingThinking(prompt, template: "<|im_start|>", addGenerationPrompt: true) == prompt)
+    }
+
+    @Test("the prefix is still a text prefix of the whole prompt once the think block is added")
+    func splitKeepsWorkingWithThinking() throws {
+        let qwen = "<think><|im_start|>"
+        let render: ([ChatMessage], Bool) -> String = { messages, addAssistant in
+            let body = messages.map { "<|im_start|>\($0.role.rawValue)\n\($0.content)<|im_end|>\n" }.joined()
+            return ChatTemplate.closingThinking(body + (addAssistant ? "<|im_start|>assistant\n" : ""), template: qwen, addGenerationPrompt: addAssistant)
+        }
+        let split = try #require(SplitPrompt.make(prefix: Self.prefix, suffix: Self.suffix, render: render))
+        #expect(split.suffix.hasSuffix("<|im_start|>assistant\n<think>\n\n</think>\n\n"))
+    }
 }

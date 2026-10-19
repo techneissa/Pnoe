@@ -16,10 +16,12 @@ final class BuiltInEnginePreviewTests: XCTestCase {
     }
 
     private static let installed = [
-        BuiltInModelRow(id: "a", title: "gemma-4-E2B-it-Q4_K_M", detail: "3.1 GB · Q4_K_M · Hugging Face"),
-        BuiltInModelRow(id: "b", title: "gemma3:4b", detail: "3.3 GB · Q4_K_M · Ollama"),
-        BuiltInModelRow(id: "c", title: "Qwen3-4B-Instruct-2507-Q8_0", detail: "4.3 GB · Q8_0 · LM Studio"),
-        BuiltInModelRow(id: "d", title: "notes-cleanup-Q5_K_M", detail: "2.7 GB · Q5_K_M · Chosen file"),
+        BuiltInModelRow(id: "a", name: "gemma-4-E2B-it", quantization: "Q4_K_M", sizeText: "3.1 GB", source: .huggingFaceCache),
+        BuiltInModelRow(id: "b", name: "gemma3:4b-it", quantization: "Q4_K_M", sizeText: "3.3 GB", source: .ollamaStore),
+        BuiltInModelRow(id: "c", name: "Qwen3-4B-Instruct-2507", quantization: "Q8_0", sizeText: "4.3 GB", source: .lmStudio),
+        BuiltInModelRow(id: "d", name: "notes-cleanup", quantization: "Q5_K_M", sizeText: "2.7 GB", source: .userChosen),
+        BuiltInModelRow(id: "e", name: "Gemma 4 E2B", quantization: "Q4_K_M", sizeText: "3.1 GB", source: .downloaded),
+        BuiltInModelRow(id: "f", name: "Llama-3.2-1B-Instruct", quantization: "Q2_K", sizeText: "0.6 GB", source: .huggingFaceCache),
     ]
 
     private struct Harness: View {
@@ -27,17 +29,8 @@ final class BuiltInEnginePreviewTests: XCTestCase {
         let rows: [BuiltInModelRow]
         @State var selection: String?
         let download: BuiltInDownloadRowState?
-        var listsEveryChoice = false
 
-        @ViewBuilder var body: some View {
-            if listsEveryChoice {
-                form.pickerStyle(.inline)
-            } else {
-                form
-            }
-        }
-
-        private var form: some View {
+        var body: some View {
             Form {
                 Section {
                     Toggle("AI Enhancement", isOn: .constant(true))
@@ -58,6 +51,18 @@ final class BuiltInEnginePreviewTests: XCTestCase {
             .scrollContentBackground(.hidden)
             .frame(width: 560)
             .background(Color(nsColor: .windowBackgroundColor))
+        }
+    }
+
+    /// What the popover looks like: its content on the material a popover is drawn on.
+    private struct PopoverCard: View {
+        let query: String
+        var body: some View {
+            BuiltInModelPopoverContent(rows: BuiltInEnginePreviewTests.installed, selectedID: "a", initialQuery: query, onSelect: { _ in }, onClose: {})
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.15)))
+                .padding(20)
+                .background(Color(nsColor: .windowBackgroundColor))
         }
     }
 
@@ -91,18 +96,24 @@ final class BuiltInEnginePreviewTests: XCTestCase {
         BuiltInDownloadRowState(name: "Gemma 4 E2B", sizeText: "3.1 GB", licenseName: "Apache-2.0", state: state)
     }
 
-    func testRenderInstalledModels() throws {
+    func testRenderThePickerClosed() throws {
         let view = Harness(providers: providers, rows: Self.installed, selection: "a", download: nil)
-        try render(view, size: NSSize(width: 560, height: 330), to: "builtin-models")
-        try render(view, size: NSSize(width: 560, height: 330), to: "builtin-models-dark", dark: true)
-        // The same rows with every choice listed: the providers and the four sample models.
-        let open = Harness(providers: providers, rows: Self.installed, selection: "a", download: nil, listsEveryChoice: true)
-        try render(open, size: NSSize(width: 560, height: 600), to: "builtin-choices")
+        try render(view, size: NSSize(width: 560, height: 360), to: "builtin-picker")
+        try render(view, size: NSSize(width: 560, height: 360), to: "builtin-picker-dark", dark: true)
     }
 
-    func testRenderNothingInstalledWithTheDownloadRow() throws {
-        let view = Harness(providers: providers, rows: [], selection: nil, download: gemma(.notInstalled))
-        try render(view, size: NSSize(width: 560, height: 370), to: "builtin-download-offer")
+    func testRenderThePopoverOpenWithASearchTerm() throws {
+        try render(PopoverCard(query: "q4"), size: NSSize(width: 440, height: 270), to: "builtin-popover-search")
+        try render(PopoverCard(query: "q4"), size: NSSize(width: 440, height: 270), to: "builtin-popover-search-dark", dark: true)
+        try render(PopoverCard(query: ""), size: NSSize(width: 440, height: 400), to: "builtin-popover-all")
+        try render(PopoverCard(query: "zzz"), size: NSSize(width: 440, height: 130), to: "builtin-popover-empty")
+    }
+
+    func testRenderTheMissingModelAndTheEmptyList() throws {
+        let missing = Harness(providers: providers, rows: Self.installed, selection: "unplugged-drive", download: nil)
+        try render(missing, size: NSSize(width: 560, height: 360), to: "builtin-model-not-found")
+        let empty = Harness(providers: providers, rows: [], selection: nil, download: gemma(.notInstalled))
+        try render(empty, size: NSSize(width: 560, height: 380), to: "builtin-download-offer")
     }
 
     func testRenderDownloadStates() throws {
@@ -111,8 +122,8 @@ final class BuiltInEnginePreviewTests: XCTestCase {
             ("builtin-paused", .paused),
             ("builtin-failed", .failed("Not enough free disk space. The download needs 4 GB free.")),
         ] {
-            let view = Harness(providers: providers, rows: Self.installed.prefix(1).map { $0 }, selection: "a", download: gemma(state))
-            try render(view, size: NSSize(width: 560, height: 400), to: name)
+            let view = Harness(providers: providers, rows: Array(Self.installed.prefix(1)), selection: "a", download: gemma(state))
+            try render(view, size: NSSize(width: 560, height: 420), to: name)
         }
     }
 }

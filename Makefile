@@ -48,7 +48,7 @@ setup: whisper
 # so this uses the entitlements without them (like `make local`) until iCloud sync is enabled.
 build: setup
 	xcodebuild -project Pnoe.xcodeproj -scheme Pnoe -configuration Debug \
-		CODE_SIGN_ENTITLEMENTS="$(CURDIR)/Pnoe/Pnoe.debug.entitlements" \
+		PNOE_APP_ENTITLEMENTS="$(CURDIR)/Pnoe/Pnoe.debug.entitlements" \
 		-skipPackagePluginValidation \
 		-skipMacroValidation \
 		build
@@ -82,7 +82,8 @@ local: check setup
 		CODE_SIGNING_REQUIRED="$$SIGNING_REQUIRED" \
 		CODE_SIGNING_ALLOWED=YES \
 		DEVELOPMENT_TEAM="" \
-		CODE_SIGN_ENTITLEMENTS="$(CURDIR)/Pnoe/Pnoe.local.entitlements" \
+		PNOE_APP_ENTITLEMENTS="$(CURDIR)/Pnoe/Pnoe.local.entitlements" \
+		PNOE_XPC_ENTITLEMENTS="$(CURDIR)/PnoeFormatterXPC/PnoeFormatterXPC.local.entitlements" \
 		SWIFT_ACTIVE_COMPILATION_CONDITIONS='$$(inherited) LOCAL_BUILD' \
 		-skipPackagePluginValidation \
 		-skipMacroValidation \

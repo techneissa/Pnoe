@@ -42,6 +42,7 @@ struct XPCGenerateRequest: Codable, Sendable {
     /// process, so the service builds its own deadline from this.
     var secondsLeft: Double
     var temperature: Double
+    var prefixKey: String?
 }
 
 struct XPCGenerateResponse: Codable, Sendable {

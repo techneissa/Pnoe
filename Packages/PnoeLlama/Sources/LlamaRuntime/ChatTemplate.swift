@@ -28,6 +28,20 @@ enum ChatTemplate: Equatable, Sendable {
         }
     }
 
+    /// What a model that thinks by default needs after the generation prompt so it answers at once: an empty
+    /// think block. A Qwen3-style template mentions `<think>`; without this the model starts thinking and runs
+    /// into the token cap, and every take falls back.
+    static let emptyThinkingBlock = "<think>\n\n</think>\n\n"
+
+    /// `rendered` (llama.cpp's output for a template it knows) with the empty think block appended when the
+    /// template supports thinking and the text ends in the generation prompt.
+    static func closingThinking(_ rendered: String, template: String, addGenerationPrompt: Bool) -> String {
+        guard addGenerationPrompt, template.contains("<think>"), !rendered.hasSuffix(emptyThinkingBlock) else {
+            return rendered
+        }
+        return rendered + emptyThinkingBlock
+    }
+
     /// The Gemma 4 text for `messages`. `bos` is the vocabulary's beginning-of-sequence text (`<bos>`).
     static func renderGemma4(_ messages: [ChatMessage], addGenerationPrompt: Bool, bos: String = "<bos>") -> String {
         var output = bos

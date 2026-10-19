@@ -236,8 +236,16 @@ struct ModeView: View {
     }
 
     private func openPlayground() {
-        playgroundModel = makePlaygroundModel()
+        let model = makePlaygroundModel()
+        playgroundModel = model
         activePanel = .playground
+        // The installed Built-in models, by name, once the folders have been read.
+        Task { @MainActor in
+            await BuiltInModelsModel.shared.refresh()
+            let builtIn = PlaygroundModelOptions.builtIn(
+                BuiltInModelsModel.shared.rows, providerName: AIProvider.builtIn.rawValue)
+            model.modelChoices = PlaygroundModelOptions.merged(model.modelChoices + builtIn, own: nil)
+        }
     }
 
     /// The Playground lists the workflows that use AI and runs one on a typed sample through the same

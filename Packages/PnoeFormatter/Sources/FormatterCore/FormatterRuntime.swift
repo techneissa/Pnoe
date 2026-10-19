@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 public enum FormatterRuntimeID: String, Sendable, Codable {
@@ -57,6 +58,15 @@ public struct PromptPrefix: Sendable, Equatable {
     public init(messages: [ChatMessage]) {
         self.messages = messages
     }
+
+    /// A short stable name for this prefix (a SHA-256 of its messages). A request carries it so a runtime that
+    /// has been prepared with another prefix in the meantime can switch back before it generates.
+    public var key: String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = (try? encoder.encode(messages)) ?? Data()
+        return SHA256.hash(data: data).prefix(12).map { String(format: "%02x", $0) }.joined()
+    }
 }
 
 public struct GenerationRequest: Sendable, Equatable {
@@ -67,19 +77,24 @@ public struct GenerationRequest: Sendable, Equatable {
     public var deadline: ContinuousClock.Instant
     /// Always 0. Carried so a backend can assert it.
     public var temperature: Double
+    /// `PromptPrefix.key` of the prefix this request was built for. A runtime shared by several workflows
+    /// switches to that prefix when another one was prepared in between; nil means "whatever is current".
+    public var prefixKey: String?
 
     public init(
         id: UUID = UUID(),
         suffix: [ChatMessage],
         maxTokens: Int,
         deadline: ContinuousClock.Instant,
-        temperature: Double = 0
+        temperature: Double = 0,
+        prefixKey: String? = nil
     ) {
         self.id = id
         self.suffix = suffix
         self.maxTokens = maxTokens
         self.deadline = deadline
         self.temperature = temperature
+        self.prefixKey = prefixKey
     }
 }
 
@@ -123,8 +138,18 @@ public enum FormatterRuntimeError: Error, Sendable, Equatable {
 public protocol FormatterRuntime: Sendable {
     var id: FormatterRuntimeID { get }
     func prepare(_ spec: RuntimeModelSpec, prefix: PromptPrefix) async throws
+    /// `prepare` for a caller that has a deadline: a runtime that can load for a long time (a model of a few GB)
+    /// waits no longer than the deadline, and a load that is still running goes on for the next caller. The
+    /// default ignores the deadline.
+    func prepare(_ spec: RuntimeModelSpec, prefix: PromptPrefix, deadline: ContinuousClock.Instant) async throws
     func generate(_ request: GenerationRequest) async throws -> GenerationResult
     /// Sets the flag the decode loop reads each token. Must make a running `generate` return soon.
     func cancel(_ requestID: UUID) async
     func unload() async
+}
+
+extension FormatterRuntime {
+    public func prepare(_ spec: RuntimeModelSpec, prefix: PromptPrefix, deadline: ContinuousClock.Instant) async throws {
+        try await prepare(spec, prefix: prefix)
+    }
 }

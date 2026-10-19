@@ -117,12 +117,11 @@ struct ModeConfigDraft {
     }
 
     mutating func applyAddModeDefaults(snapshot: ModeFormWarmupSnapshot) {
-        let connectedProviders = snapshot.connectedAIProviders
-        let inheritedProvider = selectedAIProvider.flatMap(AIProvider.init(rawValue:))
-        let provider =
-            inheritedProvider.flatMap { provider in
-                connectedProviders.contains(provider) ? provider : nil
-            } ?? connectedProviders.first
+        let provider = TemplateProviderPreselection.defaultProvider(
+            inherited: selectedAIProvider,
+            available: snapshot.connectedAIProviders.map(\.rawValue),
+            builtIn: AIProvider.builtIn.rawValue
+        ).flatMap(AIProvider.init(rawValue:))
 
         selectedAIProvider = provider?.rawValue
         guard let provider, provider != .localCLI, provider != .builtIn else {

@@ -62,9 +62,21 @@ enum BuiltInModels {
         case .ollama, .ollamaStore: "Ollama"
         case .huggingFaceCache: "Hugging Face"
         case .lmStudio: "LM Studio"
-        case .userChosen: String(localized: "Chosen file")
-        case .downloaded: String(localized: "Downloaded by Pnoe")
+        case .userChosen: String(localized: "File")
+        case .downloaded: String(localized: "Downloaded")
         }
+    }
+
+    /// The model's name without its quantization: `gemma-4-E2B-it-Q4_K_M` is `gemma-4-E2B-it`. The picker shows
+    /// the quantization as a badge of its own. A name that does not end in its quantization is left as it is.
+    static func title(of entry: FormatterModelEntry) -> String {
+        guard let quantization = entry.quantization else { return entry.displayName }
+        let name = entry.displayName
+        guard let range = name.range(
+            of: "[-_.:]?" + NSRegularExpression.escapedPattern(for: quantization) + "$", options: [.regularExpression, .caseInsensitive]),
+            range.lowerBound > name.startIndex
+        else { return name }
+        return String(name[..<range.lowerBound])
     }
 
     /// "3.1 GB · Q4_K_M · Hugging Face"
@@ -80,11 +92,13 @@ enum BuiltInModels {
 
     // MARK: Which model a workflow starts on
 
-    /// A workflow set to Built-in with no model yet starts on the downloaded Gemma 4, else the smallest
-    /// installed Gemma or Qwen instruct model, else nothing (the user picks). Base, code, vision and math
-    /// variants and very small files are skipped, as for Ollama.
+    /// A workflow set to Built-in with no model yet starts on Gemma 4 E2B (the one Pnoe downloads, else any
+    /// installed copy of it, since the prompt and the guards are tuned on it), else the smallest installed
+    /// Gemma or Qwen instruct model, else nothing (the user picks). Base, code, vision and math variants and
+    /// very small files are skipped, as for Ollama.
     static func suggested(from entries: [FormatterModelEntry]) -> FormatterModelEntry? {
         if let downloaded = entries.first(where: { $0.source == .downloaded }) { return downloaded }
+        if let gemma = entries.filter(isGemma4E2B).min(by: { ($0.sizeBytes ?? .max) < ($1.sizeBytes ?? .max) }) { return gemma }
         return entries
             .filter(isSuitable)
             .min { lhs, rhs in
@@ -95,10 +109,18 @@ enum BuiltInModels {
             }
     }
 
-    /// The stored id if that model is still installed, otherwise the suggestion. Nil when nothing fits.
+    /// A stored id stays, whether or not that model is installed now: a model that went missing (an unplugged
+    /// drive) shows as "Model not found" and the user decides. Only a workflow with no model stored gets the
+    /// suggestion, and nil when nothing fits.
     static func selection(stored: String?, installed entries: [FormatterModelEntry]) -> String? {
-        if let stored, entries.contains(where: { $0.id == stored }) { return stored }
+        if let stored, !stored.isEmpty { return stored }
         return suggested(from: entries)?.id
+    }
+
+    /// `gemma-4-E2B-it-Q4_K_M`, `gemma4:e2b`, `Gemma 4 E2B`.
+    static func isGemma4E2B(_ entry: FormatterModelEntry) -> Bool {
+        entry.kind == .gguf
+            && entry.displayName.range(of: #"gemma[-_ ]?4.*e2b"#, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
     private static let families = ["gemma", "qwen"]
@@ -125,5 +147,17 @@ enum WorkflowProviderList {
     /// `order` is every provider name in the order the editor shows them; `connected` the ones that are set up.
     static func names(order: [String], connected: Set<String>, builtIn: String) -> [String] {
         order.filter { $0 == builtIn || connected.contains($0) }
+    }
+}
+
+/// Whether any workflow still uses Built-in, so the model can be freed when none does.
+enum BuiltInUsage {
+    struct Workflow: Equatable {
+        let isAIEnabled: Bool
+        let providerName: String?
+    }
+
+    static func isUsed(by workflows: [Workflow]) -> Bool {
+        workflows.contains { $0.isAIEnabled && $0.providerName == BuiltInModels.providerName }
     }
 }

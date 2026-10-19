@@ -164,13 +164,27 @@ final class BuiltInSelectionTests: XCTestCase {
         XCTAssertNil(BuiltInModels.suggested(from: []))
     }
 
-    func testAStoredChoiceStaysWhileItIsInstalledAndFallsBackWhenItIsGone() {
+    func testAStoredChoiceStaysEvenWhenThatModelIsGoneAndOnlyAnEmptyOneGetsTheSuggestion() {
         let a = entry("gemma-3-4b-it", gigabytes: 2.5)
         let b = entry("Qwen3-4B", gigabytes: 4.2)
         XCTAssertEqual(BuiltInModels.selection(stored: b.id, installed: [a, b]), b.id)
-        XCTAssertEqual(BuiltInModels.selection(stored: "gone", installed: [a, b]), a.id)
+        // An unplugged drive: the stored model is kept, the picker says "Model not found".
+        XCTAssertEqual(BuiltInModels.selection(stored: "gone", installed: [a, b]), "gone")
+        XCTAssertEqual(BuiltInModels.selection(stored: "gone", installed: []), "gone")
+        // Nothing stored yet: the suggestion.
         XCTAssertEqual(BuiltInModels.selection(stored: nil, installed: [a, b]), a.id)
-        XCTAssertNil(BuiltInModels.selection(stored: "gone", installed: []))
+        XCTAssertEqual(BuiltInModels.selection(stored: "", installed: [a, b]), a.id)
+        XCTAssertNil(BuiltInModels.selection(stored: nil, installed: []))
+    }
+
+    func testGemma4E2BComesFirstWhereverItIsInstalledEvenWhenASmallerModelExists() {
+        let small = entry("Qwen3-1.7B-Q8_0", gigabytes: 1.8)
+        let gemma = entry("gemma-4-E2B-it-Q4_K_M", gigabytes: 3.1)
+        let other = entry("gemma-3-4b-it-Q4_K_M", gigabytes: 2.5)
+        XCTAssertEqual(BuiltInModels.suggested(from: [small, other, gemma])?.id, gemma.id)
+        let ollama = entry("gemma4:e2b", gigabytes: 7.2, source: .ollamaStore)
+        XCTAssertEqual(BuiltInModels.suggested(from: [small, ollama])?.id, ollama.id)
+        XCTAssertEqual(BuiltInModels.suggested(from: [small, other])?.id, small.id, "no Gemma 4 E2B: the smallest suitable")
     }
 
     func testOllamaStaysTheTemplateDefaultAndAGGUFFileNeverBecomesIt() async {
@@ -338,5 +352,240 @@ final class BuiltInServiceCrashTests: XCTestCase {
 
         XCTAssertEqual(result.fallbackReason, FallbackReason.runtimeCrashed.rawValue)
         XCTAssertTrue(result.text.lowercased().contains("tuesday"), "the take still pastes")
+    }
+}
+
+// MARK: - Round 2 and review fixes
+
+final class BuiltInPickerTextTests: XCTestCase {
+    private func entry(_ name: String, quantization: String?, source: FormatterModelSource = .huggingFaceCache) -> FormatterModelEntry {
+        FormatterModelEntry(
+            id: "\(source.rawValue):\(name)", displayName: name, kind: .gguf, sizeBytes: 3_100_000_000, source: source,
+            quantization: quantization, spec: RuntimeModelSpec(modelURL: URL(fileURLWithPath: "/m/\(name).gguf")))
+    }
+
+    func testTheTitleLosesItsQuantizationWhichHasABadgeOfItsOwn() {
+        XCTAssertEqual(BuiltInModels.title(of: entry("gemma-4-E2B-it-Q4_K_M", quantization: "Q4_K_M")), "gemma-4-E2B-it")
+        XCTAssertEqual(BuiltInModels.title(of: entry("gemma3:4b-it-q4_K_M", quantization: "Q4_K_M", source: .ollamaStore)), "gemma3:4b-it")
+        XCTAssertEqual(BuiltInModels.title(of: entry("Qwen3-4B.Q8_0", quantization: "Q8_0")), "Qwen3-4B")
+        XCTAssertEqual(BuiltInModels.title(of: entry("notes-cleanup", quantization: nil)), "notes-cleanup")
+        // A name that only mentions it in the middle stays whole.
+        XCTAssertEqual(BuiltInModels.title(of: entry("Q4_K_M-experiments", quantization: "Q4_K_M")), "Q4_K_M-experiments")
+        XCTAssertEqual(BuiltInModels.title(of: entry("Q4_K_M", quantization: "Q4_K_M")), "Q4_K_M")
+    }
+
+    func testSourcesAreNamedAsTheMaintainerAsked() {
+        XCTAssertEqual(
+            [FormatterModelSource.huggingFaceCache, .lmStudio, .ollamaStore, .userChosen, .downloaded].map(BuiltInModels.sourceLabel),
+            ["Hugging Face", "LM Studio", "Ollama", "File", "Downloaded"])
+    }
+
+    func testSearchMatchesNameQuantizationAndSourceAndEveryWordOfTheQuery() {
+        let rows = [
+            BuiltInModelRow(entry: entry("gemma-4-E2B-it-Q4_K_M", quantization: "Q4_K_M")),
+            BuiltInModelRow(entry: entry("Qwen3-4B-Instruct-Q8_0", quantization: "Q8_0", source: .lmStudio)),
+            BuiltInModelRow(entry: entry("gemma3:4b-it-q4_K_M", quantization: "Q4_K_M", source: .ollamaStore)),
+        ]
+        func names(_ query: String) -> [String] { BuiltInModelSearch.filter(rows, query: query).map(\.name) }
+        XCTAssertEqual(names("").count, 3)
+        XCTAssertEqual(names("QWEN"), ["Qwen3-4B-Instruct"])
+        XCTAssertEqual(names("q4_k"), ["gemma-4-E2B-it", "gemma3:4b-it"])
+        XCTAssertEqual(names("lm studio"), ["Qwen3-4B-Instruct"])
+        XCTAssertEqual(names("ollama q4"), ["gemma3:4b-it"])
+        XCTAssertEqual(names("gemma hugging"), ["gemma-4-E2B-it"])
+        XCTAssertEqual(names("nothing like this"), [])
+    }
+
+    func testPlaygroundListsBuiltInModelsByNameAndTheWorkflowsOwnChoiceTakesTheName() {
+        let rows = [BuiltInModelRow(entry: entry("gemma-4-E2B-it-Q4_K_M", quantization: "Q4_K_M"))]
+        let listed = PlaygroundModelOptions.builtIn(rows, providerName: "Built-in")
+        XCTAssertEqual(listed.map(\.label), ["Built-in · gemma-4-E2B-it"])
+        XCTAssertEqual(listed.first?.model, rows[0].id, "the model is the id the workflow stores")
+
+        // The workflow's own choice only has the id; the merged list shows the name, once.
+        let own = PlaygroundModelChoice(provider: "Built-in", model: rows[0].id)
+        let merged = PlaygroundModelOptions.merged(listed, own: own)
+        XCTAssertEqual(merged.map(\.label), ["Built-in · gemma-4-E2B-it"])
+        XCTAssertEqual(own, listed[0], "the same choice, so picking it is not an override")
+    }
+}
+
+final class BuiltInDefaultsTests: XCTestCase {
+    private func gguf(_ name: String, source: FormatterModelSource = .huggingFaceCache) -> FormatterModelEntry {
+        FormatterModelEntry(
+            id: "\(source.rawValue):\(name)", displayName: name, kind: .gguf, sizeBytes: 3_000_000_000, source: source,
+            spec: RuntimeModelSpec(modelURL: URL(fileURLWithPath: "/m/\(name).gguf")))
+    }
+
+    private var ollama: FormatterModelEntry {
+        FormatterModelEntry(
+            id: "ollama:gemma3:4b", displayName: "gemma3:4b", kind: .ollama, sizeBytes: 3_300_000_000, source: .ollama,
+            spec: RuntimeModelSpec(identifier: "gemma3:4b"))
+    }
+
+    func testANewLocalWorkflowStartsOnOllamaWhenItRuns() async {
+        let choice = await TemplateProviderPreselection.chooseLocal(
+            ollama: { [self.ollama] }, builtIn: { [self.gguf("gemma-4-E2B-it-Q4_K_M")] })
+        XCTAssertEqual(choice, PreselectedProvider(providerName: "Ollama", modelName: "gemma3:4b"))
+    }
+
+    func testWithOllamaNotRunningItStartsOnAnInstalledBuiltInModel() async {
+        let gemma = gguf("gemma-4-E2B-it-Q4_K_M")
+        let choice = await TemplateProviderPreselection.chooseLocal(ollama: { [] }, builtIn: { [gemma] })
+        XCTAssertEqual(choice, PreselectedProvider(providerName: "Built-in", modelName: gemma.id))
+    }
+
+    func testWithNeitherItIsNeverBuiltInAndTheEditorKeepsWhatItWouldPickAnyway() async {
+        let choice = await TemplateProviderPreselection.chooseLocal(ollama: { [] }, builtIn: { [] })
+        XCTAssertNil(choice)
+        // A Built-in model nobody would run (a base or tiny file) is not a model to start on either.
+        let base = await TemplateProviderPreselection.chooseLocal(ollama: { [] }, builtIn: { [self.gguf("llama-3.2-1b-instruct")] })
+        XCTAssertNil(base)
+
+        let on = ["Gemini", "Built-in"]
+        XCTAssertEqual(TemplateProviderPreselection.defaultProvider(inherited: nil, available: on, builtIn: "Built-in"), "Gemini")
+        XCTAssertNil(TemplateProviderPreselection.defaultProvider(inherited: nil, available: ["Built-in"], builtIn: "Built-in"))
+        XCTAssertEqual(
+            TemplateProviderPreselection.defaultProvider(inherited: "Groq", available: ["Groq", "Built-in"], builtIn: "Built-in"), "Groq")
+        XCTAssertEqual(
+            TemplateProviderPreselection.defaultProvider(inherited: "Groq", available: on, builtIn: "Built-in"), "Gemini",
+            "an inherited provider that is not on offer falls back as before")
+    }
+
+    func testTheModelIsFreedOnlyWhenNoWorkflowUsesBuiltIn() {
+        typealias Workflow = BuiltInUsage.Workflow
+        XCTAssertTrue(BuiltInUsage.isUsed(by: [Workflow(isAIEnabled: true, providerName: "Built-in")]))
+        XCTAssertTrue(BuiltInUsage.isUsed(by: [Workflow(isAIEnabled: true, providerName: "Gemini"), Workflow(isAIEnabled: true, providerName: "Built-in")]))
+        XCTAssertFalse(BuiltInUsage.isUsed(by: [Workflow(isAIEnabled: false, providerName: "Built-in")]), "AI switched off for it")
+        XCTAssertFalse(BuiltInUsage.isUsed(by: [Workflow(isAIEnabled: true, providerName: "Ollama")]))
+        XCTAssertFalse(BuiltInUsage.isUsed(by: []))
+    }
+}
+
+/// A runtime that records the deadlines it is given and can hold `prepare` until the test lets it go.
+private actor DeadlineRuntime: FormatterRuntime {
+    nonisolated let id: FormatterRuntimeID = .llama
+    private(set) var prepareDeadline: ContinuousClock.Instant?
+    private(set) var prepares: [(RuntimeModelSpec, PromptPrefix)] = []
+    private(set) var requests: [GenerationRequest] = []
+    var prepareDelay: Duration = .zero
+    var finishedPrepares = 0
+
+    func setPrepareDelay(_ delay: Duration) { prepareDelay = delay }
+
+    func prepare(_ spec: RuntimeModelSpec, prefix: PromptPrefix) async throws {
+        prepares.append((spec, prefix))
+        if prepareDelay > .zero { try await Task.sleep(for: prepareDelay) }
+        finishedPrepares += 1
+    }
+
+    func prepare(_ spec: RuntimeModelSpec, prefix: PromptPrefix, deadline: ContinuousClock.Instant) async throws {
+        prepareDeadline = deadline
+        try await prepare(spec, prefix: prefix)
+    }
+
+    func generate(_ request: GenerationRequest) async throws -> GenerationResult {
+        requests.append(request)
+        return GenerationResult(text: "Hello there, how are you doing today.")
+    }
+
+    func cancel(_ requestID: UUID) async {}
+    func unload() async {}
+}
+
+final class BuiltInPreloadAndDeadlineTests: XCTestCase {
+    private func installed(_ mac: FakeMac) async throws -> String {
+        try mac.addHuggingFaceModel()
+        let entries = await BuiltInModels.installed(chosenFiles: [], artifact: mac.artifact, catalog: mac.configuration)
+        return try XCTUnwrap(entries.first?.id)
+    }
+
+    private func engine(_ runtime: any FormatterRuntime, _ mac: FakeMac) -> BuiltInEngine {
+        BuiltInEngine(runtime: runtime, chosenFiles: { [] }, artifact: { mac.artifact }, catalog: { mac.configuration })
+    }
+
+    func testRecordingAWorkflowThatUsesBuiltInLoadsItsModelWithTheCleanedTextPrefix() async throws {
+        let mac = try FakeMac()
+        let id = try await installed(mac)
+        let fake = FakeRuntime(returning: "x")
+        let task = engine(fake, mac).preloadIfUsed(isEnabled: true, providerName: "Built-in", modelID: id)
+        await task?.value
+        let prepared = await fake.prepareCalls
+        XCTAssertEqual(prepared.count, 1)
+        XCTAssertEqual(prepared.first?.0.modelURL?.lastPathComponent, "gemma-4-E2B-it-Q4_K_M.gguf")
+        XCTAssertEqual(prepared.first?.1, try FormatterPipeline.bundled(runtime: fake).prefix)
+    }
+
+    func testOtherWorkflowsAndEmptyChoicesLoadNothing() async throws {
+        let mac = try FakeMac()
+        let id = try await installed(mac)
+        let fake = FakeRuntime(returning: "x")
+        let engine = engine(fake, mac)
+        XCTAssertNil(engine.preloadIfUsed(isEnabled: true, providerName: "Ollama", modelID: id))
+        XCTAssertNil(engine.preloadIfUsed(isEnabled: false, providerName: "Built-in", modelID: id))
+        XCTAssertNil(engine.preloadIfUsed(isEnabled: true, providerName: nil, modelID: id))
+        XCTAssertNil(engine.preloadIfUsed(isEnabled: true, providerName: "Built-in", modelID: nil))
+        XCTAssertNil(engine.preloadIfUsed(isEnabled: true, providerName: "Built-in", modelID: ""))
+        // A model that is gone is not loaded either; the take will fall back as it does today.
+        await engine.preloadIfUsed(isEnabled: true, providerName: "Built-in", modelID: "hf:gone/x.gguf")?.value
+        let prepared = await fake.prepareCalls
+        XCTAssertTrue(prepared.isEmpty)
+    }
+
+    func testAFailedPreloadIsQuietAndTheTakeStillFallsBack() async throws {
+        let mac = try FakeMac()
+        let id = try await installed(mac)
+        let failing = FakeRuntime(id: .llama, prepareError: .failed("could not load")) { _ in throw FormatterRuntimeError.notReady }
+        let engine = engine(failing, mac)
+        await engine.preloadIfUsed(isEnabled: true, providerName: "Built-in", modelID: id)?.value
+        let result = await GuardedCleanup.makeBuiltIn(modelID: id, engine: engine).clean("um so i think we should meet on tuesday at three")
+        XCTAssertNotNil(result.fallbackReason)
+        XCTAssertTrue(result.text.lowercased().contains("tuesday"))
+    }
+
+    func testPreloadDoesNotMakeTheCallerWaitForTheLoad() async throws {
+        let mac = try FakeMac()
+        let id = try await installed(mac)
+        let runtime = DeadlineRuntime()
+        await runtime.setPrepareDelay(.milliseconds(500))
+        let started = ContinuousClock.now
+        let task = engine(runtime, mac).preloadIfUsed(isEnabled: true, providerName: "Built-in", modelID: id)
+        XCTAssertLessThan(ContinuousClock.now - started, .milliseconds(100), "returns before the load is done")
+        let finishedEarly = await runtime.finishedPrepares
+        XCTAssertEqual(finishedEarly, 0)
+        await task?.value
+        let finished = await runtime.finishedPrepares
+        XCTAssertEqual(finished, 1)
+    }
+
+    func testAFreeFormRequestLoadsAndGeneratesUnderOneDeadline() async throws {
+        let mac = try FakeMac()
+        let id = try await installed(mac)
+        let runtime = DeadlineRuntime()
+        _ = try await engine(runtime, mac).complete(system: "s", user: "u", modelID: id, timeout: 30)
+        let recordedDeadline = await runtime.prepareDeadline
+        let prepareDeadline = try XCTUnwrap(recordedDeadline)
+        let requests = await runtime.requests
+        let request = try XCTUnwrap(requests.first)
+        XCTAssertEqual(request.deadline, prepareDeadline, "one deadline for both")
+        XCTAssertEqual(request.prefixKey, PromptPrefix(messages: [ChatMessage(role: .system, content: "s")]).key)
+    }
+
+    func testCleanedTextSpendsTheLoadOutOfTheSameBudgetAsTheGeneration() async throws {
+        let mac = try FakeMac()
+        let id = try await installed(mac)
+        let runtime = DeadlineRuntime()
+        await runtime.setPrepareDelay(.milliseconds(300))
+        let started = ContinuousClock.now
+        _ = await GuardedCleanup.makeBuiltIn(modelID: id, engine: engine(runtime, mac))
+            .clean("hello there how are you doing today my friend")
+        let recordedDeadline = await runtime.prepareDeadline
+        let prepareDeadline = try XCTUnwrap(recordedDeadline)
+        let requests = await runtime.requests
+        let request = try XCTUnwrap(requests.first)
+        // The generation deadline is inside the take's deadline (plus the 0.5 s floor), not a fresh budget on top.
+        XCTAssertLessThanOrEqual(request.deadline, prepareDeadline + .milliseconds(600))
+        XCTAssertGreaterThan(request.deadline, started)
+        XCTAssertEqual(request.prefixKey, try FormatterPipeline.bundled(runtime: runtime).prefix.key)
     }
 }

@@ -299,6 +299,7 @@ class PnoeEngine: NSObject, ObservableObject {
                             }
 
                             self.startRecordingContextCapture()
+                            self.preloadBuiltInModelIfNeeded()
 
                             let modelResolution = ModeRuntimeResolver.transcriptionModelResolution(
                                 transcriptionModelManager: self.transcriptionModelManager
@@ -528,6 +529,17 @@ class PnoeEngine: NSObject, ObservableObject {
     }
 
     // MARK: - Recording Context
+
+    /// When the workflow that is recording uses Built-in, start loading its model now, so the take that follows
+    /// finds it ready. Recording does not wait for it; a load that fails leaves the take to fall back.
+    private func preloadBuiltInModelIfNeeded() {
+        guard let enhancementService, let aiService = enhancementService.getAIService() else { return }
+        let configuration = ModeRuntimeResolver.currentEnhancementConfiguration(
+            enhancementService: enhancementService, aiService: aiService)
+        BuiltInEngine.shared.preloadIfUsed(
+            isEnabled: configuration.isEnabled, providerName: configuration.provider?.rawValue,
+            modelID: configuration.modelName)
+    }
 
     private func startRecordingContextCapture() {
         clearActiveRecordingContext()
