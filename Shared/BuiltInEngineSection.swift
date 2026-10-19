@@ -36,12 +36,7 @@ struct BuiltInModelRow: Identifiable, Equatable {
 /// What the search field matches: the name, the quantization and the source, every word of the query.
 enum BuiltInModelSearch {
     static func filter(_ rows: [BuiltInModelRow], query: String) -> [BuiltInModelRow] {
-        let words = query.lowercased().split(whereSeparator: { $0.isWhitespace }).map(String.init)
-        guard !words.isEmpty else { return rows }
-        return rows.filter { row in
-            let haystack = [row.name, row.quantization ?? "", row.sourceLabel].joined(separator: " ").lowercased()
-            return words.allSatisfy { haystack.contains($0) }
-        }
+        rows.filter { SearchWords.matches([$0.name, $0.quantization ?? "", $0.sourceLabel].joined(separator: " "), query: query) }
     }
 }
 
@@ -137,96 +132,26 @@ struct BuiltInModelRowLabel: View {
     }
 }
 
-/// The popover's content: a search field at the top (focused when it opens) and the matching models below.
-/// Typing filters, the arrow keys move, Return or a click picks, Escape closes.
+/// The popover's content for the models: the generic searchable list with the two-line model rows.
 struct BuiltInModelPopoverContent: View {
     let rows: [BuiltInModelRow]
     let selectedID: String?
+    var initialQuery = ""
     let onSelect: (BuiltInModelRow) -> Void
     let onClose: () -> Void
-    @State private var query: String
-    @State private var highlighted: String?
-    @FocusState private var searchFocused: Bool
-
-    init(
-        rows: [BuiltInModelRow], selectedID: String?, initialQuery: String = "",
-        onSelect: @escaping (BuiltInModelRow) -> Void, onClose: @escaping () -> Void
-    ) {
-        self.rows = rows
-        self.selectedID = selectedID
-        self.onSelect = onSelect
-        self.onClose = onClose
-        _query = State(initialValue: initialQuery)
-    }
-
-    private var matches: [BuiltInModelRow] { BuiltInModelSearch.filter(rows, query: query) }
-
-    private var current: BuiltInModelRow? {
-        matches.first { $0.id == highlighted } ?? matches.first
-    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("Search models", text: $query)
-                    .textFieldStyle(.plain)
-                    .focused($searchFocused)
-                    .onSubmit { if let current { onSelect(current) } }
-                if !query.isEmpty {
-                    Button { query = "" } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Clear search")
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-
-            Divider()
-
-            if matches.isEmpty {
-                Text(rows.isEmpty ? "No models found" : "No models match “\(query)”")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 64)
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 2) {
-                        ForEach(matches) { row in
-                            Button { onSelect(row) } label: {
-                                BuiltInModelRowLabel(row: row, isSelected: row.id == selectedID, showsCheckmark: true)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .fill(row.id == current?.id ? Color.accentColor.opacity(0.14) : .clear))
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .onHover { inside in if inside { highlighted = row.id } }
-                        }
-                    }
-                    .padding(6)
-                }
-                .frame(maxHeight: 280)
-            }
+        SearchablePopoverContent(
+            items: rows,
+            selectedID: selectedID,
+            initialQuery: initialQuery,
+            searchText: { [$0.name, $0.quantization ?? "", $0.sourceLabel].joined(separator: " ") },
+            emptyText: rows.isEmpty ? "No models found" : nil,
+            onSelect: onSelect,
+            onClose: onClose
+        ) { row, isSelected in
+            BuiltInModelRowLabel(row: row, isSelected: isSelected, showsCheckmark: true)
         }
-        .frame(width: 400)
-        .onAppear { searchFocused = true }
-        .onKeyPress(.downArrow) { move(by: 1) }
-        .onKeyPress(.upArrow) { move(by: -1) }
-        .onExitCommand(perform: onClose)
-        .onChange(of: query) { _, _ in highlighted = nil }
-    }
-
-    private func move(by step: Int) -> KeyPress.Result {
-        guard let index = matches.firstIndex(where: { $0.id == current?.id }) else { return .ignored }
-        let next = min(max(index + step, 0), matches.count - 1)
-        highlighted = matches[next].id
-        return .handled
     }
 }
 

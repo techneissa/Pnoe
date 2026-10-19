@@ -5,11 +5,38 @@ import SwiftUI
 /// recording shortcut), run it, and see the input and the result side by side with the time taken. A pair
 /// can be saved as an example, kept as it is or edited into what it should have been. It holds no app
 /// types, so a test can render it offscreen.
+/// The Playground's model list as the shared searchable popover; a row is the menu's row (provider · model).
+struct PlaygroundModelPopoverContent: View {
+    let choices: [PlaygroundModelChoice]
+    let selectedID: String?
+    var initialQuery = ""
+    let onSelect: (PlaygroundModelChoice) -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        SearchablePopoverContent(
+            items: choices, selectedID: selectedID, initialQuery: initialQuery,
+            searchText: { $0.label }, onSelect: onSelect, onClose: onClose
+        ) { choice, isSelected in
+            HStack(spacing: 6) {
+                Text(choice.label).lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 4)
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+        }
+    }
+}
+
 struct WorkflowPlaygroundView: View {
     @ObservedObject var model: WorkflowPlaygroundModel
     let onDismiss: () -> Void
 
     @State private var isEditingResult = false
+    @State private var isModelPopoverOpen = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -127,27 +154,31 @@ struct WorkflowPlaygroundView: View {
         }
     }
 
-    /// Which provider and model this run uses. Picking one changes only Playground runs.
+    /// Which provider and model this run uses. Picking one changes only Playground runs. The menu is a search
+    /// popover over every choice (API models, Ollama, Built-in).
     @ViewBuilder
     private var modelMenu: some View {
         if let current = model.selectedChoice ?? model.menuChoices.first {
-            Menu {
-                ForEach(model.menuChoices) { choice in
-                    Button {
-                        model.pick(choice)
-                    } label: {
-                        if choice == model.selectedChoice {
-                            Label(choice.label, systemImage: "checkmark")
-                        } else {
-                            Text(choice.label)
-                        }
-                    }
+            Button { isModelPopoverOpen.toggle() } label: {
+                HStack(spacing: 4) {
+                    Text(current.label).lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
                 }
-            } label: {
-                Text(current.label).lineLimit(1)
+                .contentShape(Rectangle())
             }
-            .menuStyle(.borderlessButton)
+            .buttonStyle(.plain)
             .fixedSize()
+            .popover(isPresented: $isModelPopoverOpen, arrowEdge: .bottom) {
+                PlaygroundModelPopoverContent(
+                    choices: model.menuChoices, selectedID: model.selectedChoice?.id,
+                    onSelect: { choice in
+                        model.pick(choice)
+                        isModelPopoverOpen = false
+                    },
+                    onClose: { isModelPopoverOpen = false })
+            }
             .help("The provider and model this run uses. Only the Playground changes; the workflow keeps its own.")
             .accessibilityLabel("Model for this run")
         }

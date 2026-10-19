@@ -31,7 +31,9 @@ final class BuiltInEngine: @unchecked Sendable {
     /// not be the thing that starts the engine.
     private(set) nonisolated(unsafe) static var started: BuiltInEngine?
 
+    /// The runtime every request goes through; it counts the requests in flight (a load or a generation).
     let runtime: any FormatterRuntime
+    private let activity: ActivityCounter
     private let chosenFiles: @Sendable () -> [URL]
     private let artifact: @Sendable () -> FormatterModelArtifact
     private let catalog: @Sendable () -> FormatterModelCatalog.Configuration
@@ -43,7 +45,9 @@ final class BuiltInEngine: @unchecked Sendable {
         artifact: @escaping @Sendable () -> FormatterModelArtifact = { .gemma4E2B() },
         catalog: @escaping @Sendable () -> FormatterModelCatalog.Configuration = { .init() }
     ) {
-        self.runtime = runtime
+        let activity = ActivityCounter()
+        self.activity = activity
+        self.runtime = CountingRuntime(wrapping: runtime, activity: activity)
         self.chosenFiles = chosenFiles
         self.artifact = artifact
         self.catalog = catalog
@@ -136,8 +140,22 @@ final class BuiltInEngine: @unchecked Sendable {
 
     /// Frees the model when no workflow uses Built-in any more. Does nothing before the engine has been used.
     static func unloadIfUnused(workflows: [BuiltInUsage.Workflow]) {
-        guard let engine = started, !BuiltInUsage.isUsed(by: workflows) else { return }
-        Task { await engine.unload() }
+        started?.applyUsage(workflows: workflows)
+    }
+
+    /// The model is freed once no workflow uses Built-in, but never under a request in flight (a dictation, or a
+    /// Playground run on a workflow that is not set to Built-in): then the unload waits for the run to end. A
+    /// workflow that uses Built-in again before that cancels the wait.
+    func applyUsage(workflows: [BuiltInUsage.Workflow]) {
+        if BuiltInUsage.isUsed(by: workflows) {
+            activity.cancelPendingUnload()
+        } else if !activity.requestUnloadWhenIdle(then: { [weak self] in self?.unloadInBackground() }) {
+            unloadInBackground()
+        }
+    }
+
+    private func unloadInBackground() {
+        Task { await unload() }
     }
 
     /// Frees the model, and with it the service process, when the app quits.
@@ -168,6 +186,87 @@ final class BuiltInEngine: @unchecked Sendable {
     func unload() async {
         await runtime.unload()
     }
+
+    /// For tests: whether any request is in flight.
+    var requestsInFlight: Int { activity.count }
+}
+
+/// How many requests are in flight, and an unload that is waiting for the last one.
+final class ActivityCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var inFlight = 0
+    private var pending: (@Sendable () -> Void)?
+
+    var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return inFlight
+    }
+
+    func begin() {
+        lock.lock()
+        inFlight += 1
+        lock.unlock()
+    }
+
+    func end() {
+        lock.lock()
+        inFlight -= 1
+        let run = inFlight == 0 ? pending : nil
+        if run != nil { pending = nil }
+        lock.unlock()
+        run?()
+    }
+
+    /// Returns false when nothing is in flight (the caller unloads now); otherwise keeps `action` for the end.
+    func requestUnloadWhenIdle(then action: @escaping @Sendable () -> Void) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard inFlight > 0 else { return false }
+        pending = action
+        return true
+    }
+
+    func cancelPendingUnload() {
+        lock.lock()
+        pending = nil
+        lock.unlock()
+    }
+}
+
+/// Counts a load or a generation as in flight for as long as it runs; everything else passes through.
+final class CountingRuntime: FormatterRuntime, @unchecked Sendable {
+    let id: FormatterRuntimeID
+    private let base: any FormatterRuntime
+    private let activity: ActivityCounter
+
+    init(wrapping base: any FormatterRuntime, activity: ActivityCounter) {
+        self.base = base
+        self.activity = activity
+        id = base.id
+    }
+
+    func prepare(_ spec: RuntimeModelSpec, prefix: PromptPrefix) async throws {
+        activity.begin()
+        defer { activity.end() }
+        try await base.prepare(spec, prefix: prefix)
+    }
+
+    func prepare(_ spec: RuntimeModelSpec, prefix: PromptPrefix, deadline: ContinuousClock.Instant) async throws {
+        activity.begin()
+        defer { activity.end() }
+        try await base.prepare(spec, prefix: prefix, deadline: deadline)
+    }
+
+    func generate(_ request: GenerationRequest) async throws -> GenerationResult {
+        activity.begin()
+        defer { activity.end() }
+        return try await base.generate(request)
+    }
+
+    func cancel(_ requestID: UUID) async { await base.cancel(requestID) }
+
+    func unload() async { await base.unload() }
 }
 
 extension BuiltInEngineError: LocalizedError {

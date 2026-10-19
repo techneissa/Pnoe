@@ -589,3 +589,111 @@ final class BuiltInPreloadAndDeadlineTests: XCTestCase {
         XCTAssertEqual(request.prefixKey, try FormatterPipeline.bundled(runtime: runtime).prefix.key)
     }
 }
+
+/// A runtime whose `generate` waits until the test lets it go.
+private actor HoldRuntime: FormatterRuntime {
+    nonisolated let id: FormatterRuntimeID = .llama
+    private(set) var unloadCount = 0
+    private(set) var generating = false
+    private var gate: CheckedContinuation<Void, Never>?
+
+    func prepare(_ spec: RuntimeModelSpec, prefix: PromptPrefix) async throws {}
+
+    func generate(_ request: GenerationRequest) async throws -> GenerationResult {
+        generating = true
+        await withCheckedContinuation { gate = $0 }
+        generating = false
+        return GenerationResult(text: "- done")
+    }
+
+    func release() { gate?.resume(); gate = nil }
+    func cancel(_ requestID: UUID) async {}
+    func unload() async { unloadCount += 1 }
+}
+
+final class BuiltInUnloadWhileBusyTests: XCTestCase {
+    private typealias Workflow = BuiltInUsage.Workflow
+    private let none = [Workflow(isAIEnabled: true, providerName: "Gemini")]
+    private let usesBuiltIn = [Workflow(isAIEnabled: true, providerName: "Built-in")]
+
+    private func start() async throws -> (BuiltInEngine, HoldRuntime, Task<String, Error>, String) {
+        let mac = try FakeMac()
+        try mac.addHuggingFaceModel()
+        let entries = await BuiltInModels.installed(chosenFiles: [], artifact: mac.artifact, catalog: mac.configuration)
+        let id = try XCTUnwrap(entries.first?.id)
+        let runtime = HoldRuntime()
+        let engine = BuiltInEngine(runtime: runtime, chosenFiles: { [] }, artifact: { mac.artifact }, catalog: { mac.configuration })
+        // A Playground run on a workflow that is not set to Built-in is a request like any other.
+        let running = Task { try await engine.complete(system: "s", user: "u", modelID: id, timeout: 30) }
+        for _ in 0..<300 {
+            if await runtime.generating { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let isGenerating = await runtime.generating
+        XCTAssertTrue(isGenerating)
+        withExtendedLifetime(mac) {}
+        return (engine, runtime, running, id)
+    }
+
+    func testSavingAWorkflowDoesNotUnloadUnderARequestAndTheUnloadFollowsItsEnd() async throws {
+        let (engine, runtime, running, _) = try await start()
+        XCTAssertEqual(engine.requestsInFlight, 1)
+        engine.applyUsage(workflows: none)
+        try await Task.sleep(for: .milliseconds(100))
+        var unloads = await runtime.unloadCount
+        XCTAssertEqual(unloads, 0, "the run in flight is not cut off")
+
+        await runtime.release()
+        let answer = try await running.value
+        XCTAssertEqual(answer, "- done", "and it finishes normally")
+        for _ in 0..<300 {
+            if await runtime.unloadCount > 0 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        unloads = await runtime.unloadCount
+        XCTAssertEqual(unloads, 1, "the deferred unload runs once the run has ended")
+    }
+
+    func testAWorkflowThatUsesBuiltInAgainCancelsTheDeferredUnload() async throws {
+        let (engine, runtime, running, _) = try await start()
+        engine.applyUsage(workflows: none)
+        engine.applyUsage(workflows: usesBuiltIn)
+        await runtime.release()
+        _ = try await running.value
+        try await Task.sleep(for: .milliseconds(200))
+        let unloads = await runtime.unloadCount
+        XCTAssertEqual(unloads, 0)
+    }
+
+    func testWithNothingInFlightTheUnloadIsImmediateAndOnlyWhenNoWorkflowUsesBuiltIn() async throws {
+        let runtime = HoldRuntime()
+        let engine = BuiltInEngine(runtime: runtime, chosenFiles: { [] })
+        engine.applyUsage(workflows: usesBuiltIn)
+        try await Task.sleep(for: .milliseconds(100))
+        var unloads = await runtime.unloadCount
+        XCTAssertEqual(unloads, 0)
+        engine.applyUsage(workflows: none)
+        for _ in 0..<300 {
+            if await runtime.unloadCount > 0 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        unloads = await runtime.unloadCount
+        XCTAssertEqual(unloads, 1)
+    }
+}
+
+final class SearchWordsTests: XCTestCase {
+    func testEveryWordMustMatchInAnyCase() {
+        XCTAssertTrue(SearchWords.matches("Ollama · gemma3:4b", query: ""))
+        XCTAssertTrue(SearchWords.matches("Ollama · gemma3:4b", query: "OLLAMA gemma"))
+        XCTAssertFalse(SearchWords.matches("Ollama · gemma3:4b", query: "ollama qwen"))
+        let choices = [
+            PlaygroundModelChoice(provider: "Anthropic", model: "claude-haiku-5-5"),
+            PlaygroundModelChoice(provider: "Ollama", model: "gemma3:4b"),
+            PlaygroundModelChoice(provider: "Built-in", model: "file:/m/g.gguf", title: "gemma-4-E2B-it"),
+        ]
+        XCTAssertEqual(choices.filter { SearchWords.matches($0.label, query: "gemma") }.map(\.provider), ["Ollama", "Built-in"])
+        XCTAssertEqual(choices.filter { SearchWords.matches($0.label, query: "built-in e2b") }.map(\.provider), ["Built-in"])
+        XCTAssertEqual(choices.filter { SearchWords.matches($0.label, query: "claude") }.map(\.provider), ["Anthropic"])
+    }
+}
