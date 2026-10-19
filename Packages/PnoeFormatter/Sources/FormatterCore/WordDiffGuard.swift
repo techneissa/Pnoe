@@ -205,6 +205,12 @@ public enum WordDiffGuard {
             removable.insert(i)
             i += 1
         }
+        // "12,500 dollars" written as `$12,500`: the spoken unit word has become the symbol.
+        let written = writtenCurrency(in: Array(output))
+        for index in words.indices.dropLast() {
+            guard let symbol = spokenUnits[words[index + 1]], let amount = amountKey(words[index]) else { continue }
+            if written.contains(CurrencyAmount(symbol: symbol, amount: amount)) { removable.insert(index + 1) }
+        }
         return removable
     }
 
@@ -230,18 +236,95 @@ public enum WordDiffGuard {
     // MARK: - New numbers, currency, meta
 
     nonisolated(unsafe) private static let digitRun = #/\d+/#
-    private static let currencySymbols: Set<Character> = ["$", "€", "£", "¥"]
 
     private static func invented(input: String, output: String, inWords: [String]) -> FallbackReason? {
         let outputBody = output.components(separatedBy: "\n").map { $0.replacing(listMarker, with: "") }.joined(separator: "\n")
-        if outputBody.contains(where: currencySymbols.contains), !input.contains(where: currencySymbols.contains) {
-            return .inventedCurrency
-        }
+        if hasInventedCurrency(input: input, output: outputBody) { return .inventedCurrency }
         // Digits in the input, plus the digit of any number word the speaker said ("five" allows "5").
         var known = Set(input.matches(of: digitRun).map { String($0.output) })
         for (digit, name) in digitNames where inWords.contains(name) { known.insert(digit) }
         if outputBody.matches(of: digitRun).contains(where: { !known.contains(String($0.output)) }) { return .newNumber }
         return nil
+    }
+
+    // MARK: Currency
+
+    /// A unit word the speaker can say after an amount, and the symbol it may become. "pound" is left out on
+    /// purpose: it is also a weight ("3 pounds of rice"), so a `£` on it is always invented.
+    private static let spokenUnits: [String: Character] = [
+        "dollar": "$", "dollars": "$", "buck": "$", "bucks": "$",
+        "euro": "€", "euros": "€", "yen": "¥",
+    ]
+
+    private static func isCurrencySymbol(_ character: Character) -> Bool {
+        character.unicodeScalars.contains { $0.properties.generalCategory == .currencySymbol }
+    }
+
+    private struct CurrencyAmount: Hashable {
+        var symbol: Character
+        var amount: String
+    }
+
+    /// Every currency symbol in the output must sit on an amount, and the input must give that same symbol
+    /// that same amount: written with the symbol, or said with its unit word right after the amount
+    /// ("twelve thousand five hundred dollars" becomes `$12,500`). A symbol with no
+    /// amount, on another amount, or for another currency is invented, whatever else the input carries.
+    static func hasInventedCurrency(input: String, output: String) -> Bool {
+        let outputChars = Array(output)
+        guard outputChars.contains(where: isCurrencySymbol) else { return false }
+        var allowed = writtenCurrency(in: Array(input))
+        let words = input.split(whereSeparator: \.isWhitespace).map { WordTools.trimEdges(String($0)).lowercased() }
+        for index in words.indices.dropLast() {
+            if let symbol = spokenUnits[words[index + 1]], let amount = amountKey(words[index]) {
+                allowed.insert(CurrencyAmount(symbol: symbol, amount: amount))
+            }
+        }
+        var used: [CurrencyAmount] = []
+        for (index, character) in outputChars.enumerated() where isCurrencySymbol(character) {
+            guard let amount = amountAfter(outputChars, index) ?? amountBefore(outputChars, index) else { return true }
+            used.append(CurrencyAmount(symbol: character, amount: amount))
+        }
+        return used.contains { !allowed.contains($0) }
+    }
+
+    /// Symbols the text carries with their amounts, in front of the number or behind it.
+    private static func writtenCurrency(in chars: [Character]) -> Set<CurrencyAmount> {
+        var found: Set<CurrencyAmount> = []
+        for (index, character) in chars.enumerated() where isCurrencySymbol(character) {
+            for amount in [amountAfter(chars, index), amountBefore(chars, index)] {
+                if let amount { found.insert(CurrencyAmount(symbol: character, amount: amount)) }
+            }
+        }
+        return found
+    }
+
+    private static func amountAfter(_ chars: [Character], _ symbol: Int) -> String? {
+        var i = symbol + 1
+        if i < chars.count, chars[i] == " " { i += 1 }
+        var text = ""
+        while i < chars.count, chars[i].isASCII, chars[i].isNumber || chars[i] == "," || (chars[i] == "." && text.last?.isNumber == true) {
+            text.append(chars[i])
+            i += 1
+        }
+        return amountKey(text)
+    }
+
+    private static func amountBefore(_ chars: [Character], _ symbol: Int) -> String? {
+        var i = symbol - 1
+        if i >= 0, chars[i] == " " { i -= 1 }
+        var text = ""
+        while i >= 0, chars[i].isASCII, chars[i].isNumber || chars[i] == "," || chars[i] == "." {
+            text.insert(chars[i], at: text.startIndex)
+            i -= 1
+        }
+        return amountKey(text)
+    }
+
+    /// "12,500." and "12,500" are the same amount; nothing numeric gives nil.
+    private static func amountKey(_ amount: String) -> String? {
+        let trimmed = amount.trimmingCharacters(in: CharacterSet(charactersIn: ",.")).replacingOccurrences(of: ",", with: "")
+        guard trimmed.first?.isNumber == true, trimmed.allSatisfy({ $0.isNumber || $0 == "." }) else { return nil }
+        return trimmed
     }
 
     private static func containsNewMeta(inWords: [String], outWords: [String]) -> Bool {

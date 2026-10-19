@@ -147,3 +147,8 @@ help:
 .PHONY: formatter-test
 formatter-test:
 	swift test --package-path Packages/PnoeFormatter
+
+# Tier 1 formatter gate: the guards over round 1's stored outputs. Runs no model; exits 1 on a miss.
+.PHONY: formatter-eval-replay
+formatter-eval-replay:
+	swift run --package-path Packages/PnoeFormatter pnoe-format-eval --backend replay
