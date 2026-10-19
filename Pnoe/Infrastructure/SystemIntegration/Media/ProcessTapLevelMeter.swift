@@ -5,7 +5,7 @@ import os
 
 /// Reads the level of some processes' audio through a CoreAudio process tap (macOS 14.2 and later).
 ///
-/// A tap listens without changing what the user hears (the default mute behavior is unmuted). The first tap makes macOS ask
+/// A tap listens without changing what the user hears (`muteBehavior` is `.unmuted`). The first tap makes macOS ask
 /// for the System Audio Recording permission, which is why `PlaybackController` uses this only when the user turned
 /// the level check on. The tap lives for one measuring window and is private to Pnoe: no other app sees it.
 ///
@@ -14,14 +14,36 @@ import os
 final class ProcessTapLevelMeter: AudioLevelMeasuring {
     private static let logger = Logger(subsystem: "com.techneissa.pnoe", category: "ProcessTapLevelMeter")
     private let queue = DispatchQueue(label: "com.techneissa.pnoe.level-meter", qos: .userInitiated)
+    /// Extra time on top of the listening window before a measurement is given up on.
+    private let deadlineMargin: TimeInterval = 0.4
+    /// A measurement is running on `queue`. One that never returns (a CoreAudio call blocked on the permission
+    /// prompt) keeps this set, so later calls answer `.unavailable` at once instead of queueing behind it.
+    private let isMeasuring = OSAllocatedUnfairLock(initialState: false)
 
     func measure(processes: [AudioProcess], window: TimeInterval) async -> AudioLevelReading {
         let objectIDs = processes.map(\.objectID).filter { $0 != 0 }
         guard !objectIDs.isEmpty else { return .unavailable }
+        guard isMeasuring.withLock({ busy -> Bool in
+            defer { busy = true }
+            return !busy
+        }) else { return .unavailable }
 
         return await withCheckedContinuation { continuation in
-            queue.async {
-                continuation.resume(returning: Self.listen(to: objectIDs, for: window))
+            let resumed = OSAllocatedUnfairLock(initialState: false)
+            let resumeOnce: @Sendable (AudioLevelReading) -> Void = { reading in
+                let first = resumed.withLock { done -> Bool in
+                    defer { done = true }
+                    return !done
+                }
+                if first { continuation.resume(returning: reading) }
+            }
+            queue.async { [isMeasuring] in
+                let reading = Self.listen(to: objectIDs, for: window)
+                isMeasuring.withLock { $0 = false }
+                resumeOnce(reading)
+            }
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + window + deadlineMargin) {
+                resumeOnce(.unavailable)
             }
         }
     }
@@ -32,7 +54,7 @@ final class ProcessTapLevelMeter: AudioLevelMeasuring {
         description.name = "Pnoe level check"
         description.uuid = UUID()
         description.isPrivate = true
-        // The mute behavior stays at its default, unmuted: the tap only listens.
+        description.muteBehavior = .unmuted
 
         var tapID = AudioObjectID(kAudioObjectUnknown)
         let tapStatus = AudioHardwareCreateProcessTap(description, &tapID)
