@@ -4,17 +4,31 @@ import Foundation
 /// One process with audio running, from the public CoreAudio process objects (macOS 14.2 and later).
 struct AudioProcess: Sendable, Equatable {
     let pid: pid_t
+    /// The CoreAudio object for the process, which a process tap needs. 0 when unknown.
+    let objectID: AudioObjectID
     /// The process's bundle ID. Helper processes carry their own, for example `com.google.Chrome.helper`.
     let bundleID: String
     let isRunningOutput: Bool
     let isRunningInput: Bool
+
+    init(
+        pid: pid_t, objectID: AudioObjectID = 0, bundleID: String, isRunningOutput: Bool, isRunningInput: Bool
+    ) {
+        self.pid = pid
+        self.objectID = objectID
+        self.bundleID = bundleID
+        self.isRunningOutput = isRunningOutput
+        self.isRunningInput = isRunningInput
+    }
 }
 
 /// Lists the processes that have audio output or input running.
 ///
 /// This says that some app is sending audio to an output device. It does not say that the app is the one the
-/// system media keys control, and the output flag stays on for a few seconds after a player pauses.
-/// `PlaybackController` accounts for both.
+/// system media keys control, and the output flag stays on for as long as the player keeps its audio stream
+/// open, which is several seconds after a pause (QuickTime about 8 s) and even when the stream carries only
+/// silence. There is no public level or "is producing sound" property on a process object; the level needs a
+/// process tap (`AudioLevelMeasuring`). `PlaybackController` accounts for both.
 ///
 /// The CoreAudio queries run on a private serial queue, never on the main actor.
 enum AudioOutputProcesses {
@@ -43,6 +57,7 @@ enum AudioOutputProcesses {
             processes.append(
                 AudioProcess(
                     pid: pid,
+                    objectID: object,
                     bundleID: bundleID(of: object) ?? "",
                     isRunningOutput: isRunningOutput,
                     isRunningInput: isRunningInput
