@@ -44,7 +44,9 @@ All in code, no model judge. Each is computed for the full pipeline (what the us
 
 ## Tier 1 gate
 
-`--backend replay` runs round 1's stored outputs through the same pipeline a live model goes through. Round 1 outputs were written for the written-out take, and the pipeline now shows a model `⟦n⟧` markers, so each stored output is first rewritten the way a marker-aware model would have answered: a protected span found in the output (also a number written in words) becomes its marker. A span the stored output changed has no marker left and the placeholder check fires. Caught means the pipeline pasted the raw take instead of the stored output.
+`--backend replay` runs round 1's stored outputs through the same pipeline a live model goes through. Round 1 outputs were written for the written-out take, and the pipeline now shows a model `⟦n⟧` markers, so each stored output is first rewritten the way a marker-aware model would have answered: a protected span found in the output (also a number written in words) becomes its marker. A span the stored output changed has no marker left and the placeholder check fires. The live pipeline also cleans the take before the model sees it, so the replay drops from each stored output the opener words that cleanup removed from the front of the input (the chat "okay so"): a model that never saw them never writes them back. Caught means the pipeline pasted the raw take instead of the stored output.
+
+A `$` in an output is accepted only before a number the speaker said with "dollars" or "bucks" right after it ("twelve thousand five hundred dollars" becomes `$12,500`); every other added currency symbol is `invented_currency`.
 
 The gate: at least 95% of the path, identifier, followed-instruction and invented-currency failures caught, and at most 8% of good outputs wrongly rejected. The command exits 1 when either bar is missed. Stored outputs for takes under 4 words are not judged (the model never sees them).
 

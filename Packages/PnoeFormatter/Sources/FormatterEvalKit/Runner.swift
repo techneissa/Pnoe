@@ -108,8 +108,7 @@ extension EvalRunner {
     public static func runOracle(cases: [EvalCase], promptBuilder: PromptBuilder) async -> [CaseResult] {
         var results: [CaseResult] = []
         for testCase in cases {
-            let protected = TokenProtector.protect(FillerCleaner.clean(testCase.raw, context: testCase.context))
-            let recorder = RecordingRuntime(ReplayRuntime(output: Markerizer.markerize(testCase.expected, protected: protected)))
+            let recorder = RecordingRuntime(ReplayRuntime(output: ReplayAlignment.modelAnswer(forStored: testCase.expected, testCase: testCase)))
             let pipeline = FormatterPipeline(runtime: recorder, promptBuilder: promptBuilder)
             results.append(await runCase(testCase, pipeline: pipeline, recorder: recorder))
         }

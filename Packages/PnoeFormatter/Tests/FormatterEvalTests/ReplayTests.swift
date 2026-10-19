@@ -97,6 +97,60 @@ struct ReplayTests {
         #expect(!outcome.text.contains("Paris"))
     }
 
+    // MARK: Cleanup alignment
+
+    @Test func openersTheCleanupRemovedAreDroppedFromTheStoredOutput() {
+        let raw = "okay so the dinner is at seven no actually eight at Luigi's"
+        func drop(_ output: String) -> String { ReplayAlignment.dropCleanedOpeners(from: output, raw: raw, context: .chat) }
+        #expect(drop("Okay, so the dinner is at 8 at Luigi's.") == "The dinner is at 8 at Luigi's.")
+        #expect(drop("Okay, the dinner is at 8 at Luigi's.") == "The dinner is at 8 at Luigi's.")
+        // Nothing to drop: the output is left alone.
+        #expect(drop("The dinner is at 8 at Luigi's.") == "The dinner is at 8 at Luigi's.")
+    }
+
+    @Test func fillersBeforeTheOpenerDoNotHideIt() {
+        #expect(ReplayAlignment.droppedOpeners(raw: "um okay so the build is green again today", context: .chat) == ["okay", "so"])
+    }
+
+    @Test func otherContextsKeepTheirOpeners() {
+        let raw = "okay so the build is green again today"
+        #expect(ReplayAlignment.droppedOpeners(raw: raw, context: .email).isEmpty)
+        #expect(ReplayAlignment.dropCleanedOpeners(from: "Okay, so the build is green again today.", raw: raw, context: .agent) == "Okay, so the build is green again today.")
+    }
+
+    @Test func aStoredOutputWithTheOpenerIsNowAccepted() async {
+        let outcome = await ReplayGate.replayOutcome(
+            Fixtures.testCase("r1-c3"), output: "Okay, so the dinner is at 8 at Luigi's.", promptBuilder: promptBuilder
+        )
+        #expect(outcome == .formatted("The dinner is at 8 at Luigi's."))
+    }
+
+    @Test func aStoredOutputWithAddedWordsIsStillCaught() async {
+        let outcome = await ReplayGate.replayOutcome(
+            Fixtures.testCase("r1-c3"), output: "Sure, the dinner is at 8 at Luigi's, and I will bring the wine.", promptBuilder: promptBuilder
+        )
+        #expect(outcome.reason != nil)
+    }
+
+    // MARK: Spoken dollars
+
+    @Test func spokenDollarsMayBecomeASymbolInTheStoredOutput() async {
+        let outcome = await ReplayGate.replayOutcome(
+            Fixtures.testCase("r1-e4"),
+            output: "Hi Daniel,\n\nThanks for the quote. The total of $12,500 is slightly above our budget. Could we discuss a 10% discount?\n\nRegards,\nSam",
+            promptBuilder: promptBuilder
+        )
+        #expect(outcome.reason == nil)
+    }
+
+    @Test func aSymbolOnNumbersTheSpeakerGaveNoDollarsForIsStillCaught() async {
+        let outcome = await ReplayGate.replayOutcome(
+            Fixtures.testCase("r1-n5"),
+            output: "The budget is $40,000 for Q3 and $60,000 for Q4, so total is $100,000.", promptBuilder: promptBuilder
+        )
+        #expect(outcome.reason == .inventedCurrency)
+    }
+
     // MARK: Tier 1 gate
 
     @Test func tierOneCatchRateMeetsTheBar() async {
@@ -106,14 +160,11 @@ struct ReplayTests {
         #expect(gate.catchPass)
     }
 
-    /// The wrongly-rejected share is not asserted against the 8% bar: the replay command reports it and exits
-    /// non-zero on a miss. This test pins a ceiling at the measured value so a guard change that makes it worse
-    /// shows up in `swift test`.
-    @Test func goodOutputRejectionDoesNotGetWorse() async {
+    @Test func tierOneGatePasses() async {
         let gate = await ReplayGate.evaluate(cases: Fixtures.cases, replay: Fixtures.replay, promptBuilder: promptBuilder)
         #expect(gate.goodTotal > 600)
-        #expect(gate.rejectRate <= 0.09, "rejected \(gate.goodRejected) of \(gate.goodTotal)")
-        #expect(gate.pass == (gate.catchPass && gate.rejectPass))
+        #expect(gate.rejectPass, "rejected \(gate.goodRejected) of \(gate.goodTotal)")
+        #expect(gate.pass)
     }
 
     @Test func skippedTakesAreNotJudged() async {

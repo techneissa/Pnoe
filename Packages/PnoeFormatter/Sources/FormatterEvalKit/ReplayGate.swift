@@ -115,8 +115,7 @@ public struct ReplayGate: Codable, Sendable {
 
     /// One stored output through the pipeline, as a marker-aware model would have answered.
     public static func replayOutcome(_ testCase: EvalCase, output: String, promptBuilder: PromptBuilder) async -> FormatterOutcome {
-        let protected = TokenProtector.protect(FillerCleaner.clean(testCase.raw, context: testCase.context))
-        let runtime = ReplayRuntime(output: Markerizer.markerize(output, protected: protected))
+        let runtime = ReplayRuntime(output: ReplayAlignment.modelAnswer(forStored: output, testCase: testCase))
         return await FormatterPipeline(runtime: runtime, promptBuilder: promptBuilder).format(testCase.raw, context: testCase.context)
     }
 }

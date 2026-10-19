@@ -141,3 +141,49 @@ enum EnglishNumber {
         }
     }
 }
+
+/// Round 1 wrote its outputs from the raw take, but the live pipeline cleans the take first and the model
+/// answers the cleaned text. The cleanup that matters for judging a stored output is the one that removes
+/// words from the front (the chat openers "so" and "okay"): a model never sees them, so it never writes them
+/// back. The replay drops the same opener words from the stored output, then marks the protected spans.
+public enum ReplayAlignment {
+    private static let fillers: Set<String> = ["um", "umm", "uh", "uhh", "uhm", "er", "erm", "ah", "hmm", "hm", "mm", "mmm"]
+
+    static func word(_ token: Substring) -> String {
+        token.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "'" || $0 == "’" }
+    }
+
+    /// The opener words the cleanup took off the front of `raw`.
+    static func droppedOpeners(raw: String, context: FormatterContext) -> [String] {
+        let rawWords = raw.split(whereSeparator: \.isWhitespace).map(word).filter { !$0.isEmpty && !fillers.contains($0) }
+        let cleanedWords = FillerCleaner.clean(raw, context: context).split(whereSeparator: \.isWhitespace).map(word).filter { !$0.isEmpty }
+        guard let first = cleanedWords.first, let start = rawWords.firstIndex(of: first), start > 0 else { return [] }
+        return Array(rawWords[..<start])
+    }
+
+    /// `output` without the leading words that the cleanup removed from the input.
+    public static func dropCleanedOpeners(from output: String, raw: String, context: FormatterContext) -> String {
+        let dropped = droppedOpeners(raw: raw, context: context)
+        guard !dropped.isEmpty else { return output }
+        var rest = Substring(output)
+        var matched = 0
+        while matched < dropped.count {
+            let trimmed = rest.drop(while: \.isWhitespace)
+            let token = trimmed.prefix(while: { !$0.isWhitespace })
+            guard !token.isEmpty, word(token) == dropped[matched] else { break }
+            rest = trimmed.dropFirst(token.count)
+            matched += 1
+        }
+        guard matched > 0 else { return output }
+        let body = rest.drop(while: \.isWhitespace)
+        guard let first = body.first else { return "" }
+        return first.uppercased() + body.dropFirst()
+    }
+
+    /// What a marker-aware model that saw the cleaned take would have answered, from a stored or ideal text.
+    public static func modelAnswer(forStored text: String, testCase: EvalCase) -> String {
+        let aligned = dropCleanedOpeners(from: text, raw: testCase.raw, context: testCase.context)
+        let protected = TokenProtector.protect(FillerCleaner.clean(testCase.raw, context: testCase.context))
+        return Markerizer.markerize(aligned, protected: protected)
+    }
+}
