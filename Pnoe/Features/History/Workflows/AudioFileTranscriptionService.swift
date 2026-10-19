@@ -79,8 +79,16 @@ class AudioTranscriptionService: ObservableObject {
                 text = ParagraphFormatter.format(text)
             }
 
-            text = WordReplacementService.shared.applyReplacements(to: text, using: modelContext)
-            let cleanedText = text
+            // Same order as live dictation: replacements, then snippets; the model only sees placeholders.
+            let snippets = SnippetProcessor.prepare(
+                text,
+                rules: SnippetService.rules(using: modelContext),
+                applyingReplacements: {
+                    WordReplacementService.shared.applyReplacements(to: $0, using: modelContext)
+                }
+            )
+            text = snippets.textForEnhancement
+            let cleanedText = snippets.expandedText
 
             let audioAsset = AVURLAsset(url: url)
             let duration = CMTimeGetSeconds(try await audioAsset.load(.duration))
@@ -120,7 +128,8 @@ class AudioTranscriptionService: ObservableObject {
             if let enhancementService = enhancementService,
                 let enhancementConfiguration,
                 enhancementConfiguration.isEnabled,
-                enhancementService.isConfigured(for: enhancementConfiguration)
+                enhancementService.isConfigured(for: enhancementConfiguration),
+                !snippets.skipsEnhancement
             {
                 do {
                     let enhancementResult = try await enhancementService.enhance(
@@ -130,7 +139,7 @@ class AudioTranscriptionService: ObservableObject {
                     let newTranscription = Transcription(
                         text: originalText,
                         duration: duration,
-                        enhancedText: enhancementResult.text,
+                        enhancedText: snippets.finish(enhanced: enhancementResult.text),
                         audioFileURL: permanentURLString,
                         transcriptionModelName: model.displayName,
                         aiEnhancementModelName: enhancementConfiguration.modelName

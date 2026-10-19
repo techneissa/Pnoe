@@ -53,6 +53,7 @@ struct PnoeApp: App {
             VocabularyWord.self,
             WordReplacement.self,
             SessionMetric.self,
+            Snippet.self,
         ])
         let resolvedContainer: ModelContainer
 
@@ -236,7 +237,7 @@ struct PnoeApp: App {
             cloudKitDatabase: .none
         )
 
-        let dictionarySchema = Schema([VocabularyWord.self, WordReplacement.self])
+        let dictionarySchema = Schema([VocabularyWord.self, WordReplacement.self, Snippet.self])
         // Dev shares the local stores but must never connect to CloudKit.
         #if DEBUG || LOCAL_BUILD
             let dictionaryCloudKit: ModelConfiguration.CloudKitDatabase = .none
@@ -272,7 +273,7 @@ struct PnoeApp: App {
         let transcriptSchema = Schema([Transcription.self])
         let transcriptConfig = ModelConfiguration("default", schema: transcriptSchema, isStoredInMemoryOnly: true)
 
-        let dictionarySchema = Schema([VocabularyWord.self, WordReplacement.self])
+        let dictionarySchema = Schema([VocabularyWord.self, WordReplacement.self, Snippet.self])
         let dictionaryConfig = ModelConfiguration("dictionary", schema: dictionarySchema, isStoredInMemoryOnly: true)
 
         let statsSchema = Schema([SessionMetric.self])

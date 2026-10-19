@@ -3,7 +3,7 @@ import SwiftData
 import os
 
 /// Handles the full post-recording pipeline:
-/// transcribe → filter → format → word-replace → AI enhance → deliver → save
+/// transcribe → filter → format → word-replace → snippets → AI enhance → deliver → save
 @MainActor
 class TranscriptionPipeline {
     struct AssistantHooks {
@@ -139,8 +139,17 @@ class TranscriptionPipeline {
                 text = ParagraphFormatter.format(text)
             }
 
-            text = WordReplacementService.shared.applyReplacements(to: text, using: modelContext)
-            let cleanedText = text
+            // Snippets match after word replacements. Their expansions stay out of the text until
+            // after enhancement, so neither replacements nor the model touch them.
+            let snippets = SnippetProcessor.prepare(
+                text,
+                rules: SnippetService.rules(using: modelContext),
+                applyingReplacements: {
+                    WordReplacementService.shared.applyReplacements(to: $0, using: modelContext)
+                }
+            )
+            text = snippets.textForEnhancement
+            let cleanedText = snippets.expandedText
 
             let actualDuration = await AudioFileMetadata.duration(for: audioURL)
 
@@ -166,8 +175,10 @@ class TranscriptionPipeline {
                 let savedThreshold = UserDefaults.standard.integer(forKey: "ShortEnhancementWordThreshold")
                 let shortEnhancementWordThreshold = savedThreshold > 0 ? savedThreshold : 3
                 let shouldSkipEnhancement =
-                    !shouldRespondInRecorder && isSkipShortEnhancementEnabled
-                    && WordCounter.count(in: text) <= shortEnhancementWordThreshold
+                    !shouldRespondInRecorder
+                    && (snippets.skipsEnhancement
+                        || (isSkipShortEnhancementEnabled
+                            && WordCounter.count(in: text) <= shortEnhancementWordThreshold))
 
                 if let enhancementService,
                     let resolvedEnhancementConfiguration,
@@ -181,7 +192,8 @@ class TranscriptionPipeline {
                     }
 
                     onStateChange(.enhancing)
-                    let textForAI = text
+                    // Deliberate exception: respond mode pastes nothing and the model needs the snippet content, so it gets the expanded text; a paste gets placeholders.
+                    let textForAI = shouldRespondInRecorder ? cleanedText : text
                     if shouldRespondInRecorder {
                         await assistant.startResponse(textForAI, resolvedEnhancementConfiguration)
                     }
@@ -197,13 +209,16 @@ class TranscriptionPipeline {
                             configuration: resolvedEnhancementConfiguration,
                             contextSnapshot: contextSnapshot
                         )
-                        transcription.enhancedText = enhancementResult.text
+                        let enhancedText =
+                            shouldRespondInRecorder
+                            ? enhancementResult.text : snippets.finish(enhanced: enhancementResult.text)
+                        transcription.enhancedText = enhancedText
                         transcription.promptName =
                             enhancementResult.promptName ?? resolvedEnhancementConfiguration.prompt?.title
                         transcription.enhancementDuration = enhancementResult.duration
                         transcription.aiRequestSystemMessage = enhancementResult.systemMessage
                         transcription.aiRequestUserMessage = enhancementResult.userMessage
-                        finalText = enhancementResult.text
+                        finalText = enhancedText
                     } catch {
                         let errorDescription = EnhancementFailureFormatter.description(for: error)
                         let failureMessage = EnhancementFailureFormatter.message(description: errorDescription)
