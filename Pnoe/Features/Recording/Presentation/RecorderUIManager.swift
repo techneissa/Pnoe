@@ -230,7 +230,7 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
                 await cancelRecording()
             case .idle:
                 if engine.assistantSession.canSendFollowUp {
-                    SoundManager.shared.playStartSound()
+                    SoundManager.shared.play(.start)
                     await engine.toggleRecord(
                         modeId: modeId,
                         isAssistantFollowUp: true
@@ -242,7 +242,7 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
                 await dismissRecorderPanel()
             }
         } else {
-            SoundManager.shared.playStartSound()
+            SoundManager.shared.play(.start)
             isRecorderPanelVisible = true
             await engine.toggleRecord(modeId: modeId)
         }
@@ -280,6 +280,12 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
 
     func cancelRecording() async {
         guard let engine = engine else { return }
+        switch engine.recordingState {
+        case .starting, .recording, .transcribing, .enhancing:
+            SoundManager.shared.play(.cancel)
+        case .idle, .busy:
+            break
+        }
         await engine.cancelRecording()
         await dismissRecorderPanel()
     }

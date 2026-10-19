@@ -15,3 +15,8 @@ None yet.
 ## Not part of Pnoe
 
 - VoiceInk Refine: VoiceInk's AI cleanup model (`beingpax/VoiceInk-Refine-V1`). Its weights are licensed for use with VoiceInk only, so Pnoe does not download, run or ship them. Pnoe removed the option that VoiceInk had.
+
+## Sounds
+
+- Pnoe's sound sets (Felt piano, Kalimba, Vibes, Harp, Bloop, Drop, Wood, Glass, Sine) are original Pnoe sounds, generated from code by the scripts in [`design/sounds`](design/sounds). They use no samples or recordings. VoiceInk's seven sound files were removed.
+- The macOS sounds offered in the sound pickers (Basso, Blow, Bottle, Frog, Funk, Glass, Hero, Morse, Ping, Pop, Purr, Sosumi, Submarine, Tink) belong to Apple. Pnoe plays them from `/System/Library/Sounds` with `NSSound(named:)` and does not bundle or copy them.

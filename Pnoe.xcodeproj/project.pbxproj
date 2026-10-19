@@ -20,6 +20,14 @@
 		E1F511012FA3B47000F00001 /* SelectedTextKit in Frameworks */ = {isa = PBXBuildFile; productRef = E1F511032FA3B47000F00001 /* SelectedTextKit */; };
 		E1FA00A12FA7000000000001 /* TextFieldPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00A02FA7000000000001 /* TextFieldPolicy.swift */; };
 		E1FA00A22FA7000000000001 /* TextFieldPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00A02FA7000000000001 /* TextFieldPolicy.swift */; };
+		E1FA00C02FA7000000000001 /* SoundCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B02FA7000000000001 /* SoundCatalog.swift */; };
+		E1FA00D02FA7000000000001 /* SoundCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B02FA7000000000001 /* SoundCatalog.swift */; };
+		E1FA00C12FA7000000000001 /* SoundPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B12FA7000000000001 /* SoundPlayer.swift */; };
+		E1FA00D12FA7000000000001 /* SoundPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B12FA7000000000001 /* SoundPlayer.swift */; };
+		E1FA00C22FA7000000000001 /* SoundSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B22FA7000000000001 /* SoundSettings.swift */; };
+		E1FA00D22FA7000000000001 /* SoundSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B22FA7000000000001 /* SoundSettings.swift */; };
+		E1FA00C32FA7000000000001 /* SoundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B32FA7000000000001 /* SoundManager.swift */; };
+		E1FA00D32FA7000000000001 /* SoundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B32FA7000000000001 /* SoundManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -55,6 +63,10 @@
 		E1B2DCAA2E3DE70A008DFD68 /* whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = whisper.xcframework; path = "../whisper.cpp/build-apple/whisper.xcframework"; sourceTree = "<group>"; };
 		E1CE28772E4336150082B758 /* whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = whisper.xcframework; path = "../build-apple/whisper.xcframework"; sourceTree = "<group>"; };
 		E1FA00A02FA7000000000001 /* TextFieldPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextFieldPolicy.swift; sourceTree = "<group>"; };
+		E1FA00B02FA7000000000001 /* SoundCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundCatalog.swift; sourceTree = "<group>"; };
+		E1FA00B12FA7000000000001 /* SoundPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundPlayer.swift; sourceTree = "<group>"; };
+		E1FA00B22FA7000000000001 /* SoundSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundSettings.swift; sourceTree = "<group>"; };
+		E1FA00B32FA7000000000001 /* SoundManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -168,6 +180,10 @@
 			isa = PBXGroup;
 			children = (
 				E1FA00A02FA7000000000001 /* TextFieldPolicy.swift */,
+				E1FA00B02FA7000000000001 /* SoundCatalog.swift */,
+				E1FA00B12FA7000000000001 /* SoundPlayer.swift */,
+				E1FA00B22FA7000000000001 /* SoundSettings.swift */,
+				E1FA00B32FA7000000000001 /* SoundManager.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -338,6 +354,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				E1FA00A12FA7000000000001 /* TextFieldPolicy.swift in Sources */,
+				E1FA00C02FA7000000000001 /* SoundCatalog.swift in Sources */,
+				E1FA00C12FA7000000000001 /* SoundPlayer.swift in Sources */,
+				E1FA00C22FA7000000000001 /* SoundSettings.swift in Sources */,
+				E1FA00C32FA7000000000001 /* SoundManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -346,6 +366,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				E1FA00A22FA7000000000001 /* TextFieldPolicy.swift in Sources */,
+				E1FA00D02FA7000000000001 /* SoundCatalog.swift in Sources */,
+				E1FA00D12FA7000000000001 /* SoundPlayer.swift in Sources */,
+				E1FA00D22FA7000000000001 /* SoundSettings.swift in Sources */,
+				E1FA00D32FA7000000000001 /* SoundManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
