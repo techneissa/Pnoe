@@ -36,7 +36,7 @@ struct ModeTriggerSection: View {
 
             HStack {
                 Text("Shortcut")
-                InfoTip("Assign a unique keyboard or mouse shortcut to instantly activate this mode and start recording.")
+                InfoTip("Assign a unique keyboard or mouse shortcut to instantly activate this workflow and start recording.")
 
                 Spacer()
 
@@ -53,7 +53,7 @@ struct ModeTriggerSection: View {
             HStack(spacing: 4) {
                 Text("Triggers")
                 InfoTip(
-                    "Pnoe automatically switches to this mode based on the app or website you're using, or when you say a trigger word during recording."
+                    "Pnoe automatically switches to this workflow based on the app or website you're using, or when you say a trigger word during recording."
                 )
             }
 

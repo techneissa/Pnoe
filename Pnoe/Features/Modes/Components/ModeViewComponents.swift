@@ -32,16 +32,16 @@ struct ModeEmptyStateView: View {
                 .font(.system(size: 48))
                 .foregroundColor(.secondary)
 
-            Text("No Modes")
+            Text("No Workflows")
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Text("Add customized modes for different contexts")
+            Text("Add customized workflows for different contexts")
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
 
             PnoeButton(
-                title: "Add New Mode",
+                title: "Add New Workflow",
                 action: action
             )
             .frame(maxWidth: 250)
@@ -94,7 +94,7 @@ struct DefaultModeIndicator: View {
                 .strokeBorder(AppTheme.Border.control, lineWidth: 0.5)
         }
         .contentShape(Capsule())
-        .help("Default mode is used when no app or website matches")
+        .help("Default workflow is used when no app or website matches")
     }
 }
 
@@ -115,9 +115,9 @@ private struct ModeShortcutIndicator: View {
         Group {
             if let shortcut {
                 ShortcutVisualization(shortcut: shortcut, isRecording: false, isCompact: true)
-                    .help("Mode shortcut: \(shortcut.displayString)")
+                    .help("Workflow shortcut: \(shortcut.displayString)")
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Mode shortcut: \(shortcut.displayString)")
+                    .accessibilityLabel("Workflow shortcut: \(shortcut.displayString)")
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: ShortcutStore.shortcutDidChange)) { notification in
@@ -257,8 +257,8 @@ struct ConfigurationRow: View {
         }
         .focusEffectDisabled()
         .buttonStyle(.plain)
-        .help("Edit mode")
-        .accessibilityLabel("Edit mode")
+        .help("Edit workflow")
+        .accessibilityLabel("Edit workflow")
     }
 
     var body: some View {
@@ -497,7 +497,7 @@ struct ConfigurationRow: View {
             modeActions
         }
         .confirmationDialog(
-            "Delete Mode?",
+            "Delete Workflow?",
             isPresented: $isShowingDeleteConfirmation,
             titleVisibility: .visible
         ) {

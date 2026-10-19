@@ -297,50 +297,44 @@ private struct AdvancedModelSettingsSection: View {
 
     var body: some View {
         Section {
-            Toggle(isOn: $appendTrailingSpace) {
-                HStack(spacing: 4) {
-                    Text("Add Space After Paste")
-                    InfoTip("Add a trailing space after pasted transcription output.")
-                }
+            HStack(spacing: 4) {
+                Toggle("Add Space After Paste", isOn: $appendTrailingSpace)
+                    .toggleStyle(.switch)
+                InfoTip("Add a trailing space after pasted transcription output.")
             }
-            .toggleStyle(.switch)
 
-            Toggle(isOn: $isVADEnabled) {
-                HStack(spacing: 4) {
-                    Text("Voice Activity Detection (VAD)")
-                    InfoTip("Detect speech segments and filter out silence to improve accuracy of local models.")
-                }
+            HStack(spacing: 4) {
+                Toggle("Voice Activity Detection (VAD)", isOn: $isVADEnabled)
+                    .toggleStyle(.switch)
+                InfoTip("Detect speech segments and filter out silence to improve accuracy of local models.")
             }
-            .toggleStyle(.switch)
 
-            Toggle(isOn: $prewarmModelOnWake) {
-                HStack(spacing: 4) {
-                    Text("Prewarm model (Experimental)")
-                    InfoTip(
-                        "Turn this on if local transcriptions take longer than expected. It prepares the selected model in the background when the app launches or wakes."
-                    )
-                }
+            HStack(spacing: 4) {
+                Toggle("Prewarm model (Experimental)", isOn: $prewarmModelOnWake)
+                    .toggleStyle(.switch)
+                InfoTip(
+                    "Turn this on if local transcriptions take longer than expected. It prepares the selected model in the background when the app launches or wakes."
+                )
             }
-            .toggleStyle(.switch)
 
-            Picker(selection: $cloudTimeout) {
-                Text("10 seconds").tag(10)
-                Text("30 seconds").tag(30)
-                Text("1 minute").tag(60)
-                Text("2 minutes").tag(120)
-                Text("5 minutes").tag(300)
-                Text("10 minutes").tag(600)
-                Text("20 minutes").tag(1_200)
-                Text("30 minutes").tag(1_800)
-            } label: {
-                HStack(spacing: 4) {
+            HStack(spacing: 4) {
+                Picker(selection: $cloudTimeout) {
+                    Text("10 seconds").tag(10)
+                    Text("30 seconds").tag(30)
+                    Text("1 minute").tag(60)
+                    Text("2 minutes").tag(120)
+                    Text("5 minutes").tag(300)
+                    Text("10 minutes").tag(600)
+                    Text("20 minutes").tag(1_200)
+                    Text("30 minutes").tag(1_800)
+                } label: {
                     Text("Timeout")
-                    InfoTip(
-                        "Set how long to wait for batch cloud transcription to finish. This does not affect local or realtime transcription."
-                    )
                 }
+                    .pickerStyle(.menu)
+                InfoTip(
+                    "Set how long to wait for batch cloud transcription to finish. This does not affect local or realtime transcription."
+                )
             }
-            .pickerStyle(.menu)
         } header: {
             Text("Advanced")
         }

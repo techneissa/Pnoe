@@ -460,32 +460,32 @@ class PnoeEngine: NSObject, ObservableObject {
         switch resolution {
         case .noMode:
             return (
-                String(localized: "No mode configured"),
-                String(localized: "Manage Modes"),
+                String(localized: "No workflow configured"),
+                String(localized: "Manage Workflows"),
                 ModeSetupNavigator.openModesSettings
             )
         case .noSelection(let mode):
             return (
                 String(
-                    format: String(localized: "No transcription model is selected for the '%@' mode"),
+                    format: String(localized: "No transcription model is selected for the '%@' workflow"),
                     mode.name
                 ),
-                String(localized: "Manage Modes"),
+                String(localized: "Manage Workflows"),
                 ModeSetupNavigator.openModesSettings
             )
         case .modelNotFound(let mode):
             return (
                 String(
-                    format: String(localized: "The transcription model selected for the '%@' mode is unavailable"),
+                    format: String(localized: "The transcription model selected for the '%@' workflow is unavailable"),
                     mode.name
                 ),
-                String(localized: "Manage Modes"),
+                String(localized: "Manage Workflows"),
                 ModeSetupNavigator.openModesSettings
             )
         case .unavailable(let mode, let model), .available(let mode, let model):
             return (
                 String(
-                    format: String(localized: "'%@' is not available for the %@ mode"),
+                    format: String(localized: "'%@' is not available for the %@ workflow"),
                     model.displayName,
                     mode.name
                 ),
@@ -500,8 +500,8 @@ class PnoeEngine: NSObject, ObservableObject {
     private func passesRecordingPreflight() async -> Bool {
         if !ModeManager.shared.hasEnabledConfiguration {
             await failRecordingPreflight(
-                title: String(localized: "No mode configured"),
-                actionLabel: String(localized: "Manage Modes"),
+                title: String(localized: "No workflow configured"),
+                actionLabel: String(localized: "Manage Workflows"),
                 action: ModeSetupNavigator.openModesSettings
             )
             return false

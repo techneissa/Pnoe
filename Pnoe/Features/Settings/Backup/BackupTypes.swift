@@ -14,7 +14,7 @@ enum BackupCategory: String, CaseIterable, Hashable {
         case .prompts:
             return String(localized: "Custom Prompts")
         case .modes:
-            return String(localized: "Modes")
+            return String(localized: "Workflows")
         case .dictionary:
             return String(localized: "Dictionary")
         case .customModels:

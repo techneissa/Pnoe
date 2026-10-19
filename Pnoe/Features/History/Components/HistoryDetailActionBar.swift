@@ -60,7 +60,7 @@ struct HistoryDetailActionBar: View {
         Button {
             isShowingModes.toggle()
         } label: {
-            actionLabel(title: selectedMode?.name ?? String(localized: "Select Mode")) {
+            actionLabel(title: selectedMode?.name ?? String(localized: "Select Workflow")) {
                 if let selectedMode {
                     ModeIconView(
                         icon: selectedMode.icon,
@@ -82,7 +82,7 @@ struct HistoryDetailActionBar: View {
                 retranscribe(using: mode)
             }
         }
-        .help("Select a mode and retranscribe")
+        .help("Select a workflow and retranscribe")
     }
 
     private var promptButton: some View {
@@ -131,11 +131,11 @@ struct HistoryDetailActionBar: View {
     private var retryButton: some View {
         HistoryIconButton(
             systemName: "arrow.clockwise",
-            help: "Retranscribe with the selected mode",
+            help: "Retranscribe with the selected workflow",
             isLoading: isWorking
         ) {
             guard let selectedMode else {
-                showError(String(localized: "No mode selected"))
+                showError(String(localized: "No workflow selected"))
                 return
             }
             retranscribe(using: selectedMode)

@@ -109,7 +109,7 @@ struct ModeConfigFormView: View {
                 )
             }
 
-            TextField("Mode name", text: $draft.name)
+            TextField("Workflow name", text: $draft.name)
                 .textFieldStyle(.plain)
                 .font(.system(size: 16, weight: .semibold))
                 .focused($isNameFieldFocused)
@@ -149,7 +149,7 @@ struct ModeConfigFormView: View {
         .contentMargins(.bottom, 58, for: .scrollContent)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .confirmationDialog(
-            "Delete Mode?",
+            "Delete Workflow?",
             isPresented: $isShowingDeleteConfirmation,
             titleVisibility: .visible
         ) {
@@ -168,7 +168,7 @@ struct ModeConfigFormView: View {
                     modeManager.getConfiguration(with: draft.id)?.name ?? draft.name))
         }
         .alert(
-            "Default Mode Can’t Be Deleted",
+            "Default Workflow Can’t Be Deleted",
             isPresented: $isShowingDefaultModeDeleteAlert,
             actions: {
                 Button("OK", role: .cancel) {}
@@ -177,7 +177,7 @@ struct ModeConfigFormView: View {
                 Text(
                     String(
                         format: String(
-                            localized: "'%@' is the default mode. Set another mode as default before deleting it."
+                            localized: "'%@' is the default workflow. Set another workflow as default before deleting it."
                         ),
                         draft.name
                     )
@@ -187,11 +187,20 @@ struct ModeConfigFormView: View {
         .modeValidationAlert(errors: validationErrors, isPresented: $showValidationAlert)
     }
 
+    private func sectionHeader(
+        _ title: LocalizedStringKey, info: LocalizedStringKey, about: LocalizedStringKey
+    ) -> some View {
+        HStack(spacing: 4) {
+            Text(title)
+            InfoTip(info, accessibilityLabel: about)
+        }
+    }
+
     private var transcriptionSection: some View {
-        Section("Transcription") {
+        Section {
             if warmupSnapshot.usableTranscriptionModels.isEmpty {
                 Text(
-                    "No transcription models available. Please connect to a cloud service or download a local model in the AI Models tab."
+                    "No transcription models available. Connect a cloud service or download a local model in AI Models."
                 )
                 .foregroundColor(.secondary)
             } else {
@@ -238,13 +247,15 @@ struct ModeConfigFormView: View {
                 title: "Transcription Formatting",
                 isExpanded: $draft.isTranscriptionFormattingExpanded
             ) {
-                Toggle(isOn: $draft.isTextFormattingEnabled) {
-                    HStack(spacing: 4) {
-                        Text("Paragraph breaks")
-                        InfoTip("Apply intelligent text formatting to break large block of text into paragraphs.")
-                    }
+                HStack(spacing: 4) {
+                    Toggle("Paragraph breaks", isOn: $draft.isTextFormattingEnabled)
+                    InfoTip("Apply intelligent text formatting to break large block of text into paragraphs.")
                 }
             }
+        } header: {
+            sectionHeader(
+                "Transcription", info: "The speech model and language that turn your voice into text.",
+                about: "About Transcription")
         }
     }
 
@@ -335,7 +346,7 @@ struct ModeConfigFormView: View {
     }
 
     private var aiEnhancementSection: some View {
-        Section("AI Enhancement") {
+        Section {
             Toggle("AI Enhancement", isOn: $draft.isAIEnhancementEnabled)
                 .onChange(of: draft.isAIEnhancementEnabled) { _, newValue in
                     if newValue {
@@ -410,6 +421,11 @@ struct ModeConfigFormView: View {
                     contextAwarenessRow
                 }
             }
+        } header: {
+            sectionHeader(
+                "AI Enhancement",
+                info: "Cleans up or reshapes the transcript with an AI model and a prompt before it is delivered.",
+                about: "About AI Enhancement")
         }
     }
 
@@ -542,25 +558,19 @@ struct ModeConfigFormView: View {
 
     private var contextToggles: some View {
         Group {
-            Toggle(isOn: $draft.useSelectedTextContext) {
-                HStack(spacing: 4) {
-                    Text("Selected Text")
-                    InfoTip("Use selected text from the active app as context for this mode.")
-                }
+            HStack(spacing: 4) {
+                Toggle("Selected Text", isOn: $draft.useSelectedTextContext)
+                InfoTip("Use selected text from the active app as context for this workflow.")
             }
 
-            Toggle(isOn: $draft.useClipboardContext) {
-                HStack(spacing: 4) {
-                    Text("Clipboard")
-                    InfoTip("Use clipboard text as context for this mode.")
-                }
+            HStack(spacing: 4) {
+                Toggle("Clipboard", isOn: $draft.useClipboardContext)
+                InfoTip("Use clipboard text as context for this workflow.")
             }
 
-            Toggle(isOn: $draft.useScreenCapture) {
-                HStack(spacing: 4) {
-                    Text("Screen")
-                    InfoTip("Use captured on-screen text as context for this mode.")
-                }
+            HStack(spacing: 4) {
+                Toggle("Screen", isOn: $draft.useScreenCapture)
+                InfoTip("Use captured on-screen text as context for this workflow.")
             }
         }
     }
@@ -580,7 +590,7 @@ struct ModeConfigFormView: View {
     }
 
     private var advancedSection: some View {
-        Section("Advanced") {
+        Section {
             Picker("Output", selection: $draft.outputMode) {
                 ForEach(outputChoices, id: \.self) { outputMode in
                     Label(outputMode.displayName, systemImage: outputMode.iconName)
@@ -592,32 +602,35 @@ struct ModeConfigFormView: View {
             }
 
             if draft.outputMode != .respond {
-                Toggle(isOn: $draft.isDefault) {
-                    HStack(spacing: 6) {
-                        Text("Set as default")
-                        InfoTip("Default mode is used when no specific app or website matches are found.")
-                    }
+                HStack(spacing: 4) {
+                    Toggle("Set as default", isOn: $draft.isDefault)
+                    InfoTip("Default workflow is used when no specific app or website matches are found.")
                 }
             }
 
             if draft.outputMode == .paste {
-                Picker(selection: $draft.autoSendKey) {
-                    ForEach(FinishAndSendKey.allCases, id: \.self) { key in
-                        Text(key.displayName).tag(key)
-                    }
-                } label: {
-                    HStack(spacing: 6) {
+                HStack(spacing: 4) {
+                    Picker(selection: $draft.autoSendKey) {
+                        ForEach(FinishAndSendKey.allCases, id: \.self) { key in
+                            Text(key.displayName).tag(key)
+                        }
+                    } label: {
                         Text("Auto Send")
-                        InfoTip(
-                            "Automatically presses a key combination after pasting text. Useful for chat applications or forms that use different send shortcuts."
-                        )
                     }
+                    InfoTip(
+                        "Automatically presses a key combination after pasting text. Useful for chat applications or forms that use different send shortcuts."
+                    )
                 }
             }
 
             if draft.outputMode == .customCommand {
                 customCommandControls
             }
+        } header: {
+            sectionHeader(
+                "Advanced",
+                info: "Where the result goes, and whether this workflow is the default.",
+                about: "About Advanced")
         }
     }
 

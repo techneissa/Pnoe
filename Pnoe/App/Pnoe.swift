@@ -409,10 +409,10 @@ struct PnoeApp: App {
 
         if !ModeManager.shared.hasEnabledConfiguration {
             NotificationManager.shared.showNotification(
-                title: String(localized: "No mode configured"),
+                title: String(localized: "No workflow configured"),
                 type: .warning,
                 duration: 7.0,
-                actionButton: (String(localized: "Manage Modes"), ModeSetupNavigator.openModesSettings)
+                actionButton: (String(localized: "Manage Workflows"), ModeSetupNavigator.openModesSettings)
             )
         }
     }

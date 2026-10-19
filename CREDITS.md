@@ -14,14 +14,21 @@ Each feature taken from another project gets one line in this format:
 - [FluidVoice](https://github.com/altic-dev/FluidVoice), GPL-3.0: sending the transcript to the model as a JSON `{"transcript": …}` envelope, and the occurrence counter behind Auto Learn (save a correction only after the same heard text was changed to the same corrected text a set number of times, with a 1 to 3 setting there, stale counts expiring and a cap on stored pairs), reimplemented in `Shared/CorrectionCounter.swift` with its own limits and file store.
 - [Handy](https://github.com/cjpais/Handy), MIT: the transcript envelope and restating the rule after the transcript.
 - [OpenWhispr](https://github.com/OpenWhispr/openwhispr), MIT: restating the rule after the transcript, the worked example of an injected instruction that comes back unchanged, and the idea of snippets (spoken trigger phrases that insert saved text; behavior only, Pnoe's code is its own).
-- [TypeWhisper](https://github.com/TypeWhisper/typewhisper-mac), GPL-3.0: sanitizing model wrappers before paste, the lesson to apply dictionary fixes before the model, and the idea of a live transcript preview in the recording indicator with theme, placement and visibility choices, of the Pill and Dot indicator styles, and of configurable left and right side slots (concept only; Pnoe's indicator design and code are its own).
+- [TypeWhisper](https://github.com/TypeWhisper/typewhisper-mac), GPL-3.0: sanitizing model wrappers before paste, the lesson to apply dictionary fixes before the model, and the idea of a live transcript preview in the recording indicator with theme, placement and visibility choices, of the Pill and Dot indicator styles, and of configurable left and right side slots (concept only; Pnoe's indicator design and code are its own), and of a Workflows screen with a compact template picker for new workflows (concept only; Pnoe's layout, wording and code are its own).
 - Ideas only, no code: [VoiceTypr](https://github.com/ideaplexa/voicetypr) (output guard classes, skip rule for short takes), [Whispering](https://github.com/EpicenterHQ/epicenter) (temperature 0), [Murmure](https://github.com/Kieirra/murmure) (output cap tied to input length).
 
-## Engines and models
+## Transcription engines and models
 
 - [WhisperKit](https://github.com/argmaxinc/WhisperKit) by Argmax, MIT: the Swift package Pnoe links to run Whisper on Core ML and the Neural Engine (pinned at 1.1.1). Pnoe does not bundle it with models; it downloads them on request.
 - [argmaxinc/whisperkit-coreml](https://huggingface.co/argmaxinc/whisperkit-coreml), MIT (as on the model card): the Core ML builds of OpenAI's Whisper (large-v3 turbo, small, base) that WhisperKit runs. Whisper is by OpenAI, MIT. Pnoe downloads them from Hugging Face at a pinned revision.
 - [openai/whisper-large-v3](https://huggingface.co/openai/whisper-large-v3), [whisper-small](https://huggingface.co/openai/whisper-small) and [whisper-base](https://huggingface.co/openai/whisper-base), Apache-2.0 (as on the model cards): only the tokenizer files (`config.json`, `tokenizer_config.json`, `tokenizer.json`), which WhisperKit needs next to each build.
+
+## Models and runtimes
+
+Pnoe's formatter uses models that are already on the Mac and downloads nothing unless the user clicks Download.
+
+- [Gemma 4 E2B](https://huggingface.co/google/gemma-4-E2B-it) by Google DeepMind, as the [Unsloth GGUF build](https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF) (`gemma-4-E2B-it-Q4_K_M.gguf`), licensed Apache-2.0 as tagged on both model cards. It is the optional download for a Mac with no model installed. Pnoe does not bundle it; it fetches the file from Hugging Face from a pinned revision after the user clicks, and checks its size and SHA-256.
+- Models found on the Mac (Ollama, the Hugging Face cache, LM Studio) belong to their authors and keep their own licences. Pnoe lists and reads them and never copies, moves or changes them.
 
 ## Not part of Pnoe
 

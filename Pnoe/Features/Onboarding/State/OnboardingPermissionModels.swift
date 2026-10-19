@@ -83,7 +83,7 @@ enum OnboardingStage: String, CaseIterable {
             return String(localized: "Try a few short samples and see how Pnoe works before you start.")
         case .contextAwareness:
             return String(
-                localized: "Pnoe can select the right mode from the app you are using and the rules you configure.")
+                localized: "Pnoe can select the right workflow from the app you are using and the rules you configure.")
         case .trust:
             return String(localized: "Pnoe is private by default. No data leaves your device unless you opt in.")
         }

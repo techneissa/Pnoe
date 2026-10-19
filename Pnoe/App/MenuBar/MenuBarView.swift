@@ -59,14 +59,14 @@ struct MenuBarView: View {
                 }
 
                 if modeManager.enabledConfigurations.isEmpty {
-                    Text("No modes available")
+                    Text("No workflows available")
                         .foregroundColor(.secondary)
                 }
 
                 Divider()
 
-                Button("Manage Modes") {
-                    showMainWindowAndNavigate(to: "Modes")
+                Button("Manage Workflows") {
+                    showMainWindowAndNavigate(to: "Workflows")
                 }
 
                 Button("Manage Models") {
@@ -77,7 +77,7 @@ struct MenuBarView: View {
                     Image(systemName: "sparkles.square.fill.on.square")
                         .font(.system(size: 11, weight: .medium))
                     let activeMode = modeManager.currentEffectiveConfiguration
-                    Text(String(format: String(localized: "Mode: %@"), activeMode?.name ?? String(localized: "None")))
+                    Text(String(format: String(localized: "Workflow: %@"), activeMode?.name ?? String(localized: "None")))
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.system(size: 10))
                 }
