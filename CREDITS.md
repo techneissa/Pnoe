@@ -10,7 +10,12 @@ Each feature taken from another project gets one line in this format:
 
 `- [Project](link), License: what was taken`
 
-None yet.
+- [betterwispr](https://github.com/opennookorg/betterwispr), Apache-2.0: the idea of the word-diff acceptance rule (reply length bounds, share of new content words, a spoken question mark must survive) and the filler and repeated-word cleanup logic, both reimplemented in Swift in `Packages/PnoeFormatter`, plus stripping section tags from user text before it goes into a prompt.
+- [FluidVoice](https://github.com/altic-dev/FluidVoice), GPL-3.0: sending the transcript to the model as a JSON `{"transcript": …}` envelope.
+- [Handy](https://github.com/cjpais/Handy), MIT: the transcript envelope and restating the rule after the transcript.
+- [OpenWhispr](https://github.com/OpenWhispr/openwhispr), MIT: restating the rule after the transcript, and the worked example of an injected instruction that comes back unchanged.
+- [TypeWhisper](https://github.com/TypeWhisper/typewhisper-mac), GPL-3.0: sanitizing model wrappers before paste, and the lesson to apply dictionary fixes before the model.
+- Ideas only, no code: [VoiceTypr](https://github.com/ideaplexa/voicetypr) (output guard classes, skip rule for short takes), [Whispering](https://github.com/EpicenterHQ/epicenter) (temperature 0), [Murmure](https://github.com/Kieirra/murmure) (output cap tied to input length).
 
 ## Not part of Pnoe
 
