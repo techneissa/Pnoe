@@ -10,6 +10,19 @@ enum AudioLevelReading: Sendable, Equatable {
     case unavailable
 }
 
+/// What a listening session heard.
+struct AudioLevelMeasurement: Sendable, Equatable {
+    /// The players' audio, mixed.
+    var players: AudioLevelReading
+    /// Pnoe's own audio (its start sound), read separately from the players'. `nil` when it was not asked for.
+    /// Heard sound here proves the tap delivers audio right now, so silence in `players` is real.
+    var own: AudioLevelReading?
+
+    static func unavailable(includingOwn: Bool) -> AudioLevelMeasurement {
+        AudioLevelMeasurement(players: .unavailable, own: includingOwn ? .unavailable : nil)
+    }
+}
+
 /// Measures the level of the audio some processes send to the output, which the process list cannot say.
 ///
 /// The process list (`AudioOutputProcesses`) reports a process as playing for as long as it keeps its stream
@@ -17,8 +30,28 @@ enum AudioLevelReading: Sendable, Equatable {
 /// Reading them needs a CoreAudio process tap, which needs the System Audio Recording permission, so this is
 /// optional and off by default.
 protocol AudioLevelMeasuring: Sendable {
-    /// Listens to the mix of `processes` for `window` seconds. Never throws: any failure is `.unavailable`.
-    func measure(processes: [AudioProcess], window: TimeInterval) async -> AudioLevelReading
+    /// Listens to the mix of `processes`, and to Pnoe's own audio separately when `includingOwnProcess` is set,
+    /// for at most `window` seconds (`ListeningPlan` says when it may stop sooner). Never throws: any failure
+    /// is `.unavailable`.
+    func measure(processes: [AudioProcess], includingOwnProcess: Bool, window: TimeInterval) async
+        -> AudioLevelMeasurement
+}
+
+/// When a listening session may stop before its window ends.
+enum ListeningPlan {
+    /// Listening to the players alone, or to the players and Pnoe's own audio, lasts at least this long, so a
+    /// player that is about to produce sound is not judged on a few milliseconds.
+    static let minimumWindow: TimeInterval = 0.15
+
+    static func isDone(
+        elapsed: TimeInterval, window: TimeInterval, players: AudioLevelReading, own: AudioLevelReading?
+    ) -> Bool {
+        if elapsed >= window { return true }
+        // A player making sound answers the question at once.
+        if players == .sound { return true }
+        // Without Pnoe's own audio to wait for, or once it has been heard, the minimum is enough.
+        return elapsed >= minimumWindow && (own == nil || own == .sound)
+    }
 }
 
 /// Running peak of the samples seen in a measuring window.

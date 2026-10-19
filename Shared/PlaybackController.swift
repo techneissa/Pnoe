@@ -62,17 +62,33 @@ class PlaybackController: ObservableObject {
     private let levelMeter: AudioLevelMeasuring?
     private let defaults: UserDefaults
     private let clock: @MainActor () -> TimeInterval
-    /// When a level check last heard sound, which proves the tap works (permission granted). A "silent" reading is
-    /// believed only while this is recent: without the permission, or after it is revoked, a tap can deliver
-    /// silence for loud music. Kept in memory only, and cleared whenever the tap fails.
-    private var lastSoundHeardAt: TimeInterval?
-    /// How long a heard sound keeps a "silent" reading believable.
-    private let soundProofLifetime: TimeInterval = 5 * 60
-    /// The longest a level check may take, the permission prompt included. Past it the output flag decides.
+    private let isStartSoundOn: @MainActor () -> Bool
+    /// A level check has heard sound since the check was switched on or the tap last failed, which proves the tap
+    /// works (permission granted). Only used when Pnoe's own start sound cannot prove it for the recording at
+    /// hand. Without the permission, or after it is revoked, a tap can deliver silence for loud music, so this is
+    /// kept in memory only and cleared by a tap error, by a start sound the tap did not hear, and by switching
+    /// the check off and on. It does not expire: with the start sound off, nothing else can refresh it.
+    private var hasHeardSound = false
+    /// The longest a level check may take from its start, the permission prompt included. Past it the output flag
+    /// decides.
     private let levelDeadline: TimeInterval
-    /// How long the level check listens. Long enough for a few audio buffers, short enough to add little to the
-    /// start of a recording.
-    private let levelWindow: TimeInterval = 0.15
+    /// How long the level check listens to the players alone: long enough for a few audio buffers, short enough to
+    /// add little to the start of a recording.
+    private let levelWindow: TimeInterval = ListeningPlan.minimumWindow
+    /// The longest it listens when it waits for Pnoe's own start sound (at most 0.36 s long) to be heard. It stops
+    /// as soon as the sound is heard and the minimum window is over.
+    private let ownSoundWindow: TimeInterval = 0.3
+    /// How old a listening session started before the start sound may be and still count for a pause.
+    private let probeFreshness: TimeInterval = 3
+
+    /// A listening session started when the start sound was played, so that it overlaps the sound however long the
+    /// recording takes to start.
+    private struct LevelProbe {
+        let startedAt: TimeInterval
+        let includesOwnSound: Bool
+        let task: Task<AudioLevelMeasurement?, Never>
+    }
+    private var pendingProbe: LevelProbe?
 
     private var ownedPause: OwnedPause?
     private var monitorTask: Task<Void, Never>?
@@ -94,7 +110,7 @@ class PlaybackController: ObservableObject {
     @Published var isLevelCheckEnabled: Bool {
         didSet {
             defaults.set(isLevelCheckEnabled, forKey: Self.levelCheckKey)
-            lastSoundHeardAt = nil
+            hasHeardSound = false
         }
     }
 
@@ -106,7 +122,8 @@ class PlaybackController: ObservableObject {
         levelMeter: AudioLevelMeasuring? = nil,
         defaults: UserDefaults = .standard,
         levelDeadline: TimeInterval = 0.5,
-        clock: @escaping @MainActor () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+        clock: @escaping @MainActor () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+        isStartSoundOn: @escaping @MainActor () -> Bool = { false }
     ) {
         self.mediaApplications = mediaApplications
         self.readAudioProcesses = readAudioProcesses
@@ -116,6 +133,7 @@ class PlaybackController: ObservableObject {
         self.defaults = defaults
         self.levelDeadline = levelDeadline
         self.clock = clock
+        self.isStartSoundOn = isStartSoundOn
         self.isPauseMediaEnabled = defaults.bool(forKey: Self.pauseMediaKey)
         self.isLevelCheckEnabled = defaults.bool(forKey: Self.levelCheckKey)
 
@@ -180,46 +198,100 @@ class PlaybackController: ObservableObject {
         return processes.filter { activity.playingProcessIDs.contains($0.pid) }
     }
 
+    /// Call right before Pnoe plays its start sound. With the level check on, this starts listening to the players
+    /// and to Pnoe's own audio at once, so the start sound is inside the listening window however long the recording
+    /// takes to start. `pauseMedia` uses the result. Does nothing when the pause or the check is off, and makes no
+    /// tap when no known player is playing.
+    func beginLevelProbe() {
+        pendingProbe?.task.cancel()
+        pendingProbe = nil
+        guard isPauseMediaEnabled, isLevelCheckEnabled, let levelMeter, !isQuitting else { return }
+
+        let includesOwnSound = isStartSoundOn()
+        pendingProbe = LevelProbe(
+            startedAt: clock(),
+            includesOwnSound: includesOwnSound,
+            task: Task { [weak self] in
+                guard let self, let players = await self.knownPlayersPlayingAlone() else { return nil }
+                return await self.measureWithDeadline(levelMeter, players, includingOwnSound: includesOwnSound)
+            }
+        )
+    }
+
     /// With the level check on, a press needs sound in the players' audio. Whenever the check cannot say
-    /// (it is off, the tap failed or took too long, no samples came, or sound was not heard lately, so silence
-    /// may be a missing permission) the output flag decides, as it did before the check existed.
+    /// (it is off, the tap failed or took too long, no samples came, or nothing proves that the tap works right now)
+    /// the output flag decides, as it did before the check existed.
     private func levelCheckAllowsPause(for players: [AudioProcess]) async -> Bool {
         guard isLevelCheckEnabled, let levelMeter else { return true }
-        let reading = await measureWithDeadline(levelMeter, players)
-        switch reading {
+
+        var measurement: AudioLevelMeasurement?
+        var ownSoundExpected = false
+        if let probe = pendingProbe, clock() - probe.startedAt < probeFreshness {
+            pendingProbe = nil
+            measurement = await probe.task.value
+            ownSoundExpected = probe.includesOwnSound
+        } else {
+            pendingProbe?.task.cancel()
+            pendingProbe = nil
+        }
+        if measurement == nil {
+            // No listening session overlapped the start sound (nothing was playing when it started, or no sound
+            // was played), so only the earlier proof can vouch for the tap.
+            measurement = await measureWithDeadline(levelMeter, players, includingOwnSound: false)
+            ownSoundExpected = false
+        }
+        guard let measurement else { return true }
+
+        switch measurement.players {
         case .sound:
-            lastSoundHeardAt = clock()
+            hasHeardSound = true
+            return true
+        case .unavailable:
+            hasHeardSound = false
             return true
         case .silent:
-            guard let heardAt = lastSoundHeardAt, clock() - heardAt < soundProofLifetime else {
-                lastSoundHeardAt = nil
+            break
+        }
+
+        if ownSoundExpected {
+            switch measurement.own ?? .unavailable {
+            case .sound:
+                // Pnoe's own start sound came through the tap, so the tap works now and the players are silent.
+                hasHeardSound = true
+                return false
+            case .silent, .unavailable:
+                // The sound played but the tap did not deliver it: the silence proves nothing.
+                hasHeardSound = false
                 return true
             }
-            return false
-        case .unavailable:
-            lastSoundHeardAt = nil
-            return true
         }
+        return !hasHeardSound
     }
 
     /// Asks the meter and gives up after `levelDeadline`, whatever the meter does: a CoreAudio call can block while
     /// the permission prompt is up. The meter's work is left to finish on its own.
-    private func measureWithDeadline(_ meter: AudioLevelMeasuring, _ players: [AudioProcess]) async -> AudioLevelReading {
-        let window = levelWindow
+    private func measureWithDeadline(
+        _ meter: AudioLevelMeasuring, _ players: [AudioProcess], includingOwnSound: Bool
+    ) async -> AudioLevelMeasurement {
+        let window = includingOwnSound ? ownSoundWindow : levelWindow
         let deadline = levelDeadline
+        let unavailable = AudioLevelMeasurement.unavailable(includingOwn: includingOwnSound)
         return await withCheckedContinuation { continuation in
             let resumed = OSAllocatedUnfairLock(initialState: false)
-            let resumeOnce: @Sendable (AudioLevelReading) -> Void = { reading in
+            let resumeOnce: @Sendable (AudioLevelMeasurement) -> Void = { measurement in
                 let first = resumed.withLock { done -> Bool in
                     defer { done = true }
                     return !done
                 }
-                if first { continuation.resume(returning: reading) }
+                if first { continuation.resume(returning: measurement) }
             }
-            Task.detached { resumeOnce(await meter.measure(processes: players, window: window)) }
+            Task.detached {
+                resumeOnce(
+                    await meter.measure(processes: players, includingOwnProcess: includingOwnSound, window: window))
+            }
             Task.detached {
                 try? await Task.sleep(for: .seconds(deadline))
-                resumeOnce(.unavailable)
+                resumeOnce(unavailable)
             }
         }
     }
