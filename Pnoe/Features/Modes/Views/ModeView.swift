@@ -167,6 +167,7 @@ struct ModeView: View {
                     options: StarterModeCatalog.templates.map(\.pickerOption),
                     onSelect: { option in
                         let template = StarterModeCatalog.templates.first { $0.id == option?.id }
+                        if let template { seedPrompts(for: template) }
                         openPanel(mode: .add, template: template)
                     },
                     onDismiss: closePanel
@@ -187,6 +188,15 @@ struct ModeView: View {
                 enhancementService: enhancementService,
                 transcriptionModelManager: transcriptionModelManager
             )
+        }
+    }
+
+    /// A template's prompt is added to the prompt list the first time the template is used.
+    private func seedPrompts(for template: StarterModeTemplate) {
+        let seeded = StarterModePromptSeeder.ensurePrompts(for: [template.kind], in: enhancementService.customPrompts)
+        if seeded.didChange {
+            enhancementService.customPrompts = seeded.prompts
+            modeWarmupStore.refreshSnapshot()
         }
     }
 

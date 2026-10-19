@@ -17,6 +17,12 @@
 		E1F350112F1D10D600790A2C /* whisper.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E1A0BD052EB1E7B800266859 /* whisper.xcframework */; };
 		E1F350122F1D10D600790A2C /* whisper.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E1A0BD052EB1E7B800266859 /* whisper.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		E1F511012FA3B47000F00001 /* SelectedTextKit in Frameworks */ = {isa = PBXBuildFile; productRef = E1F511032FA3B47000F00001 /* SelectedTextKit */; };
+		E1FC0A1030B0000000000001 /* FormatterCore in Frameworks */ = {isa = PBXBuildFile; productRef = E1FC0A1030A0000000000001 /* FormatterCore */; };
+		E1FC0A1030B0000000000002 /* FormatterModels in Frameworks */ = {isa = PBXBuildFile; productRef = E1FC0A1030A0000000000002 /* FormatterModels */; };
+		E1FC0A1030B0000000000003 /* FormatterOllama in Frameworks */ = {isa = PBXBuildFile; productRef = E1FC0A1030A0000000000003 /* FormatterOllama */; };
+		E1FC0A1030B0000000000011 /* FormatterCore in Frameworks */ = {isa = PBXBuildFile; productRef = E1FC0A1030A0000000000011 /* FormatterCore */; };
+		E1FC0A1030B0000000000012 /* FormatterModels in Frameworks */ = {isa = PBXBuildFile; productRef = E1FC0A1030A0000000000012 /* FormatterModels */; };
+		E1FC0A1030B0000000000013 /* FormatterOllama in Frameworks */ = {isa = PBXBuildFile; productRef = E1FC0A1030A0000000000013 /* FormatterOllama */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -103,6 +109,9 @@
 				E1701E75305E77220098872B /* LLMkit in Frameworks */,
 				E13461ED2FD1CCCD005B6A81 /* MarkdownUI in Frameworks */,
 				E1F511012FA3B47000F00001 /* SelectedTextKit in Frameworks */,
+				E1FC0A1030B0000000000001 /* FormatterCore in Frameworks */,
+				E1FC0A1030B0000000000002 /* FormatterModels in Frameworks */,
+				E1FC0A1030B0000000000003 /* FormatterOllama in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -110,6 +119,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E1FC0A1030B0000000000011 /* FormatterCore in Frameworks */,
+				E1FC0A1030B0000000000012 /* FormatterModels in Frameworks */,
+				E1FC0A1030B0000000000013 /* FormatterOllama in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -193,6 +205,9 @@
 				E13461EC2FD1CCCD005B6A81 /* MarkdownUI */,
 				E1AF669A3031B7AA006D50FA /* FluidAudio */,
 				E1701E74305E77220098872B /* LLMkit */,
+				E1FC0A1030A0000000000001 /* FormatterCore */,
+				E1FC0A1030A0000000000002 /* FormatterModels */,
+				E1FC0A1030A0000000000003 /* FormatterOllama */,
 			);
 			productName = Pnoe;
 			productReference = E11473B02CBE0F0A00318EE4 /* Pnoe Dev.app */;
@@ -216,6 +231,9 @@
 			);
 			name = PnoeTests;
 			packageProductDependencies = (
+				E1FC0A1030A0000000000011 /* FormatterCore */,
+				E1FC0A1030A0000000000012 /* FormatterModels */,
+				E1FC0A1030A0000000000013 /* FormatterOllama */,
 			);
 			productName = PnoeTests;
 			productReference = E11473C32CBE0F0B00318EE4 /* PnoeTests.xctest */;
@@ -287,6 +305,7 @@
 				E1C0A0002FA8000000000001 /* XCRemoteSwiftPackageReference "Transcribe-cpp-swift" */,
 				E1AF66993031B7AA006D50FA /* XCRemoteSwiftPackageReference "FluidAudio" */,
 				E1701E73305E77220098872B /* XCRemoteSwiftPackageReference "LLMkit" */,
+				E1FC0A1030C0000000000001 /* XCLocalSwiftPackageReference "Packages/PnoeFormatter" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E11473B12CBE0F0A00318EE4 /* Products */;
@@ -660,6 +679,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		E1FC0A1030C0000000000001 /* XCLocalSwiftPackageReference "Packages/PnoeFormatter" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/PnoeFormatter;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		E1342C1D2EB4844800CED8A2 /* XCRemoteSwiftPackageReference "swift-atomics" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -754,6 +780,36 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E1F511022FA3B47000F00001 /* XCRemoteSwiftPackageReference "SelectedTextKit" */;
 			productName = SelectedTextKit;
+		};
+		E1FC0A1030A0000000000001 /* FormatterCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1FC0A1030C0000000000001 /* XCLocalSwiftPackageReference "Packages/PnoeFormatter" */;
+			productName = FormatterCore;
+		};
+		E1FC0A1030A0000000000002 /* FormatterModels */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1FC0A1030C0000000000001 /* XCLocalSwiftPackageReference "Packages/PnoeFormatter" */;
+			productName = FormatterModels;
+		};
+		E1FC0A1030A0000000000003 /* FormatterOllama */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1FC0A1030C0000000000001 /* XCLocalSwiftPackageReference "Packages/PnoeFormatter" */;
+			productName = FormatterOllama;
+		};
+		E1FC0A1030A0000000000011 /* FormatterCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1FC0A1030C0000000000001 /* XCLocalSwiftPackageReference "Packages/PnoeFormatter" */;
+			productName = FormatterCore;
+		};
+		E1FC0A1030A0000000000012 /* FormatterModels */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1FC0A1030C0000000000001 /* XCLocalSwiftPackageReference "Packages/PnoeFormatter" */;
+			productName = FormatterModels;
+		};
+		E1FC0A1030A0000000000013 /* FormatterOllama */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1FC0A1030C0000000000001 /* XCLocalSwiftPackageReference "Packages/PnoeFormatter" */;
+			productName = FormatterOllama;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -29,7 +29,7 @@ final class WorkflowPickerPreviewTests: XCTestCase {
             id: UUID(), title: "Assistant", icon: "bubble.left.and.bubble.right.fill",
             summary: "Ask a question and keep the answer in the recorder.",
             detail: "Use this for answers, summaries, and follow-ups."),
-    ]
+    ] + LocalWorkflowTemplate.allCases.map(\.pickerOption)
 
     private var outputDirectory: URL {
         if let path = ProcessInfo.processInfo.environment["PNOE_WORKFLOW_PNG_DIR"], !path.isEmpty {
@@ -77,8 +77,8 @@ final class WorkflowPickerPreviewTests: XCTestCase {
 
     func testRenderTemplatePicker() throws {
         let picker = WorkflowTemplatePickerView(options: Self.options, onSelect: { _ in }, onDismiss: {})
-        try render(picker, size: CGSize(width: 400, height: 260), name: "template-picker")
-        try render(picker, size: CGSize(width: 400, height: 260), name: "template-picker-dark", dark: true)
+        try render(picker, size: CGSize(width: 400, height: 430), name: "template-picker")
+        try render(picker, size: CGSize(width: 400, height: 430), name: "template-picker-dark", dark: true)
     }
 
     func testRenderTemplateInfoPopover() throws {

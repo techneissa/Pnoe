@@ -58,6 +58,8 @@ struct ModeConfig: Codable, Identifiable, Equatable {
     var useScreenCapture: Bool
     var selectedAIProvider: String?
     var selectedAIModel: String?
+    /// The language the Translation prompt writes, as an English name such as "French". Nil means English.
+    var translationTargetLanguage: String?
     var outputMode: ModeOutputMode = .paste
     var autoSendKey: FinishAndSendKey = .none
     var customCommand: ModeCustomCommand?
@@ -68,7 +70,7 @@ struct ModeConfig: Codable, Identifiable, Equatable {
         case id, name, icon, appConfigs, urlConfigs, triggerGroups, triggerWords, isAIEnhancementEnabled,
             selectedPrompt, isRealtimeTranscriptionEnabled, selectedLanguage, isTextFormattingEnabled,
             useClipboardContext, useSelectedTextContext, useScreenCapture, selectedAIProvider, selectedAIModel,
-            outputMode, autoSendKey, isAutoSendEnabled, customCommand, isEnabled, isDefault
+            translationTargetLanguage, outputMode, autoSendKey, isAutoSendEnabled, customCommand, isEnabled, isDefault
         case legacyEmoji = "emoji"
         case selectedWhisperModel
         case selectedTranscriptionModelName
@@ -161,6 +163,7 @@ struct ModeConfig: Codable, Identifiable, Equatable {
             ?? UserDefaults.standard.bool(forKey: "useScreenCaptureContext")
         selectedAIProvider = try container.decodeIfPresent(String.self, forKey: .selectedAIProvider)
         selectedAIModel = try container.decodeIfPresent(String.self, forKey: .selectedAIModel)
+        translationTargetLanguage = try container.decodeIfPresent(String.self, forKey: .translationTargetLanguage)
         outputMode = try container.decodeIfPresent(ModeOutputMode.self, forKey: .outputMode) ?? .paste
         customCommand = try container.decodeIfPresent(ModeCustomCommand.self, forKey: .customCommand)
         // Keep compatibility with saved modes from before Auto Send became global.
@@ -204,6 +207,7 @@ struct ModeConfig: Codable, Identifiable, Equatable {
         try container.encode(useScreenCapture, forKey: .useScreenCapture)
         try container.encodeIfPresent(selectedAIProvider, forKey: .selectedAIProvider)
         try container.encodeIfPresent(selectedAIModel, forKey: .selectedAIModel)
+        try container.encodeIfPresent(translationTargetLanguage, forKey: .translationTargetLanguage)
         try container.encode(outputMode, forKey: .outputMode)
         try container.encode(autoSendKey, forKey: .autoSendKey)
         try container.encodeIfPresent(customCommand, forKey: .customCommand)

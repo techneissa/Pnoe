@@ -5,6 +5,8 @@ public enum FormatterRuntimeID: String, Sendable, Codable {
     case mlx
     /// An Ollama server reached over HTTP.
     case ollama
+    /// Any chat provider the host app already talks to (cloud API, custom endpoint, local CLI).
+    case chatCompletion
 }
 
 public struct ChatMessage: Sendable, Equatable, Codable {
