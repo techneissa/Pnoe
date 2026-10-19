@@ -46,7 +46,7 @@ final class SystemInfoService {
             Recorder Style: \(UserDefaults.standard.string(forKey: "RecorderType") ?? "mini")
 
             RECORDING FEEDBACK:
-            Sound Feedback: \(CustomSoundManager.shared.hasAnyRecordingSoundEnabled)
+            Sound Feedback: \(SoundSettings.shared.hasAnySoundEnabled)
             Pause Media While Recording: \(UserDefaults.standard.bool(forKey: "isPauseMediaEnabled"))
             Mute Audio While Recording: \(UserDefaults.standard.bool(forKey: "isSystemMuteEnabled"))
             Audio Resumption Delay: \(UserDefaults.standard.double(forKey: "audioResumptionDelay"))s

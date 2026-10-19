@@ -56,7 +56,7 @@ final class TranscriptionDelivery {
     }
 
     private func deliverFollowUp(_ item: Request, actions: Actions) async {
-        SoundManager.shared.playStopSound()
+        SoundManager.shared.play(.stop)
 
         guard let text = item.text?.trimmingCharacters(in: .whitespacesAndNewlines),
             !text.isEmpty
@@ -69,7 +69,7 @@ final class TranscriptionDelivery {
     }
 
     private func deliverResponse(_ item: Request, actions: Actions) async {
-        SoundManager.shared.playStopSound()
+        SoundManager.shared.play(.stop)
 
         if let responseError = item.responseError {
             await actions.failResponse("Enhancement failed: \(responseError)")
@@ -85,7 +85,7 @@ final class TranscriptionDelivery {
     private func deliverCustomCommand(_ item: Request, actions: Actions) async {
         guard let text = item.text else {
             notifyCustomCommandFailure(CustomCommandDeliveryError.noTextToDeliver)
-            SoundManager.shared.playStopSound()
+            SoundManager.shared.play(.stop)
             await actions.dismiss()
             return
         }
@@ -94,13 +94,13 @@ final class TranscriptionDelivery {
             let command = customCommand.trimmedCommand
         else {
             notifyCustomCommandFailure(CustomCommandDeliveryError.commandNotConfigured)
-            SoundManager.shared.playStopSound()
+            SoundManager.shared.play(.stop)
             await actions.dismiss()
             return
         }
 
         let finishAndSendKey: FinishAndSendKey = item.sendAfterPaste ? FinishAndSendSettings.selectedKey : .none
-        SoundManager.shared.playStopSound()
+        SoundManager.shared.play(.stop)
         await actions.dismiss()
 
         Task {
@@ -167,7 +167,7 @@ final class TranscriptionDelivery {
         let appendSpace = UserDefaults.standard.bool(forKey: "AppendTrailingSpace")
         let pastedText = text + (appendSpace ? " " : "")
         actions.setState(.idle)
-        SoundManager.shared.playStopSound()
+        SoundManager.shared.play(.stop)
         await actions.dismiss()
 
         let pasteTask = CursorPaster.startPasteAtCursor(pastedText)

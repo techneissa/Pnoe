@@ -46,9 +46,8 @@ final class WhisperModelWarmupCoordinator: ObservableObject {
     private func warmupSampleURL() -> URL? {
         let bundle = Bundle.main
         let candidates: [URL?] = [
-            bundle.url(forResource: "sound7", withExtension: "wav", subdirectory: "Resources/Sounds"),
-            bundle.url(forResource: "sound7", withExtension: "wav", subdirectory: "Sounds"),
-            bundle.url(forResource: "sound7", withExtension: "wav"),
+            bundle.url(forResource: "prewarm", withExtension: "wav", subdirectory: "Resources"),
+            bundle.url(forResource: "prewarm", withExtension: "wav"),
         ]
 
         for candidate in candidates {

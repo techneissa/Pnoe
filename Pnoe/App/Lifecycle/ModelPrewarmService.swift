@@ -15,7 +15,7 @@ final class ModelPrewarmService: ObservableObject {
         modelsDirectory: whisperModelManager.modelsDirectory,
         modelContext: modelContext
     )
-    private let prewarmAudioURL = Bundle.main.url(forResource: "sound7", withExtension: "wav")
+    private let prewarmAudioURL = Bundle.main.url(forResource: "prewarm", withExtension: "wav")
     private let prewarmEnabledKey = "PrewarmModelOnWake"
     private var lifecycleCancellable: AnyCancellable?
 
@@ -83,7 +83,7 @@ final class ModelPrewarmService: ObservableObject {
                 )
             } else {
                 guard let audioURL = prewarmAudioURL else {
-                    logger.error("❌ Prewarm audio file (sound7.wav) not found")
+                    logger.error("❌ Prewarm audio file (prewarm.wav) not found")
                     return
                 }
                 let _ = try await serviceRegistry.transcribe(
