@@ -139,15 +139,13 @@ struct PromptEditorView: View {
 
     private var systemTemplateToggle: some View {
         HStack(spacing: 12) {
-            Toggle(isOn: $useSystemInstructions) {
-                HStack(spacing: 4) {
-                    Text("Use System Template")
-                    InfoTip(
-                        "If enabled, your instructions are combined with a general-purpose template to improve transcription quality.\n\nDisable for full control over the AI's system prompt (for advanced users)."
-                    )
-                }
+            HStack(spacing: 4) {
+                Toggle("Use System Template", isOn: $useSystemInstructions)
+                    .toggleStyle(.switch)
+                InfoTip(
+                    "If enabled, your instructions are combined with a general-purpose template to improve transcription quality.\n\nDisable for full control over the AI's system prompt (for advanced users)."
+                )
             }
-            .toggleStyle(.switch)
 
             Spacer(minLength: 12)
         }

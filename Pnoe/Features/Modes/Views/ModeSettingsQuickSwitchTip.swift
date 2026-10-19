@@ -6,12 +6,12 @@ struct ModeSettingsQuickSwitchTip: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Mode shortcuts")
+                Text("Workflow shortcuts")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(AppTheme.Text.primary)
                     .lineLimit(1)
 
-                Text("During recording, press Option + 1-9 to switch modes quickly.")
+                Text("During recording, press Option + 1-9 to switch workflows quickly.")
                     .font(.system(size: 12))
                     .foregroundColor(AppTheme.Text.secondary)
                     .fixedSize(horizontal: false, vertical: true)

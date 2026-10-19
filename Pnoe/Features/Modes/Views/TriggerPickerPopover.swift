@@ -222,7 +222,7 @@ struct TriggerPickerPopover: View {
             systemName: "globe",
             isSelected: isWebsiteAlreadyAdded,
             claimedBy: claimedBy,
-            unavailableMessage: "Each website can only belong to one mode",
+            unavailableMessage: "Each website can only belong to one workflow",
             addTitle: "Add website",
             removeTitle: "Remove website",
             detail: websiteCandidate,
@@ -383,10 +383,10 @@ struct TriggerPickerPopover: View {
             systemName: "mic.fill",
             isSelected: isTriggerWordAlreadyAdded,
             claimedBy: claimedBy,
-            unavailableMessage: "Each trigger word can only belong to one mode",
+            unavailableMessage: "Each trigger word can only belong to one workflow",
             addTitle: "Add trigger word",
             removeTitle: "Remove trigger word",
-            detail: "Say \"\(query)\" to activate this mode",
+            detail: "Say \"\(query)\" to activate this workflow",
             action: toggleTriggerWordCandidate
         )
     }

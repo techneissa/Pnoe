@@ -85,7 +85,7 @@ struct OnboardingAPIScreen: View {
                 onConfirmSkip()
             }
         } message: {
-            Text("Enhancement modes and AI actions will stay off until you add a key. You can set this up anytime from Settings.")
+            Text("Enhancement workflows and AI actions will stay off until you add a key. You can set this up anytime from Settings.")
         }
     }
 }

@@ -25,7 +25,7 @@ enum ModeValidationError: Error, Identifiable {
     var localizedDescription: String {
         switch self {
         case .emptyName:
-            return String(localized: "Mode name cannot be empty.")
+            return String(localized: "Workflow name cannot be empty.")
         case .missingTranscriptionModel:
             return String(localized: "A transcription model must be selected.")
         case .missingEnhancementModel:
@@ -34,18 +34,18 @@ enum ModeValidationError: Error, Identifiable {
             return String(localized: "Custom command cannot be empty.")
         case .duplicateName(let name):
             return String(
-                format: String(localized: "A mode with the name '%@' already exists."),
+                format: String(localized: "A workflow with the name '%@' already exists."),
                 name
             )
         case .duplicateAppTrigger(let appName, let modeName):
             return String(
-                format: String(localized: "The app '%@' is already configured in the '%@' mode."),
+                format: String(localized: "The app '%@' is already configured in the '%@' workflow."),
                 appName,
                 modeName
             )
         case .duplicateWebsiteTrigger(let website, let modeName):
             return String(
-                format: String(localized: "The website '%@' is already configured in the '%@' mode."),
+                format: String(localized: "The website '%@' is already configured in the '%@' workflow."),
                 website,
                 modeName
             )
@@ -133,7 +133,7 @@ extension View {
         isPresented: Binding<Bool>
     ) -> some View {
         self.alert(
-            "Cannot Save Mode",
+            "Cannot Save Workflow",
             isPresented: isPresented,
             actions: {
                 Button("OK", role: .cancel) {}

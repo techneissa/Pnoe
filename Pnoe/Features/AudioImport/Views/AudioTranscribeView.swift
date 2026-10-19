@@ -215,7 +215,7 @@ struct AudioTranscribeView: View {
                 .buttonStyle(.plain)
                 .disabled(selectedMode == nil)
                 .opacity(selectedMode == nil ? 0.5 : 1.0)
-                .help(selectedMode == nil ? "Select an enabled mode to start" : "Start transcription")
+                .help(selectedMode == nil ? "Select an enabled workflow to start" : "Start transcription")
             }
 
             Button {
@@ -248,7 +248,7 @@ struct AudioTranscribeView: View {
 
     private var modePicker: some View {
         HStack(spacing: 6) {
-            Text("Mode")
+            Text("Workflow")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(.secondary)
                 .lineLimit(1)

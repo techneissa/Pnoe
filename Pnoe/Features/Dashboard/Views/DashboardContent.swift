@@ -916,12 +916,12 @@ private struct DashboardNoModesReminder: View {
             .frame(width: 34, height: 34)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("Set Up a Mode")
+                Text("Set Up a Workflow")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
-                Text("Pnoe needs at least one mode to record. Create one to start dictating.")
+                Text("Pnoe needs at least one workflow to record. Create one to start dictating.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -929,9 +929,9 @@ private struct DashboardNoModesReminder: View {
 
             Spacer(minLength: 12)
 
-            Button("Manage Modes", action: onOpenModes)
+            Button("Manage Workflows", action: onOpenModes)
                 .controlSize(.small)
-                .help("Open Modes settings")
+                .help("Open Workflows settings")
         }
         .focusEffectDisabled()
         .padding(16)

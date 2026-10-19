@@ -27,7 +27,7 @@ struct ModeConfigDraft {
 
     private var sourceConfig: ModeConfig?
 
-    init(mode: ConfigurationMode, modeManager: ModeManager) {
+    init(mode: ConfigurationMode, modeManager: ModeManager, template: StarterModeTemplate? = nil) {
         switch mode {
         case .add:
             let inheritedConfig = modeManager.currentEffectiveConfiguration
@@ -84,6 +84,25 @@ struct ModeConfigDraft {
             isTranscriptionFormattingExpanded = false
             sourceConfig = latestConfig
         }
+
+        if case .add = mode, let template {
+            apply(template: template, existingNames: Set(modeManager.configurations.map(\.name)))
+        }
+    }
+
+    /// Starts a new workflow from a starter template. Triggers and shortcuts stay empty so the
+    /// copy never collides with the workflow the template was installed as.
+    private mutating func apply(template: StarterModeTemplate, existingNames: Set<String>) {
+        name = WorkflowNaming.uniqueName(template.name, existing: existingNames)
+        icon = template.icon
+        isAIEnhancementEnabled = template.usesAIEnhancement
+        if let promptId = template.promptId {
+            selectedPromptId = promptId
+        }
+        useSelectedTextContext = template.useSelectedTextContext
+        useScreenCapture = template.useScreenCapture
+        useClipboardContext = template.kind == .email
+        outputMode = template.outputMode
     }
 
     var canSave: Bool {
