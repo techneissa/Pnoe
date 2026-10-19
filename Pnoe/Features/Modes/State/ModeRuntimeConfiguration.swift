@@ -16,7 +16,8 @@ struct TranscriptionRuntimeConfiguration {
     var requestContext: TranscriptionRequestContext {
         TranscriptionRequestContext(
             language: language,
-            prompt: model.provider == .whisper ? WhisperPrompt.resolvedPrompt(for: language) : nil
+            prompt: model.provider == .whisper || model.provider == .whisperKit
+                ? WhisperPrompt.resolvedPrompt(for: language) : nil
         )
     }
 }
@@ -103,12 +104,19 @@ enum ModeRuntimeResolver {
         mode: ModeConfig? = nil,
         transcriptionModelManager: TranscriptionModelManager
     ) -> TranscriptionRuntimeConfiguration? {
-        transcriptionConfiguration(
-            from: transcriptionModelResolution(
-                mode: mode,
-                transcriptionModelManager: transcriptionModelManager
-            )
+        var resolution = transcriptionModelResolution(
+            mode: mode,
+            transcriptionModelManager: transcriptionModelManager
         )
+        // A WhisperKit model may give way to the fallback model, per the "Use WhisperKit" setting.
+        if case .available(let mode, let model) = resolution {
+            resolution = .available(
+                mode: mode,
+                model: WhisperKitEngineSelection.effectiveModel(
+                    for: model, transcriptionModelManager: transcriptionModelManager)
+            )
+        }
+        return transcriptionConfiguration(from: resolution)
     }
 
     static func transcriptionConfiguration(

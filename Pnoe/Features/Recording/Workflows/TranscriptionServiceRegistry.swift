@@ -18,6 +18,7 @@ class TranscriptionServiceRegistry {
     private(set) lazy var nativeAppleTranscriptionService = NativeAppleTranscriptionService()
     private(set) lazy var fluidAudioTranscriptionService = FluidAudioTranscriptionService()
     private var cachedTranscribeCppTranscriptionService: TranscribeCppTranscriptionService?
+    private(set) lazy var whisperKitTranscriptionService = WhisperKitTranscriptionService()
 
     var transcribeCppTranscriptionService: TranscribeCppTranscriptionService {
         if let cachedTranscribeCppTranscriptionService {
@@ -42,6 +43,8 @@ class TranscriptionServiceRegistry {
             return fluidAudioTranscriptionService
         case .transcribeCpp:
             return transcribeCppTranscriptionService
+        case .whisperKit:
+            return whisperKitTranscriptionService
         case .nativeApple:
             return nativeAppleTranscriptionService
         default:
@@ -86,5 +89,6 @@ class TranscriptionServiceRegistry {
     func cleanup() async {
         await fluidAudioTranscriptionService.cleanup()
         cachedTranscribeCppTranscriptionService?.cleanup()
+        whisperKitTranscriptionService.cleanup()
     }
 }

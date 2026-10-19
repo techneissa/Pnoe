@@ -17,6 +17,12 @@ Each feature taken from another project gets one line in this format:
 - [TypeWhisper](https://github.com/TypeWhisper/typewhisper-mac), GPL-3.0: sanitizing model wrappers before paste, the lesson to apply dictionary fixes before the model, and the idea of a live transcript preview in the recording indicator with theme, placement and visibility choices (Pnoe's indicator design and code are its own).
 - Ideas only, no code: [VoiceTypr](https://github.com/ideaplexa/voicetypr) (output guard classes, skip rule for short takes), [Whispering](https://github.com/EpicenterHQ/epicenter) (temperature 0), [Murmure](https://github.com/Kieirra/murmure) (output cap tied to input length).
 
+## Engines and models
+
+- [WhisperKit](https://github.com/argmaxinc/WhisperKit) by Argmax, MIT: the Swift package Pnoe links to run Whisper on Core ML and the Neural Engine (pinned at 1.1.1). Pnoe does not bundle it with models; it downloads them on request.
+- [argmaxinc/whisperkit-coreml](https://huggingface.co/argmaxinc/whisperkit-coreml), MIT (as on the model card): the Core ML builds of OpenAI's Whisper (large-v3 turbo, small, base) that WhisperKit runs. Whisper is by OpenAI, MIT. Pnoe downloads them from Hugging Face at a pinned revision.
+- [openai/whisper-large-v3](https://huggingface.co/openai/whisper-large-v3), [whisper-small](https://huggingface.co/openai/whisper-small) and [whisper-base](https://huggingface.co/openai/whisper-base), Apache-2.0 (as on the model cards): only the tokenizer files (`config.json`, `tokenizer_config.json`, `tokenizer.json`), which WhisperKit needs next to each build.
+
 ## Not part of Pnoe
 
 - VoiceInk Refine: VoiceInk's AI cleanup model (`beingpax/VoiceInk-Refine-V1`). Its weights are licensed for use with VoiceInk only, so Pnoe does not download, run or ship them. Pnoe removed the option that VoiceInk had.

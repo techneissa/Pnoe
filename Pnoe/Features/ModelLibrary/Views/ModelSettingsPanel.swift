@@ -76,6 +76,8 @@ private struct TranscriptionModelSettingsView: View {
 
     var body: some View {
         Form {
+            WhisperKitSettingsContainer()
+
             WhisperPromptSettingsSection(whisperPrompt: whisperModelManager.whisperPrompt)
 
             FillerWordsSettingsSection()
@@ -85,6 +87,35 @@ private struct TranscriptionModelSettingsView: View {
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct WhisperKitSettingsContainer: View {
+    @EnvironmentObject private var transcriptionModelManager: TranscriptionModelManager
+    @AppStorage(WhisperKitUsage.defaultsKey) private var usageRawValue = WhisperKitUsage.default.rawValue
+    @AppStorage(WhisperKitUsage.fallbackModelDefaultsKey) private var fallbackModel = ""
+    @State private var power = PowerSourceReader.current()
+
+    private var usage: Binding<WhisperKitUsage> {
+        Binding(
+            get: { WhisperKitUsage(rawValue: usageRawValue) ?? .default },
+            set: { usageRawValue = $0.rawValue }
+        )
+    }
+
+    var body: some View {
+        WhisperKitSettingsSection(
+            usage: usage,
+            fallbackModel: $fallbackModel,
+            fallbackOptions: WhisperKitEngineSelection.fallbackCandidates(in: transcriptionModelManager)
+                .map { WhisperKitFallbackOption(id: $0.selectionKey, title: $0.displayName) },
+            power: power
+        ) {
+            InfoTip(
+                "Applies when your transcription model is a WhisperKit model. On uses it always. Off uses the model below instead. Automatic uses WhisperKit on mains power and the model below on battery."
+            )
+        }
+        .onAppear { power = PowerSourceReader.current() }
     }
 }
 

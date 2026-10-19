@@ -207,6 +207,6 @@ enum TranscriptionModelRegistry {
             ),
         ]
 
-        return nonCloudModels
+        return nonCloudModels + WhisperKitCatalog.models.map { WhisperKitModel(spec: $0) }
     }()
 }
