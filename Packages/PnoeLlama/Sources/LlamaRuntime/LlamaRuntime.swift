@@ -42,9 +42,20 @@ public final class LlamaRuntime: FormatterRuntime, @unchecked Sendable {
         guard let modelURL = spec.modelURL else { throw FormatterRuntimeError.failed("the model has no file") }
         let configuration = self.configuration
         try await onQueue { [self] in
-            if let engine, engine.matches(modelURL: modelURL, contextLength: spec.contextLength, prefix: prefix) { return }
+            if let loaded = engine, loaded.matches(modelURL: modelURL, contextLength: spec.contextLength) {
+                if loaded.hasPrefix(prefix) { return }
+                do {
+                    try loaded.setPrefix(prefix)
+                } catch {
+                    engine = nil
+                    throw error
+                }
+                return
+            }
             engine = nil
-            engine = try Engine(modelURL: modelURL, contextLength: spec.contextLength, prefix: prefix, configuration: configuration)
+            let loaded = try Engine(modelURL: modelURL, contextLength: spec.contextLength, configuration: configuration)
+            try loaded.setPrefix(prefix)
+            engine = loaded
         }
     }
 

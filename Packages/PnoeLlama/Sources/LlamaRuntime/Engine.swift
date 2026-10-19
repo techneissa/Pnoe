@@ -14,7 +14,7 @@ final class Engine {
 
     private let modelURL: URL
     private let requestedContextLength: Int
-    private let prefixMessages: PromptPrefix
+    private var prefixMessages = PromptPrefix(messages: [])
 
     /// Tokens of the cached prefix, and how the cache gets back to them between requests.
     private var prefixTokens: [llama_token] = []
@@ -22,7 +22,7 @@ final class Engine {
     private var prefixState: [UInt8]?
     private let stopStrings = ["<turn|>", "<end_of_turn>"]
 
-    init(modelURL: URL, contextLength: Int, prefix: PromptPrefix, configuration: LlamaRuntime.Configuration) throws {
+    init(modelURL: URL, contextLength: Int, configuration: LlamaRuntime.Configuration) throws {
         guard FileManager.default.isReadableFile(atPath: modelURL.path) else {
             throw FormatterRuntimeError.notReady
         }
@@ -70,12 +70,8 @@ final class Engine {
         self.batchSize = Int(configuration.batchSize)
         self.modelURL = modelURL
         self.requestedContextLength = contextLength
-        self.prefixMessages = prefix
         let bosToken = llama_vocab_bos(vocab)
         self.bos = bosToken >= 0 ? (llama_vocab_get_text(vocab, bosToken).map { String(cString: $0) } ?? "<bos>") : "<bos>"
-
-        // Every property is set, so a throw here still runs `deinit`, which frees the context and the model.
-        try cachePrefix(prefix)
     }
 
     deinit {
@@ -83,8 +79,22 @@ final class Engine {
         llama_model_free(model)
     }
 
-    func matches(modelURL: URL, contextLength: Int, prefix: PromptPrefix) -> Bool {
-        self.modelURL == modelURL && requestedContextLength == contextLength && prefixMessages == prefix
+    func matches(modelURL: URL, contextLength: Int) -> Bool {
+        self.modelURL == modelURL && requestedContextLength == contextLength
+    }
+
+    func hasPrefix(_ prefix: PromptPrefix) -> Bool {
+        prefixMessages == prefix && !prefixTokens.isEmpty
+    }
+
+    /// Decodes a new fixed prompt prefix into the loaded context. The model stays loaded, so a workflow with
+    /// another system prompt does not pay for a reload.
+    func setPrefix(_ prefix: PromptPrefix) throws {
+        prefixMessages = prefix
+        prefixTokens = []
+        prefixState = nil
+        llama_memory_clear(llama_get_memory(context), true)
+        try cachePrefix(prefix)
     }
 
     // MARK: Prefix cache
