@@ -78,7 +78,6 @@ struct WorkflowTemplatePickerView: View {
             .help("Close")
             .accessibilityLabel("Close")
         }
-        .focusEffectDisabled()
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
         .overlay(Divider().opacity(0.5), alignment: .bottom)
@@ -119,7 +118,7 @@ private struct WorkflowTemplateCard: View {
             InfoTip(
                 LocalizedStringKey(summary),
                 detail: detail.map { LocalizedStringKey($0) },
-                accessibilityLabel: "About \(title)"
+                accessibilityLabel: "About \(String(localized: String.LocalizationValue(title)))"
             )
             .foregroundStyle(.secondary)
         }

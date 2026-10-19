@@ -193,15 +193,15 @@ struct SettingsView: View {
             }
 
             Section("Pasting") {
-                Picker(selection: $finishAndSendKey) {
-                    ForEach(FinishAndSendKey.allCases, id: \.self) { key in
-                        Text(key.displayName).tag(key.rawValue)
-                    }
-                } label: {
-                    HStack(spacing: 4) {
+                HStack(spacing: 4) {
+                    Picker(selection: $finishAndSendKey) {
+                        ForEach(FinishAndSendKey.allCases, id: \.self) { key in
+                            Text(key.displayName).tag(key.rawValue)
+                        }
+                    } label: {
                         Text("Auto Send")
-                        InfoTip("Press Return while recording to stop and deliver the result. Pnoe will then paste the result and press the selected key to send it. Choose None to disable this feature.")
                     }
+                    InfoTip("Press Return while recording to stop and deliver the result. Pnoe will then paste the result and press the selected key to send it. Choose None to disable this feature.")
                 }
 
                 ExpandableSettingsRow(
@@ -223,25 +223,25 @@ struct SettingsView: View {
                 }
                 .disabled(pasteMethodRawValue == PasteMethod.directTyping.rawValue)
 
-                Picker(selection: $pasteMethodRawValue) {
-                    ForEach(PasteMethod.allCases) { method in
-                        Text(method.displayName).tag(method.rawValue)
-                    }
-                } label: {
-                    HStack(spacing: 4) {
+                HStack(spacing: 4) {
+                    Picker(selection: $pasteMethodRawValue) {
+                        ForEach(PasteMethod.allCases) { method in
+                            Text(method.displayName).tag(method.rawValue)
+                        }
+                    } label: {
                         Text("Paste Method")
-                        InfoTip(
-                            "Default uses Cmd+V. AppleScript offers an alternative way to send Cmd+V. Direct Typing enters text without using the clipboard. Some editors may not support it."
-                        )
                     }
-                }
-                .pickerStyle(.menu)
-                .onChange(of: pasteMethodRawValue) { _, newValue in
-                    guard let method = PasteMethod(rawValue: newValue) else {
-                        pasteMethodRawValue = PasteMethod.standard.rawValue
-                        return
-                    }
-                    PasteMethod.setCurrent(method)
+                        .pickerStyle(.menu)
+                        .onChange(of: pasteMethodRawValue) { _, newValue in
+                            guard let method = PasteMethod(rawValue: newValue) else {
+                                pasteMethodRawValue = PasteMethod.standard.rawValue
+                                return
+                            }
+                            PasteMethod.setCurrent(method)
+                        }
+                    InfoTip(
+                        "Default uses Cmd+V. AppleScript offers an alternative way to send Cmd+V. Direct Typing enters text without using the clipboard. Some editors may not support it."
+                    )
                 }
             }
 
@@ -299,35 +299,35 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.menu)
 
-                Picker(selection: $recorderDisplay) {
-                    Text("Active Screen").tag(RecorderDisplaySelection.active.storedValue)
-                    Text("Main Screen").tag(RecorderDisplaySelection.main.storedValue)
-                    ForEach(recorderDisplayChoices, id: \.self) { name in
-                        Text(name).tag(RecorderDisplaySelection.named(name).storedValue)
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text("Recorder Display")
-                        InfoTip(
-                            "The active screen is the one with the focused window. A display that is not connected falls back to the active screen. The Notch style becomes Mini on a built-in display without a notch."
-                        )
-                    }
-                }
-                .pickerStyle(.menu)
-
-                if recorderUIManager.recorderPanelStyle.hasSideSlots {
-                    Picker(selection: recorderSlotBinding(.left)) {
-                        ForEach(RecorderSlotContent.allCases) { content in
-                            Text(content.displayName).tag(content)
+                HStack(spacing: 4) {
+                    Picker(selection: $recorderDisplay) {
+                        Text("Active Screen").tag(RecorderDisplaySelection.active.storedValue)
+                        Text("Main Screen").tag(RecorderDisplaySelection.main.storedValue)
+                        ForEach(recorderDisplayChoices, id: \.self) { name in
+                            Text(name).tag(RecorderDisplaySelection.named(name).storedValue)
                         }
                     } label: {
-                        HStack(spacing: 4) {
-                            Text("Left Side")
-                            InfoTip(
-                                "What the recorder shows on its left and right side. The level meter is in the centre unless you put it on a side; then the centre stays empty. The same item cannot be on both sides. On the Notch the centre is the camera housing, so the level meter sits right beside it. The Pill has no workflow button, so the workflow name is the only way to see the workflow there.")
-                        }
+                        Text("Recorder Display")
                     }
-                    .pickerStyle(.menu)
+                        .pickerStyle(.menu)
+                    InfoTip(
+                        "The active screen is the one with the focused window. A display that is not connected falls back to the active screen. The Notch style becomes Mini on a built-in display without a notch."
+                    )
+                }
+
+                if recorderUIManager.recorderPanelStyle.hasSideSlots {
+                    HStack(spacing: 4) {
+                        Picker(selection: recorderSlotBinding(.left)) {
+                            ForEach(RecorderSlotContent.allCases) { content in
+                                Text(content.displayName).tag(content)
+                            }
+                        } label: {
+                            Text("Left Side")
+                        }
+                            .pickerStyle(.menu)
+                        InfoTip(
+                            "What the recorder shows on its left and right side. The level meter is in the centre unless you put it on a side; then the centre stays empty. The same item cannot be on both sides. On the Notch the centre is the camera housing, so the level meter sits right beside it. The Pill has no workflow button, so the workflow name is the only way to see the workflow there.")
+                    }
 
                     Picker("Right Side", selection: recorderSlotBinding(.right)) {
                         ForEach(RecorderSlotContent.allCases) { content in
@@ -337,17 +337,17 @@ struct SettingsView: View {
                     .pickerStyle(.menu)
                 }
 
-                Picker(selection: $recorderMiniPlacement) {
-                    ForEach(MiniRecorderPlacement.allCases) { placement in
-                        Text(placement.displayName).tag(placement.rawValue)
-                    }
-                } label: {
-                    HStack(spacing: 4) {
+                HStack(spacing: 4) {
+                    Picker(selection: $recorderMiniPlacement) {
+                        ForEach(MiniRecorderPlacement.allCases) { placement in
+                            Text(placement.displayName).tag(placement.rawValue)
+                        }
+                    } label: {
                         Text("Position")
-                        InfoTip("Top or bottom of the screen for Mini, Pill and Dot. Notch always hangs from the top edge.")
                     }
+                        .pickerStyle(.menu)
+                    InfoTip("Top or bottom of the screen for Mini, Pill and Dot. Notch always hangs from the top edge.")
                 }
-                .pickerStyle(.menu)
 
                 Picker("Show Recorder", selection: $recorderVisibility) {
                     ForEach(RecorderVisibility.allCases) { visibility in
@@ -356,11 +356,9 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.menu)
 
-                Toggle(isOn: $showLiveTranscript) {
-                    HStack(spacing: 4) {
-                        Text("Live Text Display")
-                        InfoTip("Shows live text while recording with realtime models.")
-                    }
+                HStack(spacing: 4) {
+                    Toggle("Live Text Display", isOn: $showLiveTranscript)
+                    InfoTip("Shows live text while recording with realtime models.")
                 }
 
                 Picker("Live Text Size", selection: $liveTranscriptSize) {

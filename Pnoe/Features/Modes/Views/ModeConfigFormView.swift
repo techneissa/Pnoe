@@ -247,11 +247,9 @@ struct ModeConfigFormView: View {
                 title: "Transcription Formatting",
                 isExpanded: $draft.isTranscriptionFormattingExpanded
             ) {
-                Toggle(isOn: $draft.isTextFormattingEnabled) {
-                    HStack(spacing: 4) {
-                        Text("Paragraph breaks")
-                        InfoTip("Apply intelligent text formatting to break large block of text into paragraphs.")
-                    }
+                HStack(spacing: 4) {
+                    Toggle("Paragraph breaks", isOn: $draft.isTextFormattingEnabled)
+                    InfoTip("Apply intelligent text formatting to break large block of text into paragraphs.")
                 }
             }
         } header: {
@@ -560,25 +558,19 @@ struct ModeConfigFormView: View {
 
     private var contextToggles: some View {
         Group {
-            Toggle(isOn: $draft.useSelectedTextContext) {
-                HStack(spacing: 4) {
-                    Text("Selected Text")
-                    InfoTip("Use selected text from the active app as context for this workflow.")
-                }
+            HStack(spacing: 4) {
+                Toggle("Selected Text", isOn: $draft.useSelectedTextContext)
+                InfoTip("Use selected text from the active app as context for this workflow.")
             }
 
-            Toggle(isOn: $draft.useClipboardContext) {
-                HStack(spacing: 4) {
-                    Text("Clipboard")
-                    InfoTip("Use clipboard text as context for this workflow.")
-                }
+            HStack(spacing: 4) {
+                Toggle("Clipboard", isOn: $draft.useClipboardContext)
+                InfoTip("Use clipboard text as context for this workflow.")
             }
 
-            Toggle(isOn: $draft.useScreenCapture) {
-                HStack(spacing: 4) {
-                    Text("Screen")
-                    InfoTip("Use captured on-screen text as context for this workflow.")
-                }
+            HStack(spacing: 4) {
+                Toggle("Screen", isOn: $draft.useScreenCapture)
+                InfoTip("Use captured on-screen text as context for this workflow.")
             }
         }
     }
@@ -610,26 +602,24 @@ struct ModeConfigFormView: View {
             }
 
             if draft.outputMode != .respond {
-                Toggle(isOn: $draft.isDefault) {
-                    HStack(spacing: 6) {
-                        Text("Set as default")
-                        InfoTip("Default workflow is used when no specific app or website matches are found.")
-                    }
+                HStack(spacing: 4) {
+                    Toggle("Set as default", isOn: $draft.isDefault)
+                    InfoTip("Default workflow is used when no specific app or website matches are found.")
                 }
             }
 
             if draft.outputMode == .paste {
-                Picker(selection: $draft.autoSendKey) {
-                    ForEach(FinishAndSendKey.allCases, id: \.self) { key in
-                        Text(key.displayName).tag(key)
-                    }
-                } label: {
-                    HStack(spacing: 6) {
+                HStack(spacing: 4) {
+                    Picker(selection: $draft.autoSendKey) {
+                        ForEach(FinishAndSendKey.allCases, id: \.self) { key in
+                            Text(key.displayName).tag(key)
+                        }
+                    } label: {
                         Text("Auto Send")
-                        InfoTip(
-                            "Automatically presses a key combination after pasting text. Useful for chat applications or forms that use different send shortcuts."
-                        )
                     }
+                    InfoTip(
+                        "Automatically presses a key combination after pasting text. Useful for chat applications or forms that use different send shortcuts."
+                    )
                 }
             }
 
