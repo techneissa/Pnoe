@@ -189,6 +189,7 @@ struct AutoLearnModelSelectionView: View {
         guard retriesOnChange,
             isAutoLearnDictionaryEnabled,
             hasAutoLearnFailure,
+            AutoLearnSettings.usesAIReview,
             AutoLearnSettings.reviewSchedule != .manually
         else { return }
         Task {

@@ -113,7 +113,9 @@ enum CorrectionDiffEngine {
             results.append(
                 DetectedCorrectionCandidate(
                     originalText: originalSnippet,
-                    correctedText: correctedSnippet
+                    correctedText: correctedSnippet,
+                    heardText: pair.source,
+                    correctedPairText: pair.destination
                 ))
         }
 
