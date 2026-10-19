@@ -12,6 +12,10 @@ Each feature taken from another project gets one line in this format:
 
 None yet.
 
+## Not part of Pnoe
+
+- VoiceInk Refine: VoiceInk's AI cleanup model (`beingpax/VoiceInk-Refine-V1`). Its weights are licensed for use with VoiceInk only, so Pnoe does not download, run or ship them. Pnoe removed the option that VoiceInk had.
+
 ## Sounds
 
 - Pnoe's sound sets (Felt piano, Kalimba, Vibes, Harp, Bloop, Drop, Wood, Glass, Sine) are original Pnoe sounds, generated from code by the scripts in [`design/sounds`](design/sounds). They use no samples or recordings. VoiceInk's seven sound files were removed.

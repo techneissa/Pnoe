@@ -56,7 +56,6 @@ Pnoe's base is VoiceInk; [CREDITS.md](CREDITS.md) has the details and lists feat
 ### Dependencies
 - [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts): user-customizable keyboard shortcuts
 - [LaunchAtLogin](https://github.com/sindresorhus/LaunchAtLogin): launch at login
-- [MediaRemoteAdapter](https://github.com/ejbills/mediaremote-adapter): media playback control during recording
 - [Zip](https://github.com/marmelroy/Zip): file compression and decompression
 - [SelectedTextKit](https://github.com/tisfeng/SelectedTextKit): reading the selected text
 - [Swift Atomics](https://github.com/apple/swift-atomics): atomic operations
