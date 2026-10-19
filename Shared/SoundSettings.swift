@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import os
 
 /// The sound picked for each event, plus the audio file the user imported for it.
 @MainActor
@@ -11,12 +12,14 @@ final class SoundSettings: ObservableObject {
     @Published private(set) var choices: [SoundEvent: SoundChoice]
     @Published private var customFilenames: [SoundEvent: String]
 
+    private let logger = Logger(subsystem: "com.techneissa.pnoe", category: "SoundSettings")
     private let defaults: UserDefaults
     private let customSoundsDirectory: URL?
 
     init(
         defaults: UserDefaults = .standard,
-        customSoundsDirectory: URL? = SoundSettings.defaultCustomSoundsDirectory
+        customSoundsDirectory: URL? = SoundSettings.defaultCustomSoundsDirectory,
+        availableSystemSounds: () -> [String] = { SystemSounds.available() }
     ) {
         self.defaults = defaults
         self.customSoundsDirectory = customSoundsDirectory
@@ -37,6 +40,15 @@ final class SoundSettings: ObservableObject {
             } else {
                 loaded[event] = event.defaultChoice
             }
+        }
+
+        // A macOS sound that no longer exists would leave the picker blank, so the event goes back to its default.
+        let installedSystemSounds = Set(availableSystemSounds())
+        for event in SoundEvent.allCases {
+            guard case .system(let name) = loaded[event], !installedSystemSounds.contains(name) else { continue }
+            logger.error("System sound \(name, privacy: .public) is gone; \(event.rawValue, privacy: .public) reset to default")
+            loaded[event] = event.defaultChoice
+            defaults.set(event.defaultChoice.storageValue, forKey: event.choiceKey)
         }
         self.customFilenames = filenames
         self.choices = loaded
@@ -94,6 +106,9 @@ final class SoundSettings: ObservableObject {
 
         switch copySoundFile(from: url, standardName: event.customStandardName) {
         case .success(let filename):
+            if let previous = customFilenames[event], previous != filename {
+                try? customSoundsDirectory.map { try FileManager.default.removeItem(at: $0.appendingPathComponent(previous)) }
+            }
             customFilenames[event] = filename
             defaults.set(filename, forKey: event.customFilenameKey)
             select(.custom, for: event)
@@ -184,7 +199,7 @@ final class SoundSettings: ObservableObject {
 
         let duration: TimeInterval
         do {
-            duration = try await AVAsset(url: url).load(.duration).seconds
+            duration = try await AVURLAsset(url: url).load(.duration).seconds
         } catch {
             return .failure(.invalidAudioFile)
         }

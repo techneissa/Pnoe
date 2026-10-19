@@ -10,16 +10,23 @@ final class SoundTests: XCTestCase {
         func play(_ sound: PlayableSound) { played.append(sound) }
     }
 
-    private var suiteName = ""
-    private var defaults: UserDefaults!
-    private var tempDirectory: URL!
+    private let suiteName = "PnoeSoundTests-\(UUID().uuidString)"
+    private var defaults = UserDefaults.standard
+    private var soundsBundle = Bundle.main
 
-    override func setUp() {
-        super.setUp()
-        suiteName = "PnoeSoundTests-\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)
-        tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(suiteName, isDirectory: true)
-        try? FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+    private var tempDirectory: URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent(suiteName, isDirectory: true)
+    }
+
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+
+        // The sets as they sit in the source tree, the folder Xcode copies into the app bundle.
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        soundsBundle = try XCTUnwrap(Bundle(url: root.appendingPathComponent("Pnoe/Resources/Sounds", isDirectory: true)))
     }
 
     override func tearDown() {
@@ -28,15 +35,12 @@ final class SoundTests: XCTestCase {
         super.tearDown()
     }
 
-    private func makeSettings() -> SoundSettings {
-        SoundSettings(defaults: defaults, customSoundsDirectory: tempDirectory.appendingPathComponent("Custom"))
-    }
-
-    /// The sets as they sit in the source tree, the folder Xcode copies into the app bundle.
-    private var soundsBundle: Bundle {
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        return Bundle(url: root.appendingPathComponent("Pnoe/Resources/Sounds", isDirectory: true))!
+    private func makeSettings(systemSounds: [String] = ["Glass", "Ping", "Submarine", "Tink"]) -> SoundSettings {
+        SoundSettings(
+            defaults: defaults,
+            customSoundsDirectory: tempDirectory.appendingPathComponent("Custom"),
+            availableSystemSounds: { systemSounds }
+        )
     }
 
     // MARK: - Defaults
@@ -80,6 +84,17 @@ final class SoundTests: XCTestCase {
         let settings = makeSettings()
         settings.select(.custom, for: .stop)
         XCTAssertEqual(settings.choice(for: .stop), .pnoe(.feltPiano))
+    }
+
+    func testMissingSystemSoundResetsToDefaultOnLoad() {
+        defaults.set("system:Gone", forKey: SoundEvent.start.choiceKey)
+        defaults.set("system:Tink", forKey: SoundEvent.stop.choiceKey)
+
+        let settings = makeSettings()
+        XCTAssertEqual(settings.choice(for: .start), .pnoe(.kalimba))
+        XCTAssertEqual(defaults.string(forKey: SoundEvent.start.choiceKey), "pnoe:kalimba")
+        XCTAssertEqual(settings.choice(for: .stop), .system("Tink"))
+        XCTAssertEqual(makeSettings(systemSounds: []).choice(for: .stop), .pnoe(.feltPiano))
     }
 
     // MARK: - Migration
@@ -228,5 +243,25 @@ final class SoundTests: XCTestCase {
         XCTAssertEqual(settings.choice(for: .cancel), .custom)
         XCTAssertEqual(settings.customFilename(for: .cancel), "CustomCancelSound.wav")
         XCTAssertEqual(player.played, [.file(try XCTUnwrap(settings.customSoundURL(for: .cancel)), volume: SoundManager.fileVolume)])
+    }
+
+    func testImportingAnotherFormatDeletesThePreviousCustomFile() async throws {
+        let settings = makeSettings()
+        let wav = try XCTUnwrap(PnoeSoundSet.sine.url(for: .start, in: soundsBundle))
+        let caf = tempDirectory.appendingPathComponent("source.caf")
+        let input = try AVAudioFile(forReading: wav)
+        let buffer = try XCTUnwrap(
+            AVAudioPCMBuffer(pcmFormat: input.processingFormat, frameCapacity: AVAudioFrameCount(input.length)))
+        try input.read(into: buffer)
+        try AVAudioFile(forWriting: caf, settings: input.processingFormat.settings).write(from: buffer)
+
+        let custom = tempDirectory.appendingPathComponent("Custom")
+        guard case .success = await settings.setCustomSound(url: wav, for: .cancel) else { return XCTFail("wav import") }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: custom.appendingPathComponent("CustomCancelSound.wav").path))
+
+        guard case .success = await settings.setCustomSound(url: caf, for: .cancel) else { return XCTFail("caf import") }
+        XCTAssertEqual(settings.customFilename(for: .cancel), "CustomCancelSound.caf")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: custom.appendingPathComponent("CustomCancelSound.wav").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: custom.appendingPathComponent("CustomCancelSound.caf").path))
     }
 }
