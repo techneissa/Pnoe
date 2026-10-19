@@ -26,6 +26,8 @@ enum AutoLearnSettings {
     static let failureMessageKey = "AutoLearnDictionaryFailureMessage"
     static let failureAcknowledgedKey = "AutoLearnDictionaryFailureAcknowledged"
     static let reviewScheduleKey = "AutoLearnDictionaryReviewSchedule"
+    static let repeatThresholdKey = "AutoLearnDictionaryRepeatThreshold"
+    static let usesAIReviewKey = "AutoLearnDictionaryUsesAIReview"
 
     static var isEnabled: Bool {
         UserDefaults.standard.bool(forKey: isEnabledKey)
@@ -40,6 +42,17 @@ enum AutoLearnSettings {
         let value = UserDefaults.standard.string(forKey: modelKey)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return value?.isEmpty == false ? value : nil
+    }
+
+    static var repeatThreshold: AutoLearnRepeatThreshold {
+        AutoLearnRepeatThreshold(
+            rawValue: UserDefaults.standard.integer(forKey: repeatThresholdKey)
+        ) ?? .default
+    }
+
+    /// Off by default: a saved pair needs repeats, not an AI provider.
+    static var usesAIReview: Bool {
+        UserDefaults.standard.bool(forKey: usesAIReviewKey)
     }
 
     static var reviewSchedule: AutoLearnReviewSchedule {
@@ -154,6 +167,8 @@ enum AppDefaults {
             CloudTranscriptionSettings.timeoutKey: CloudTranscriptionSettings.defaultTimeout,
             AutoLearnSettings.isEnabledKey: true,
             AutoLearnSettings.reviewScheduleKey: AutoLearnReviewSchedule.immediately.rawValue,
+            AutoLearnSettings.repeatThresholdKey: AutoLearnRepeatThreshold.default.rawValue,
+            AutoLearnSettings.usesAIReviewKey: false,
 
             // Cleanup
             CleanupSettingsKeys.isTranscriptionCleanupEnabled: false,

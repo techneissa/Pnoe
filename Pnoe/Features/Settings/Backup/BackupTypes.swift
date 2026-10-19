@@ -121,6 +121,8 @@ struct BackupFile: Codable {
     let generalSettings: GeneralBackup?
     let customEmojis: [String]?
     let customCloudModels: [CustomModelBackup]?
+    /// Backup format version and snippets (format 2). Absent from older files, which decode to an empty payload.
+    let snippetPayload: SnippetBackupPayload
 
     private enum CodingKeys: String, CodingKey {
         case version, customPrompts, modeConfigs, modeShortcuts, vocabularyWords, wordReplacements, generalSettings,
@@ -132,7 +134,8 @@ struct BackupFile: Codable {
     init(
         version: String, customPrompts: [CustomPrompt], modeConfigs: [ModeConfig],
         modeShortcuts: [String: ShortcutBackup]?, vocabularyWords: [WordBackup]?, wordReplacements: [String: String]?,
-        generalSettings: GeneralBackup?, customEmojis: [String]?, customCloudModels: [CustomModelBackup]?
+        generalSettings: GeneralBackup?, customEmojis: [String]?, customCloudModels: [CustomModelBackup]?,
+        snippetPayload: SnippetBackupPayload = SnippetBackupPayload()
     ) {
         self.version = version
         self.customPrompts = customPrompts
@@ -143,6 +146,7 @@ struct BackupFile: Codable {
         self.generalSettings = generalSettings
         self.customEmojis = customEmojis
         self.customCloudModels = customCloudModels
+        self.snippetPayload = snippetPayload
     }
 
     init(from decoder: Decoder) throws {
@@ -161,6 +165,7 @@ struct BackupFile: Codable {
         generalSettings = try container.decodeIfPresent(GeneralBackup.self, forKey: .generalSettings)
         customEmojis = try container.decodeIfPresent([String].self, forKey: .customEmojis)
         customCloudModels = try container.decodeIfPresent([CustomModelBackup].self, forKey: .customCloudModels)
+        snippetPayload = try SnippetBackupPayload(from: decoder)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -174,5 +179,6 @@ struct BackupFile: Codable {
         try container.encodeIfPresent(generalSettings, forKey: .generalSettings)
         try container.encodeIfPresent(customEmojis, forKey: .customEmojis)
         try container.encodeIfPresent(customCloudModels, forKey: .customCloudModels)
+        try snippetPayload.encode(to: encoder)
     }
 }

@@ -11,6 +11,7 @@ struct DictionarySettingsView: View {
     enum DictionarySection: String, CaseIterable, Hashable {
         case replacements = "Word Replacements"
         case spellings = "Vocabulary"
+        case snippets = "Snippets"
 
         var description: String {
             switch self {
@@ -24,6 +25,11 @@ struct DictionarySettingsView: View {
                     localized:
                         "Word Replacements run after transcription to replace misheard words, phrases, abbreviations, or boilerplate text."
                 )
+            case .snippets:
+                return String(
+                    localized:
+                        "Snippets insert saved text, exactly as written, when you say their trigger phrase."
+                )
             }
         }
 
@@ -33,6 +39,8 @@ struct DictionarySettingsView: View {
                 return "character.book.closed"
             case .replacements:
                 return "arrow.left.arrow.right"
+            case .snippets:
+                return "text.insert"
             }
         }
     }
@@ -134,6 +142,8 @@ struct DictionarySettingsView: View {
             VocabularyView()
         case .replacements:
             WordReplacementView()
+        case .snippets:
+            SnippetsView()
         }
     }
 }
