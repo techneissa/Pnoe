@@ -10,6 +10,7 @@ class TranscriptionModelManager: ObservableObject {
     private weak var whisperModelManager: WhisperModelManager?
     private weak var fluidAudioModelManager: FluidAudioModelManager?
     private let transcribeCppModelManager = TranscribeCppModelManager.shared
+    private let whisperKitModelManager = WhisperKitModelManager.shared
 
     private let logger = Logger(subsystem: "com.techneissa.pnoe", category: "TranscriptionModelManager")
 
@@ -27,6 +28,9 @@ class TranscriptionModelManager: ObservableObject {
         transcribeCppModelManager.onModelDeleted = { [weak self] modelName in
             self?.handleModelDeleted(modelName)
         }
+        whisperKitModelManager.onModelDeleted = { [weak self] modelName in
+            self?.handleModelDeleted(modelName)
+        }
 
         // Wire up "models changed" callbacks so this manager rebuilds allAvailableModels.
         whisperModelManager.onModelsChanged = { [weak self] in
@@ -36,6 +40,9 @@ class TranscriptionModelManager: ObservableObject {
             self?.refreshAllAvailableModels()
         }
         transcribeCppModelManager.onModelsChanged = { [weak self] in
+            self?.refreshAllAvailableModels()
+        }
+        whisperKitModelManager.onModelsChanged = { [weak self] in
             self?.refreshAllAvailableModels()
         }
 
@@ -52,6 +59,8 @@ class TranscriptionModelManager: ObservableObject {
                 return fluidAudioModelManager?.isFluidAudioModelDownloaded(named: model.name) ?? false
             case .transcribeCpp:
                 return transcribeCppModelManager.isModelDownloaded(named: model.name)
+            case .whisperKit:
+                return whisperKitModelManager.isModelDownloaded(named: model.name)
             case .nativeApple:
                 if #available(macOS 26, *) { return true } else { return false }
             case .custom:

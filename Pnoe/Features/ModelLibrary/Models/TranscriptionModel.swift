@@ -5,6 +5,7 @@ enum ModelProvider: String, Codable, Hashable, CaseIterable {
     case whisper = "Whisper"
     case fluidAudio = "Parakeet"
     case transcribeCpp = "TranscribeCpp"
+    case whisperKit = "WhisperKit"
     case groq = "Groq"
     case elevenLabs = "ElevenLabs"
     case deepgram = "Deepgram"
@@ -132,6 +133,36 @@ struct TranscribeCppModel: TranscriptionModel, Sendable {
     let supportedLanguages: [String: String]
 
     var isMultilingualModel: Bool { supportedLanguages.count > 1 }
+}
+
+/// A Core ML Whisper build that runs through WhisperKit on the Neural Engine.
+struct WhisperKitModel: TranscriptionModel, Sendable {
+    let id = UUID()
+    let name: String
+    let displayName: String
+    let description: String
+    let provider: ModelProvider = .whisperKit
+    let size: String
+    let speed: Double
+    let accuracy: Double
+    let ramUsage: Double
+    let supportedLanguages: [String: String]
+
+    var isMultilingualModel: Bool { supportedLanguages.count > 1 }
+
+    init(spec: WhisperKitModelSpec) {
+        name = spec.name
+        displayName = spec.displayName
+        description = spec.description
+        size = spec.formattedSize
+        speed = spec.speed
+        accuracy = spec.accuracy
+        ramUsage = spec.ramUsage
+        supportedLanguages = LanguageDictionary.forProvider(
+            isMultilingual: spec.isMultilingual, provider: .whisperKit)
+    }
+
+    var spec: WhisperKitModelSpec? { WhisperKitCatalog.spec(named: name) }
 }
 
 // A new struct for cloud models

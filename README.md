@@ -50,6 +50,7 @@ Pnoe's base is VoiceInk; [CREDITS.md](CREDITS.md) has the details and lists feat
 ### Core technology
 - [whisper.cpp](https://github.com/ggerganov/whisper.cpp): inference of OpenAI's Whisper model
 - [FluidAudio](https://github.com/FluidInference/FluidAudio): Parakeet model implementation
+- [WhisperKit](https://github.com/argmaxinc/WhisperKit) by Argmax (MIT): runs Whisper on Core ML and the Neural Engine, with the Core ML builds from [argmaxinc/whisperkit-coreml](https://huggingface.co/argmaxinc/whisperkit-coreml)
 - [TranscribeCpp for Swift](https://github.com/Beingpax/Transcribe-cpp-swift): SwiftPM distribution of [transcribe.cpp](https://github.com/handy-computer/transcribe.cpp), used for local GGUF transcription models
 - [SenseVoice Small](https://huggingface.co/FunAudioLLM/SenseVoiceSmall) by FunAudioLLM / Alibaba: multilingual model under the [FunASR Model Open Source License Agreement](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE)
 

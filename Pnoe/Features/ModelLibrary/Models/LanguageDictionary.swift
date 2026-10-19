@@ -61,7 +61,7 @@ enum LanguageDictionary {
         }
 
         switch provider {
-        case .whisper:
+        case .whisper, .whisperKit:
             return languages(matching: whisperLanguageCodes)
 
         case .nativeApple:

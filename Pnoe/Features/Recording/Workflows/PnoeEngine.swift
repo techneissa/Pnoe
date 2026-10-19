@@ -405,6 +405,9 @@ class PnoeEngine: NSObject, ObservableObject {
                                 } else if let transcribeCppModel = currentModel as? TranscribeCppModel {
                                     try? await self.serviceRegistry.transcribeCppTranscriptionService.loadModel(
                                         for: transcribeCppModel)
+                                } else if let whisperKitModel = currentModel as? WhisperKitModel {
+                                    try? await self.serviceRegistry.whisperKitTranscriptionService.loadModel(
+                                        for: whisperKitModel)
                                 }
 
                             }

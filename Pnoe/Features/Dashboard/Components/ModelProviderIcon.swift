@@ -123,6 +123,10 @@ private struct ModelProviderIdentity {
             displayName = "On-Device"
             providerKey = "On-Device"
             fallbackSystemImage = "waveform.badge.magnifyingglass"
+        case .whisperKit:
+            displayName = "WhisperKit"
+            providerKey = "WhisperKit"
+            fallbackSystemImage = "brain"
         case .nativeApple:
             displayName = "Apple Speech"
             providerKey = "Native Apple"

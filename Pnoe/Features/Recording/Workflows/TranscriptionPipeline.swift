@@ -240,6 +240,12 @@ class TranscriptionPipeline {
 
             transcription.transcriptionStatus = TranscriptionStatus.completed.rawValue
         } catch {
+            // A cancelled take ends in an error; the user asked for that, so it is not a failure.
+            if shouldCancel() {
+                await finishCanceledTranscription()
+                return
+            }
+
             let errorDescription = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
 
             if let nativeAppleError = error as? NativeAppleTranscriptionService.ServiceError,
