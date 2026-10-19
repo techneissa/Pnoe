@@ -43,8 +43,14 @@ class NotchRecorderPanel: KeyablePanel {
 
     /// Returns `nil` when there is no screen at all, so callers can skip showing the panel
     /// instead of placing it at the global origin.
-    static func calculateWindowMetrics() -> (frame: NSRect, notchWidth: CGFloat, notchHeight: CGFloat)? {
-        guard let screen = RecorderScreenResolver.resolve() else { return nil }
+    ///
+    /// `compact` is the idle indicator that stays on screen between dictations: it is only as
+    /// tall as the notch row, so the transparent host never covers other apps' content.
+    static func calculateWindowMetrics(
+        compact: Bool = false,
+        settings: RecorderIndicatorSettings = .current
+    ) -> (frame: NSRect, notchWidth: CGFloat, notchHeight: CGFloat)? {
+        guard let screen = RecorderScreenResolver.resolve(settings: settings) else { return nil }
 
         let safeAreaInsets = screen.safeAreaInsets
         let notchHeight: CGFloat = safeAreaInsets.top > 0 ? safeAreaInsets.top : NSStatusBar.system.thickness
@@ -58,11 +64,11 @@ class NotchRecorderPanel: KeyablePanel {
             return 180
         }()
 
-        let maxSideExpansion: CGFloat = 240
+        let maxSideExpansion: CGFloat = compact ? 100 : 240
         let sideMargin: CGFloat = 10
         let totalWidth = notchWidth + (maxSideExpansion + sideMargin) * 2
 
-        let maxContentHeight: CGFloat = 430
+        let maxContentHeight: CGFloat = compact ? notchHeight + 12 : 430
         let xPosition = screen.frame.midX - (totalWidth / 2)
         let yPosition = screen.frame.maxY - maxContentHeight
 
@@ -71,8 +77,8 @@ class NotchRecorderPanel: KeyablePanel {
     }
 
     @discardableResult
-    func show() -> Bool {
-        guard let metrics = NotchRecorderPanel.calculateWindowMetrics() else {
+    func show(compact: Bool = false) -> Bool {
+        guard let metrics = NotchRecorderPanel.calculateWindowMetrics(compact: compact) else {
             logger.error("Notch panel show skipped: no screen available")
             return false
         }

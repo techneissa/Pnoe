@@ -27,6 +27,16 @@
 		E1FA00D22FA7000000000001 /* SoundSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B22FA7000000000001 /* SoundSettings.swift */; };
 		E1FA00C32FA7000000000001 /* SoundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B32FA7000000000001 /* SoundManager.swift */; };
 		E1FA00D32FA7000000000001 /* SoundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B32FA7000000000001 /* SoundManager.swift */; };
+		E1FA00E02FA7000000000003 /* RecorderIndicatorModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E02FA7000000000001 /* RecorderIndicatorModel.swift */; };
+		E1FA00E02FA7000000000002 /* RecorderIndicatorModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E02FA7000000000001 /* RecorderIndicatorModel.swift */; };
+		E1FA00E12FA7000000000003 /* LiveTranscriptFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E12FA7000000000001 /* LiveTranscriptFormatter.swift */; };
+		E1FA00E12FA7000000000002 /* LiveTranscriptFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E12FA7000000000001 /* LiveTranscriptFormatter.swift */; };
+		E1FA00E22FA7000000000003 /* PartialTranscriptThrottle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E22FA7000000000001 /* PartialTranscriptThrottle.swift */; };
+		E1FA00E22FA7000000000002 /* PartialTranscriptThrottle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E22FA7000000000001 /* PartialTranscriptThrottle.swift */; };
+		E1FA00E32FA7000000000003 /* RecorderIndicatorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E32FA7000000000001 /* RecorderIndicatorViews.swift */; };
+		E1FA00E32FA7000000000002 /* RecorderIndicatorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E32FA7000000000001 /* RecorderIndicatorViews.swift */; };
+		E1FA00E42FA7000000000003 /* RecorderLayouts.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E42FA7000000000001 /* RecorderLayouts.swift */; };
+		E1FA00E42FA7000000000002 /* RecorderLayouts.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E42FA7000000000001 /* RecorderLayouts.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -66,6 +76,11 @@
 		E1FA00B12FA7000000000001 /* SoundPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundPlayer.swift; sourceTree = "<group>"; };
 		E1FA00B22FA7000000000001 /* SoundSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundSettings.swift; sourceTree = "<group>"; };
 		E1FA00B32FA7000000000001 /* SoundManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundManager.swift; sourceTree = "<group>"; };
+		E1FA00E02FA7000000000001 /* RecorderIndicatorModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderIndicatorModel.swift; sourceTree = "<group>"; };
+		E1FA00E12FA7000000000001 /* LiveTranscriptFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranscriptFormatter.swift; sourceTree = "<group>"; };
+		E1FA00E22FA7000000000001 /* PartialTranscriptThrottle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartialTranscriptThrottle.swift; sourceTree = "<group>"; };
+		E1FA00E32FA7000000000001 /* RecorderIndicatorViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderIndicatorViews.swift; sourceTree = "<group>"; };
+		E1FA00E42FA7000000000001 /* RecorderLayouts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderLayouts.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -182,6 +197,11 @@
 				E1FA00B12FA7000000000001 /* SoundPlayer.swift */,
 				E1FA00B22FA7000000000001 /* SoundSettings.swift */,
 				E1FA00B32FA7000000000001 /* SoundManager.swift */,
+				E1FA00E02FA7000000000001 /* RecorderIndicatorModel.swift */,
+				E1FA00E12FA7000000000001 /* LiveTranscriptFormatter.swift */,
+				E1FA00E22FA7000000000001 /* PartialTranscriptThrottle.swift */,
+				E1FA00E32FA7000000000001 /* RecorderIndicatorViews.swift */,
+				E1FA00E42FA7000000000001 /* RecorderLayouts.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -350,6 +370,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				E1FA00A12FA7000000000001 /* TextFieldPolicy.swift in Sources */,
+				E1FA00E02FA7000000000003 /* RecorderIndicatorModel.swift in Sources */,
+				E1FA00E12FA7000000000003 /* LiveTranscriptFormatter.swift in Sources */,
+				E1FA00E22FA7000000000003 /* PartialTranscriptThrottle.swift in Sources */,
+				E1FA00E32FA7000000000003 /* RecorderIndicatorViews.swift in Sources */,
+				E1FA00E42FA7000000000003 /* RecorderLayouts.swift in Sources */,
 				E1FA00C02FA7000000000001 /* SoundCatalog.swift in Sources */,
 				E1FA00C12FA7000000000001 /* SoundPlayer.swift in Sources */,
 				E1FA00C22FA7000000000001 /* SoundSettings.swift in Sources */,
@@ -362,6 +387,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				E1FA00A22FA7000000000001 /* TextFieldPolicy.swift in Sources */,
+				E1FA00E02FA7000000000002 /* RecorderIndicatorModel.swift in Sources */,
+				E1FA00E12FA7000000000002 /* LiveTranscriptFormatter.swift in Sources */,
+				E1FA00E22FA7000000000002 /* PartialTranscriptThrottle.swift in Sources */,
+				E1FA00E32FA7000000000002 /* RecorderIndicatorViews.swift in Sources */,
+				E1FA00E42FA7000000000002 /* RecorderLayouts.swift in Sources */,
 				E1FA00D02FA7000000000001 /* SoundCatalog.swift in Sources */,
 				E1FA00D12FA7000000000001 /* SoundPlayer.swift in Sources */,
 				E1FA00D22FA7000000000001 /* SoundSettings.swift in Sources */,

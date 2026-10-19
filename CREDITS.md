@@ -10,7 +10,7 @@ Each feature taken from another project gets one line in this format:
 
 `- [Project](link), License: what was taken`
 
-None yet.
+- [TypeWhisper](https://github.com/TypeWhisper/typewhisper-mac), GPL-3.0: the idea of a live transcript preview in the recording indicator, with theme, placement and visibility choices. Pnoe's design and code are its own; nothing was copied.
 
 ## Not part of Pnoe
 
