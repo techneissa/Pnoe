@@ -17,6 +17,20 @@ struct AudioSetupView: View {
                 Text("Audio Input")
             }
 
+            Section {
+                MicrophoneVisibilityRows(
+                    rows: audioDeviceManager.microphoneVisibilityRows,
+                    allDevicesHidden: audioDeviceManager.allDevicesHidden
+                ) { row, hidden in
+                    audioDeviceManager.setDevice(uid: row.uid, name: row.name, hidden: hidden)
+                }
+                .toggleStyle(HideToggleStyle())
+            } header: {
+                Text("Hide Microphones")
+            } footer: {
+                Text("A hidden microphone is left out of the menus and is never used for recording, even when it becomes the system default.")
+            }
+
             if usesPriorityOrder {
                 Section {
                     priorityOrderRows
@@ -66,7 +80,7 @@ struct AudioSetupView: View {
             Picker("Microphone", selection: microphoneSourceSelection) {
                 Text(systemDefaultSourceTitle).tag(MicrophoneSourceSelection.systemDefault)
 
-                ForEach(audioDeviceManager.availableDevices, id: \.uid) { device in
+                ForEach(audioDeviceManager.visibleDevices, id: \.uid) { device in
                     Text(device.name).tag(MicrophoneSourceSelection.device(device.uid))
                 }
             }
@@ -154,7 +168,8 @@ struct AudioSetupView: View {
     }
 
     private func priorityDeviceRow(for prioritizedDevice: PrioritizedDevice) -> some View {
-        let device = audioDeviceManager.availableDevices.first { $0.uid == prioritizedDevice.id }
+        let device = audioDeviceManager.visibleDevices.first { $0.uid == prioritizedDevice.id }
+        let isHidden = audioDeviceManager.isDeviceHidden(uid: prioritizedDevice.id)
         let isAvailable = device != nil
         let isActive = device.map { audioDeviceManager.getCurrentDevice() == $0.id } ?? false
 
@@ -171,7 +186,7 @@ struct AudioSetupView: View {
                         .lineLimit(1)
 
                     if !isAvailable {
-                        Text("Unavailable")
+                        Text(isHidden ? "Hidden" : "Unavailable")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -240,7 +255,7 @@ struct AudioSetupView: View {
         case .systemDefault:
             audioDeviceManager.selectInputMode(.systemDefault)
         case .device(let uid):
-            guard let device = audioDeviceManager.availableDevices.first(where: { $0.uid == uid }) else {
+            guard let device = audioDeviceManager.visibleDevices.first(where: { $0.uid == uid }) else {
                 audioDeviceManager.selectInputMode(.systemDefault)
                 return
             }
@@ -261,7 +276,7 @@ struct AudioSetupView: View {
 
     private var selectedDeviceUID: String? {
         guard let selectedDeviceID = audioDeviceManager.selectedDeviceID else { return nil }
-        return audioDeviceManager.availableDevices.first { $0.id == selectedDeviceID }?.uid
+        return audioDeviceManager.visibleDevices.first { $0.id == selectedDeviceID }?.uid
     }
 
     private var systemDefaultSourceTitle: String {
@@ -287,7 +302,7 @@ struct AudioSetupView: View {
     }
 
     private var availableDevicesNotInPriorityOrder: [(id: AudioDeviceID, uid: String, name: String)] {
-        audioDeviceManager.availableDevices.filter { device in
+        audioDeviceManager.visibleDevices.filter { device in
             !audioDeviceManager.prioritizedDevices.contains { $0.id == device.uid }
         }
     }

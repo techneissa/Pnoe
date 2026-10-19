@@ -4,22 +4,11 @@ import Foundation
 import IOKit.audio
 import os
 
-struct PrioritizedDevice: Codable, Identifiable {
-    let id: String
-    let name: String
-    let priority: Int
-    var modelUID: String?
-}
-
-enum AudioInputMode: String, CaseIterable {
-    case systemDefault = "System Default"
-    case custom = "Custom Device"
-    case prioritized = "Prioritized"
-}
-
 class AudioDeviceManager: ObservableObject {
     let logger = Logger(subsystem: "com.techneissa.pnoe", category: "AudioDeviceManager")
     @Published var availableDevices: [(id: AudioDeviceID, uid: String, name: String)] = []
+    /// Hidden input devices: device UID to last known name. Not-connected ones stay listed in settings.
+    @Published private(set) var hiddenDeviceNamesByUID: [String: String] = UserDefaults.standard.hiddenAudioDeviceNamesByUID
     @Published var selectedDeviceID: AudioDeviceID?
     @Published var inputMode: AudioInputMode = .custom
     @Published var prioritizedDevices: [PrioritizedDevice] = []
@@ -35,6 +24,29 @@ class AudioDeviceManager: ObservableObject {
     var isRecordingActive: Bool { recordingDeviceSession.isActive }
     var activeRecordingDeviceID: AudioDeviceID? { recordingDeviceSession.activeDeviceID }
     var isClamshellClosed: Bool { clamshellStateMonitor?.isClosed == true }
+
+    /// Connected devices that are not hidden: what every device menu lists and recording may use.
+    var visibleDevices: [(id: AudioDeviceID, uid: String, name: String)] {
+        availableDevices.filter { hiddenDeviceNamesByUID[$0.uid] == nil }
+    }
+
+    /// Devices are connected but all of them are hidden, so recording uses the built-in microphone.
+    var allDevicesHidden: Bool {
+        !availableDevices.isEmpty && visibleDevices.isEmpty
+    }
+
+    func isDeviceHidden(uid: String) -> Bool {
+        hiddenDeviceNamesByUID[uid] != nil
+    }
+
+    func isDeviceHidden(deviceID: AudioDeviceID) -> Bool {
+        availableDevices.first { $0.id == deviceID }.map { isDeviceHidden(uid: $0.uid) } ?? false
+    }
+
+    var microphoneVisibilityRows: [MicrophoneVisibilityRow] {
+        RecordingDevicePolicy.visibilityRows(
+            connected: inputDeviceInfos(), hiddenNamesByUID: hiddenDeviceNamesByUID)
+    }
 
     static let shared = AudioDeviceManager()
 
@@ -183,7 +195,10 @@ class AudioDeviceManager: ObservableObject {
                 guard let self = self else { return }
                 self.availableDevices = devices.map { ($0.id, $0.uid, $0.name) }
                 self.inputChannelsByDevice = inputChannels
-                if let currentID = self.selectedDeviceID, !devices.contains(where: { $0.id == currentID }) {
+                self.refreshHiddenDeviceNames()
+                if let currentID = self.selectedDeviceID,
+                    !devices.contains(where: { $0.id == currentID }) || self.isDeviceExcluded(deviceID: currentID)
+                {
                     if !self.isRecordingActive {
                         if self.inputMode == .prioritized {
                             self.selectHighestPriorityAvailableDevice()
@@ -278,7 +293,7 @@ class AudioDeviceManager: ObservableObject {
     }
 
     func selectDevice(id: AudioDeviceID) {
-        if let deviceToSelect = availableDevices.first(where: { $0.id == id }) {
+        if let deviceToSelect = visibleDevices.first(where: { $0.id == id }) {
             let uid = deviceToSelect.uid
             let modelUID = getDeviceModelUID(deviceID: id)
             DispatchQueue.main.async {
@@ -293,7 +308,7 @@ class AudioDeviceManager: ObservableObject {
     }
 
     func selectDeviceAndSwitchToCustomMode(id: AudioDeviceID) {
-        if let deviceToSelect = availableDevices.first(where: { $0.id == id }) {
+        if let deviceToSelect = visibleDevices.first(where: { $0.id == id }) {
             let uid = deviceToSelect.uid
             let modelUID = getDeviceModelUID(deviceID: id)
             DispatchQueue.main.async {
@@ -318,7 +333,7 @@ class AudioDeviceManager: ObservableObject {
             break
         case .custom:
             if selectedDeviceID == nil {
-                if let firstDevice = availableDevices.first {
+                if let firstDevice = visibleDevices.first {
                     selectDevice(id: firstDevice.id)
                 }
             }
@@ -329,6 +344,80 @@ class AudioDeviceManager: ObservableObject {
         }
 
         notifyDeviceChange()
+    }
+
+    /// Hides or shows a device by UID. Hiding the selected device switches the selection at once;
+    /// during a recording the change waits for the next one.
+    func setDevice(uid: String, name: String, hidden: Bool) {
+        guard isDeviceHidden(uid: uid) != hidden else { return }
+        if hidden {
+            hiddenDeviceNamesByUID[uid] = name
+        } else {
+            hiddenDeviceNamesByUID.removeValue(forKey: uid)
+        }
+        UserDefaults.standard.hiddenAudioDeviceNamesByUID = hiddenDeviceNamesByUID
+        logger.notice("Input device \(hidden ? "hidden" : "shown", privacy: .public)")
+        if allDevicesHidden {
+            logger.notice("Every input device is hidden: recording uses the built-in microphone")
+        }
+        guard !isRecordingActive else {
+            notifyDeviceChange()
+            return
+        }
+        reconcileSelectionAfterVisibilityChange()
+    }
+
+    /// Moves the selection off a hidden device, and back to the saved choice once it is shown again.
+    func reconcileSelectionAfterVisibilityChange() {
+        switch inputMode {
+        case .systemDefault:
+            notifyDeviceChange()
+        case .prioritized:
+            selectHighestPriorityAvailableDevice()
+        case .custom:
+            reconcileCustomDeviceAfterListChange()
+            notifyDeviceChange()
+        }
+    }
+
+    /// Hidden and not the last resort: with every device hidden the built-in microphone stays selectable.
+    func isDeviceExcluded(deviceID: AudioDeviceID) -> Bool {
+        isDeviceHidden(deviceID: deviceID) && !allDevicesHidden
+    }
+
+    var selectedDeviceIsExcluded: Bool {
+        selectedDeviceID.map(isDeviceExcluded(deviceID:)) ?? false
+    }
+
+    private func refreshHiddenDeviceNames() {
+        var updated = hiddenDeviceNamesByUID
+        for device in availableDevices where updated[device.uid] != nil && updated[device.uid] != device.name {
+            updated[device.uid] = device.name
+        }
+        guard updated != hiddenDeviceNamesByUID else { return }
+        hiddenDeviceNamesByUID = updated
+        UserDefaults.standard.hiddenAudioDeviceNamesByUID = updated
+    }
+
+    func inputDeviceInfos() -> [InputDeviceInfo] {
+        availableDevices.map {
+            InputDeviceInfo(
+                id: $0.id, uid: $0.uid, name: $0.name, modelUID: getDeviceModelUID(deviceID: $0.id),
+                isInternalMicrophone: isInternalMicrophone($0.id))
+        }
+    }
+
+    func recordingDevicePolicy() -> RecordingDevicePolicy {
+        RecordingDevicePolicy(
+            mode: inputMode,
+            devices: inputDeviceInfos(),
+            hiddenUIDs: Set(hiddenDeviceNamesByUID.keys),
+            systemDefaultID: getSystemDefaultDevice(),
+            customUID: UserDefaults.standard.selectedAudioDeviceUID ?? "",
+            customModelUID: UserDefaults.standard.selectedAudioDeviceModelUID,
+            selectedDeviceID: selectedDeviceID,
+            prioritized: prioritizedDevices,
+            isClamshellClosed: isClamshellClosed)
     }
 
     private func loadPrioritizedDevices() {
@@ -493,17 +582,16 @@ class AudioDeviceManager: ObservableObject {
         return uid as String?
     }
 
+    /// Finds a connected device that is not hidden, by UID and then by model UID.
     func findAvailableDevice(uid: String, modelUID: String?) -> (id: AudioDeviceID, uid: String, name: String)?
     {
-        if !uid.isEmpty, let found = availableDevices.first(where: { $0.uid == uid }) {
-            return found
-        }
-        if let modelUID, !modelUID.isEmpty,
-            let found = availableDevices.first(where: { getDeviceModelUID(deviceID: $0.id) == modelUID })
-        {
-            return found
-        }
-        return nil
+        guard let found = RecordingDevicePolicy.find(uid: uid, modelUID: modelUID, in: visibleInputDeviceInfos())
+        else { return nil }
+        return availableDevices.first { $0.id == found.id }
+    }
+
+    private func visibleInputDeviceInfos() -> [InputDeviceInfo] {
+        inputDeviceInfos().filter { !isDeviceHidden(uid: $0.uid) }
     }
 
     private func rebindPrioritizedDevice(savedUID: String, newUID: String, newModelUID: String?) {
@@ -535,7 +623,7 @@ class AudioDeviceManager: ObservableObject {
             } else if savedModelUID == nil {
                 updateCustomDeviceHints(deviceID: desired.id, uid: desired.uid)
             }
-        } else if let currentID = selectedDeviceID, !isDeviceAvailable(currentID) {
+        } else if let currentID = selectedDeviceID, !isDeviceAvailable(currentID) || isDeviceExcluded(deviceID: currentID) {
             fallbackToDefaultDevice()
         }
     }

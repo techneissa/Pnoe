@@ -84,7 +84,7 @@ struct MenuBarView: View {
             }
 
             Menu {
-                ForEach(audioDeviceManager.availableDevices, id: \.id) { device in
+                ForEach(audioDeviceManager.visibleDevices, id: \.id) { device in
                     Button {
                         audioDeviceManager.selectDeviceAndSwitchToCustomMode(id: device.id)
                     } label: {
@@ -93,8 +93,8 @@ struct MenuBarView: View {
                     }
                 }
 
-                if audioDeviceManager.availableDevices.isEmpty {
-                    Text("No devices available")
+                if audioDeviceManager.visibleDevices.isEmpty {
+                    Text(audioDeviceManager.allDevicesHidden ? "All devices hidden" : "No devices available")
                         .foregroundColor(.secondary)
                 }
             } label: {
