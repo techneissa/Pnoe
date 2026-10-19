@@ -111,11 +111,13 @@ final class CorrectionCounterOverflowTests: XCTestCase {
     }
 
     func testIncrementSaturatesAtTheMaximum() throws {
-        let realKey = CorrectionCounter.key(heard: "pnoy", corrected: "Pnoe")
-        let json = """
-        {"pairs":{"\(realKey)":{"heard":"pnoy","corrected":"Pnoe","count":9223372036854775807,"lastSeen":\(Date().timeIntervalSinceReferenceDate)}}}
-        """
-        var counter = try JSONDecoder().decode(CorrectionCounter.self, from: Data(json.utf8))
+        var original = CorrectionCounter()
+        original.record(heard: "pnoy", corrected: "Pnoe")
+        let encoded = try XCTUnwrap(String(data: JSONEncoder().encode(original), encoding: .utf8))
+        XCTAssertTrue(encoded.contains("\"count\":1"))
+        let damaged = encoded.replacingOccurrences(of: "\"count\":1", with: "\"count\":9223372036854775807")
+        var counter = try JSONDecoder().decode(CorrectionCounter.self, from: Data(damaged.utf8))
+        XCTAssertEqual(counter.count(heard: "pnoy", corrected: "Pnoe"), CorrectionCounter.maximumCount)
         XCTAssertEqual(counter.record(heard: "pnoy", corrected: "Pnoe"), CorrectionCounter.maximumCount)
         XCTAssertEqual(counter.record(heard: "pnoy", corrected: "Pnoe"), CorrectionCounter.maximumCount)
     }
@@ -210,7 +212,7 @@ final class CorrectionNoiseFilterTests: XCTestCase {
 
     func testKeepsAbbreviationsAndSymbolsInsideAWord() {
         XCTAssertTrue(learnable("st. jon", "St. John"))
-        XCTAssertTrue(learnable("dr. who", "Dr. Who"))
+        XCTAssertTrue(learnable("dr. hu", "Dr. Who"))
         XCTAssertTrue(learnable("mr. smith", "Mr. Smyth"))
         XCTAssertTrue(learnable("j. smith", "J. Smythe"))
         XCTAssertTrue(learnable("c++", "c#"))
