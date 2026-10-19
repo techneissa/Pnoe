@@ -42,10 +42,13 @@ enum WordLists {
     /// May be dropped at the very start of a take.
     static let leadingMarkers: Set<String> = ["so", "okay", "ok", "well", "yeah", "hey"]
 
+    /// Phrases that cancel the words before them. "sorry" and "I mean" are left out on purpose: in plain
+    /// speech they open no correction ("sorry about the delay"), so they must not open a drop window.
     static let correctionPhrases: [[String]] = [
-        ["no", "wait"], ["no", "actually"], ["wait", "no"], ["actually", "no"], ["i", "mean"], ["sorry"],
-        ["scratch", "that"],
+        ["no", "wait"], ["no", "actually"], ["wait", "no"], ["actually", "no"], ["scratch", "that"],
     ]
+    /// Discourse words the model may drop, but which cancel nothing.
+    static let softCorrectionPhrases: [[String]] = [["i", "mean"]]
 
     static let interrogatives: Set<String> = ["what", "why", "how", "who", "when", "where", "which", "whose"]
     static let questionAuxiliaries: Set<String> = [
@@ -54,6 +57,10 @@ enum WordLists {
     static let questionSecondWords: Set<String> = [
         "you", "we", "i", "they", "he", "she", "it", "there", "this", "that", "the", "anyone", "someone", "everyone", "a",
     ]
+    /// "do" and "have" also open imperatives ("do the dishes", "have the report ready", "do it now"), so after
+    /// them only a person word makes a question.
+    static let imperativeAuxiliaries: Set<String> = ["do", "have"]
+    static let personWords: Set<String> = ["you", "we", "i", "they", "he", "she", "there", "anyone", "someone", "everyone"]
     static let leadingInterjections: Set<String> = ["hey", "okay", "ok", "so", "well", "yeah", "hi", "um", "uh", "and", "but"]
 
     static let metaPhrases: [[String]] = [

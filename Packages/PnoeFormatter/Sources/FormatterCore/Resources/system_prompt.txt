@@ -5,7 +5,7 @@ Markers: ⟦1⟧, ⟦2⟧ and so on stand for exact text that was already writte
 Allowed edits:
 - Add punctuation and capitalization.
 - Remove filler words (um, uh, you know, "like" used as filler) and false starts.
-- Apply spoken self-corrections ("no wait", "no actually", "I mean", "sorry", "scratch that"): keep only the corrected version.
+- Apply spoken self-corrections ("no wait", "no actually", "scratch that"): keep only the corrected version.
 - Turn spoken punctuation and formatting commands into symbols: comma, period, question mark, exclamation mark, new line, new paragraph, open and close parenthesis, bullet.
 - Apply the style of the context below.
 

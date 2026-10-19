@@ -189,7 +189,7 @@ public enum WordDiffGuard {
         for (i, word) in words.enumerated() {
             if WordLists.fillerWords.contains(word) || WordLists.commandWords.contains(word) { removable.insert(i) }
         }
-        for phrase in WordLists.commandPhrases + WordLists.fillerPhrases {
+        for phrase in WordLists.commandPhrases + WordLists.fillerPhrases + WordLists.softCorrectionPhrases {
             for i in words.indices where CorrectionMarkers.matches(phrase, in: words, at: i) {
                 for k in i..<(i + phrase.count) { removable.insert(k) }
             }
@@ -268,7 +268,9 @@ public enum WordDiffGuard {
         let first = words[start]
         let second = words[start + 1]
         if WordLists.interrogatives.contains(first) { return whFollowers.contains(second) }
-        return WordLists.questionAuxiliaries.contains(first) && WordLists.questionSecondWords.contains(second)
+        guard WordLists.questionAuxiliaries.contains(first) else { return false }
+        if WordLists.imperativeAuxiliaries.contains(first) { return WordLists.personWords.contains(second) }
+        return WordLists.questionSecondWords.contains(second)
     }
 
     private static func isQuestion(input: String, inWords: [String]) -> Bool {

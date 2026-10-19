@@ -26,33 +26,57 @@ public enum PlaceholderCheck {
         return nil
     }
 
-    /// Markers the speaker may have corrected away: up to 4 words before a correction phrase.
+    /// Markers the speaker may have corrected away: up to 4 words before a correction phrase, and only when
+    /// a marker of the same kind follows the phrase within 3 words ("8080 no wait 9090"). A phrase with no
+    /// replacement after it never excuses a lost marker.
     static func droppableIDs(_ protected: ProtectedText) -> Set<Int> {
         let words = protected.text.split(whereSeparator: \.isWhitespace).map { WordTools.trimEdges(String($0)).lowercased() }
-        let regions = CorrectionMarkers.regions(in: words)
-        var ids: Set<Int> = []
-        for index in regions.window {
-            let word = words[index]
-            for match in TokenProtector.markerMatches(in: word) { ids.insert(match.id) }
+        var kinds: [Int: ProtectedSpan.Kind] = [:]
+        for span in protected.spans { kinds[span.id] = span.kind }
+        func ids(in range: Range<Int>) -> [Int] {
+            range.flatMap { TokenProtector.markerMatches(in: words[$0]).map(\.id) }
         }
-        return ids
+        var droppable: Set<Int> = []
+        for match in CorrectionMarkers.matches(in: words) {
+            let after = match.phrase.upperBound..<min(words.count, match.phrase.upperBound + 3)
+            let replacementKinds = Set(ids(in: after).compactMap { kinds[$0] })
+            for id in ids(in: match.window) {
+                if let kind = kinds[id], replacementKinds.contains(kind) { droppable.insert(id) }
+            }
+        }
+        return droppable
     }
 }
 
 enum CorrectionMarkers {
-    /// Indices of the marker words themselves, and of the up to 4 words before each marker.
-    static func regions(in words: [String]) -> (markers: Set<Int>, window: Set<Int>) {
-        var markers: Set<Int> = []
-        var window: Set<Int> = []
+    struct Match {
+        /// The phrase itself.
+        let phrase: Range<Int>
+        /// The up to 4 words before it.
+        let window: Range<Int>
+    }
+
+    static func matches(in words: [String]) -> [Match] {
+        var result: [Match] = []
         var i = 0
         while i < words.count {
             if let phrase = WordLists.correctionPhrases.first(where: { matches($0, in: words, at: i) }) {
-                for k in i..<(i + phrase.count) { markers.insert(k) }
-                for k in max(0, i - 4)..<i { window.insert(k) }
+                result.append(Match(phrase: i..<(i + phrase.count), window: max(0, i - 4)..<i))
                 i += phrase.count
             } else {
                 i += 1
             }
+        }
+        return result
+    }
+
+    /// Indices of the phrase words themselves, and of the up to 4 words before each phrase.
+    static func regions(in words: [String]) -> (markers: Set<Int>, window: Set<Int>) {
+        var markers: Set<Int> = []
+        var window: Set<Int> = []
+        for match in matches(in: words) {
+            markers.formUnion(match.phrase)
+            window.formUnion(match.window)
         }
         window.subtract(markers)
         return (markers, window)

@@ -85,7 +85,12 @@ public struct FormatterPipeline: Sendable {
             return .raw(fallback, .runtimeError)
         }
         if Task.isCancelled { return .raw(fallback, .cancelled) }
-        if result.stopReason == .cap { return .raw(fallback, .truncated) }
+        // Only a clean end of generation is usable; anything else is partial text.
+        switch result.stopReason {
+        case .eos: break
+        case .cap: return .raw(fallback, .truncated)
+        case .interrupted: return .raw(fallback, ContinuousClock.now >= request.deadline ? .timeout : .cancelled)
+        }
 
         // 6. Sanitize.
         let sanitized: String
