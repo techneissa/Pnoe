@@ -22,7 +22,7 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
 
     var recorderType: String {
         get { recorderPanelStyle.rawValue }
-        set { recorderPanelStyle = RecorderPanelStyle(rawValue: newValue) ?? .mini }
+        set { recorderPanelStyle = RecorderPanelStyle(storedValue: newValue) }
     }
 
     @Published var isRecorderPanelVisible = false {
@@ -110,11 +110,17 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
                 )
             }
             shown = notchWindowManager?.show(compact: idle) ?? false
-        case .mini:
+        case .mini, .pill, .dot:
             notchWindowManager?.destroyWindow()
             notchWindowManager = nil
+            // Mini, Pill and Dot share a manager that is built for one of them.
+            if let manager = miniWindowManager, manager.style != style {
+                manager.destroyWindow()
+                miniWindowManager = nil
+            }
             if miniWindowManager == nil {
                 miniWindowManager = MiniWindowManager(
+                    style: style,
                     engine: engine,
                     recorder: recorder,
                     assistantSession: engine.assistantSession,

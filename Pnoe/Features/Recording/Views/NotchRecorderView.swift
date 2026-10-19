@@ -12,6 +12,8 @@ struct NotchRecorderView<S: RecorderStateProvider & ObservableObject>: View {
     @AppStorage(RecorderDisplaySettingsKeys.theme) private var themeRaw = RecorderTheme.dark.rawValue
     @AppStorage(RecorderDisplaySettingsKeys.levelDisplay) private var levelDisplayRaw = RecorderLevelDisplay.bars.rawValue
     @AppStorage(RecorderDisplaySettingsKeys.visibility) private var visibilityRaw = RecorderVisibility.whileRecording.rawValue
+    @AppStorage(RecorderSideSlots.storageKey(for: .notch)) private var slotsRaw = RecorderSideSlots.defaults(for: .notch).storedValue
+    @ObservedObject private var modeManager = ModeManager.shared
     /// Notch size of the screen the recorder is on. It comes from AppKit, which SwiftUI cannot
     /// observe, so it is read once when the view is created and again on every screen
     /// reconfiguration, never while rendering: `body` runs for every partial transcript.
@@ -44,6 +46,9 @@ struct NotchRecorderView<S: RecorderStateProvider & ObservableObject>: View {
             notchHeight: screenMetrics.height,
             levelHistoryProvider: recorder.levelHistorySnapshot,
             levelDisplay: RecorderLevelDisplay(rawValue: levelDisplayRaw) ?? .bars,
+            slots: RecorderSideSlots(storedValue: slotsRaw, style: .notch),
+            modeName: modeManager.currentEffectiveConfiguration?.name ?? String(localized: "None"),
+            clockProvider: recorder.recordingClockSnapshot,
             onRecordButtonTapped: onRecordButtonTapped,
             onCloseTapped: onCloseTapped,
             modeButton: RecorderModeButton(buttonSize: 20, padding: EdgeInsets()),

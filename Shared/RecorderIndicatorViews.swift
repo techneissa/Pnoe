@@ -321,6 +321,35 @@ struct ProcessingStatusDisplay: View {
 
 // MARK: - Record Button
 
+extension RecordingState {
+    /// Whether the record button (or the dot, which is one) reacts to a click.
+    var allowsRecordButton: Bool {
+        switch self {
+        case .idle, .recording:
+            return true
+        case .starting, .transcribing, .enhancing, .busy:
+            return false
+        }
+    }
+
+    var recordButtonLabel: String {
+        switch self {
+        case .idle:
+            return String(localized: "Start recording")
+        case .starting:
+            return String(localized: "Starting recording")
+        case .recording:
+            return String(localized: "Stop recording")
+        case .transcribing:
+            return String(localized: "Transcribing recording")
+        case .enhancing:
+            return String(localized: "Enhancing recording")
+        case .busy:
+            return String(localized: "Recorder unavailable")
+        }
+    }
+}
+
 struct RecorderRecordButton: View {
     @Environment(\.recorderPalette) private var palette
     let recordingState: RecordingState
@@ -337,14 +366,7 @@ struct RecorderRecordButton: View {
         }
     }
 
-    private var isDisabled: Bool {
-        switch recordingState {
-        case .idle, .recording:
-            return false
-        case .starting, .transcribing, .enhancing, .busy:
-            return true
-        }
-    }
+    private var isDisabled: Bool { !recordingState.allowsRecordButton }
 
     var body: some View {
         Button(action: action) {
@@ -409,22 +431,7 @@ struct RecorderRecordButton: View {
         }
     }
 
-    private var accessibilityLabel: String {
-        switch recordingState {
-        case .idle:
-            return String(localized: "Start recording")
-        case .starting:
-            return String(localized: "Starting recording")
-        case .recording:
-            return String(localized: "Stop recording")
-        case .transcribing:
-            return String(localized: "Transcribing recording")
-        case .enhancing:
-            return String(localized: "Enhancing recording")
-        case .busy:
-            return String(localized: "Recorder unavailable")
-        }
-    }
+    private var accessibilityLabel: String { recordingState.recordButtonLabel }
 
     private enum VisualState: Equatable {
         case ready
@@ -604,5 +611,163 @@ struct RecorderStatusDisplay: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: currentState)
+    }
+}
+
+// MARK: - Side Slots
+
+/// The recording time, `m:ss`: it ticks while recording, and is plain text otherwise (frozen at
+/// the length of the take while the recording is processed, 0:00 when idle), so an idle bar
+/// that stays on screen schedules nothing.
+struct RecorderTimerLabel: View {
+    @Environment(\.recorderPalette) private var palette
+    let recordingState: RecordingState
+    let clockProvider: () -> RecordingClock
+    var width: CGFloat = RecorderSlotContent.timer.width
+
+    var body: some View {
+        Group {
+            if recordingState == .recording {
+                TimelineView(.periodic(from: .now, by: 0.5)) { _ in text }
+            } else {
+                text
+            }
+        }
+        .accessibilityLabel(Text("Recording time"))
+    }
+
+    private var text: some View {
+        Text(RecordingClock.format(clockProvider().elapsed(at: RecordingClock.now)))
+            .font(.system(size: 12, weight: .medium).monospacedDigit())
+            .foregroundColor(palette.ink.opacity(recordingState == .recording ? 0.9 : 0.55))
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .frame(width: width)
+    }
+}
+
+/// One side slot of a bar: what `RecorderSlotContent` names.
+struct RecorderSlotView: View {
+    @Environment(\.recorderPalette) private var palette
+    let content: RecorderSlotContent
+    let recordingState: RecordingState
+    let levelHistoryProvider: () -> LevelHistory
+    let levelDisplay: RecorderLevelDisplay
+    let clockProvider: () -> RecordingClock
+    let modeName: String
+    var menuBarHeight: CGFloat? = nil
+
+    @ViewBuilder
+    var body: some View {
+        switch content {
+        case .none:
+            EmptyView()
+        case .timer:
+            RecorderTimerLabel(recordingState: recordingState, clockProvider: clockProvider)
+        case .level:
+            RecorderStatusDisplay(
+                currentState: recordingState,
+                levelHistoryProvider: levelHistoryProvider,
+                levelDisplay: levelDisplay,
+                menuBarHeight: menuBarHeight)
+        case .modeName:
+            Text(modeName)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(palette.ink.opacity(0.75))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(width: content.width)
+        }
+    }
+}
+
+// MARK: - Dot
+
+/// The dot style's face: a small dot that is red while recording, with a halo that swells with
+/// the real input level, and the recording time beside it. Processing shows a slowly pulsing
+/// neutral dot; idle (visibility "Always") a still grey one.
+///
+/// The time is a small label beside the dot rather than a hover reveal: the panel never becomes
+/// the key window, and hover tracking in such a panel is not reliable, so a label is the version
+/// that always works.
+struct RecorderDotView: View {
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(\.recorderPalette) private var palette
+    let recordingState: RecordingState
+    let levelHistoryProvider: () -> LevelHistory
+    let clockProvider: () -> RecordingClock
+    let reduceMotionOverride: Bool?
+
+    init(
+        recordingState: RecordingState,
+        levelHistoryProvider: @escaping () -> LevelHistory,
+        clockProvider: @escaping () -> RecordingClock,
+        reduceMotionOverride: Bool? = nil
+    ) {
+        self.recordingState = recordingState
+        self.levelHistoryProvider = levelHistoryProvider
+        self.clockProvider = clockProvider
+        self.reduceMotionOverride = reduceMotionOverride
+    }
+
+    private var reducesMotion: Bool { reduceMotionOverride ?? systemReduceMotion }
+
+    static func showsTimer(for state: RecordingState) -> Bool {
+        switch state {
+        case .recording, .transcribing, .enhancing: return true
+        case .idle, .starting, .busy: return false
+        }
+    }
+
+    /// Only a recording or a processing dot moves; an idle dot is still, and its timeline is
+    /// paused. With Reduce Motion the processing dot is still too.
+    private var isAnimated: Bool {
+        switch recordingState {
+        case .recording: return true
+        case .transcribing, .enhancing: return !reducesMotion
+        case .idle, .starting, .busy: return false
+        }
+    }
+
+    var body: some View {
+        let showsTimer = Self.showsTimer(for: recordingState)
+        HStack(spacing: RecorderDotMetrics.spacing) {
+            TimelineView(.animation(minimumInterval: 1 / RecorderLevelMetrics.samplesPerSecond, paused: !isAnimated)) { context in
+                dot(at: context.date)
+            }
+            .frame(width: RecorderDotMetrics.areaSize, height: RecorderDotMetrics.areaSize)
+
+            if showsTimer {
+                RecorderTimerLabel(
+                    recordingState: recordingState, clockProvider: clockProvider,
+                    width: RecorderDotMetrics.timerWidth)
+            }
+        }
+        .padding(.leading, showsTimer ? 4 : 0)
+        .frame(
+            width: RecorderDotMetrics.width(showsTimer: showsTimer), height: RecorderDotMetrics.capsuleHeight,
+            alignment: showsTimer ? .leading : .center)
+        .contentShape(Capsule())
+    }
+
+    private func dot(at date: Date) -> some View {
+        let diameter = RecorderDotMetrics.diameter
+        switch recordingState {
+        case .recording:
+            let level = levelHistoryProvider().latest ?? 0
+            let red = Color(nsColor: .systemRed)
+            let halo = reducesMotion ? 1.5 : RecorderDotMetrics.haloScale(level: level)
+            let haloOpacity = reducesMotion ? 0.1 + 0.3 * Double(level) : 0.3
+            return AnyView(
+                ZStack {
+                    Circle().fill(red.opacity(haloOpacity)).frame(width: diameter, height: diameter).scaleEffect(halo)
+                    Circle().fill(red).frame(width: diameter, height: diameter)
+                })
+        case .transcribing, .enhancing:
+            let pulse = reducesMotion ? 0.7 : 0.45 + 0.4 * (0.5 + 0.5 * sin(date.timeIntervalSinceReferenceDate * 2 * .pi / 1.2))
+            return AnyView(Circle().fill(palette.ink.opacity(pulse)).frame(width: diameter, height: diameter))
+        case .idle, .starting, .busy:
+            return AnyView(Circle().fill(palette.ink.opacity(0.45)).frame(width: diameter, height: diameter))
+        }
     }
 }

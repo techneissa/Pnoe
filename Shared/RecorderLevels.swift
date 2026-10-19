@@ -32,6 +32,8 @@ enum RecorderLevelMetrics {
     static let barCount = 30
     /// Levels the wave goes through: the whole history.
     static let waveSampleCount = historyCapacity
+    /// Width of the Bars and Wave display: 30 bars of 1.5 pt with 1 pt gaps.
+    static let meterWidth = CGFloat(barCount) * 2.5 - 1
 }
 
 /// Turns the recorder's decibel reading into the 0...1 level the display draws.

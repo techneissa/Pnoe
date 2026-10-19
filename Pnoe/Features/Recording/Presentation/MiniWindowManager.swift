@@ -7,6 +7,8 @@ import os
 class MiniWindowManager {
     private var windowController: NSWindowController?
     private var panel: MiniRecorderPanel?
+    /// Mini, Pill or Dot: the three share this manager and its panel.
+    let style: RecorderPanelStyle
 
     private let assistantSession: AssistantSession
     private var assistantCancellable: AnyCancellable?
@@ -14,6 +16,7 @@ class MiniWindowManager {
     private let logger = Logger(subsystem: "com.techneissa.pnoe", category: "MiniWindowManager")
 
     init(
+        style: RecorderPanelStyle,
         engine: PnoeEngine,
         recorder: Recorder,
         assistantSession: AssistantSession,
@@ -21,10 +24,12 @@ class MiniWindowManager {
         onCloseTapped: @escaping () -> Void,
         onAssistantFollowUp: @escaping (String) -> Void
     ) {
+        self.style = style
         self.assistantSession = assistantSession
         self.makeView = {
             AnyView(
                 MiniRecorderView(
+                    style: style,
                     stateProvider: engine,
                     recorder: recorder,
                     assistantSession: assistantSession,
@@ -70,11 +75,11 @@ class MiniWindowManager {
     // lives in `AssistantSession`, which is owned by the engine and survives.
     private func initializeWindow(compact: Bool) {
         deinitializeWindow()
-        guard let metrics = MiniRecorderPanel.calculateWindowMetrics(compact: compact) else {
+        guard let metrics = MiniRecorderPanel.calculateWindowMetrics(style: style, compact: compact) else {
             logger.error("Mini panel not created: no screen available")
             return
         }
-        let newPanel = MiniRecorderPanel(contentRect: metrics)
+        let newPanel = MiniRecorderPanel(style: style, contentRect: metrics)
         let view = makeView()
         let hostingController = NSHostingController(rootView: view)
         newPanel.contentView = hostingController.view
@@ -85,6 +90,7 @@ class MiniWindowManager {
             .removeDuplicates()
             .sink { [weak newPanel] visible in
                 newPanel?.acceptsKeyboardInput = RecorderKeyWindowPolicy.canBecomeKey(assistantVisible: visible)
+                newPanel?.assistantVisibilityChanged(visible)
             }
         windowController = NSWindowController(window: newPanel)
     }
