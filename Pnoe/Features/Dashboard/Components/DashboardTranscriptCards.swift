@@ -93,10 +93,11 @@ private struct DashboardTranscriptCardRow: View {
         }
         .contentShape(Rectangle())
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) {
+            Motion.animate(.hover) {
                 isHovering = hovering
             }
         }
+        .onDisappear { isHovering = false }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Transcript from \(metadataText)")
         .accessibilityValue(isExpanded ? copyText : previewText)

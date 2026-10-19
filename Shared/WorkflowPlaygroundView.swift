@@ -73,6 +73,7 @@ struct WorkflowPlaygroundView: View {
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
+            .motionHover(cornerRadius: 14)
             .keyboardShortcut(.escape, modifiers: [])
             .help("Close")
             .accessibilityLabel("Close")
@@ -81,6 +82,8 @@ struct WorkflowPlaygroundView: View {
         .padding(.vertical, 16)
         .overlay(Divider().opacity(0.5), alignment: .bottom)
     }
+
+    private var running: Bool { model.motionPhase == .running }
 
     // MARK: - Sample and result
 
@@ -114,6 +117,7 @@ struct WorkflowPlaygroundView: View {
                 }
                 column(title: "Result") {
                     resultBox
+                        .motion(.reveal, value: model.motionPhase)
                 }
             }
 
@@ -121,8 +125,13 @@ struct WorkflowPlaygroundView: View {
                 Button {
                     model.start()
                 } label: {
-                    Text("Run")
-                        .frame(minWidth: 52)
+                    HStack(spacing: 5) {
+                        // The button itself only plays and waits; a finish or a failure shows on the line below.
+                        Image(systemName: Motion.symbol(for: running ? .running : .idle, idle: "play.fill", running: "hourglass"))
+                            .motionJobSymbol(running ? .running : .idle)
+                        Text("Run")
+                    }
+                    .frame(minWidth: 52)
                 }
                 .keyboardShortcut(.return, modifiers: .command)
                 .buttonStyle(.borderedProminent)
@@ -151,6 +160,7 @@ struct WorkflowPlaygroundView: View {
             }
 
             verdict
+                .motion(.reveal, value: model.motionPhase)
         }
     }
 
@@ -198,6 +208,13 @@ struct WorkflowPlaygroundView: View {
             readOnlyBox("Running…", minHeight: 110, dimmed: true)
         case .failed(let message):
             readOnlyBox(message, minHeight: 110, color: .red)
+                .overlay(alignment: .topTrailing) {
+                    Image(systemName: Motion.symbol(for: .failed, idle: ""))
+                        .foregroundColor(.red)
+                        .motionWiggle(when: true)
+                        .padding(10)
+                }
+                .motionFade()
         case .idle:
             readOnlyBox("The result appears here.", minHeight: 110, dimmed: true)
         }
@@ -212,6 +229,7 @@ struct WorkflowPlaygroundView: View {
                     Label("The sample changed since this run. Run again to see its result.", systemImage: "arrow.clockwise")
                         .font(.callout)
                         .foregroundColor(.secondary)
+                        .motionFade()
                 }
                 if let skipped = finished.outcome.skippedReason {
                     Label(skipped, systemImage: "forward.end")
@@ -219,14 +237,26 @@ struct WorkflowPlaygroundView: View {
                         .foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else if let sentence = model.fallbackSentence {
-                    Label(sentence, systemImage: "arrow.uturn.backward.circle")
-                        .font(.callout)
-                        .foregroundColor(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Label {
+                        Text(sentence)
+                    } icon: {
+                        Image(systemName: "arrow.uturn.backward.circle")
+                            .motionWiggle(when: true)
+                    }
+                    .font(.callout)
+                    .foregroundColor(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .motionFade()
                 } else if finished.workflow.isCleanedText {
-                    Label("The result passed Pnoe's checks.", systemImage: "checkmark.circle")
-                        .font(.callout)
-                        .foregroundColor(.secondary)
+                    Label {
+                        Text("The result passed Pnoe's checks.")
+                    } icon: {
+                        Image(systemName: "checkmark.circle")
+                            .motionBounce(when: true)
+                    }
+                    .font(.callout)
+                    .foregroundColor(.secondary)
+                    .motionFade()
                 }
 
                 if let segments = model.rejectedDiff {
@@ -314,7 +344,7 @@ struct WorkflowPlaygroundView: View {
                 .foregroundColor(.secondary)
 
             if let notice = model.notice {
-                Text(notice).font(.caption).foregroundColor(.accentColor)
+                Text(notice).font(.caption).foregroundColor(.accentColor).motionFade()
             }
             if let loadError = model.loadError {
                 Label(loadError, systemImage: "exclamationmark.triangle")
@@ -339,8 +369,10 @@ struct WorkflowPlaygroundView: View {
                         exampleRow(example)
                     }
                 }
+                .motion(.reveal, value: model.examples.count)
             }
         }
+        .motion(.reveal, value: model.notice)
     }
 
     private func exampleRow(_ example: PlaygroundExample) -> some View {
@@ -370,6 +402,7 @@ struct WorkflowPlaygroundView: View {
                 Image(systemName: "trash")
             }
             .buttonStyle(.plain)
+            .motionHover(cornerRadius: 6)
             .foregroundColor(.secondary)
             .help("Delete this example")
             .accessibilityLabel("Delete example")
@@ -377,6 +410,7 @@ struct WorkflowPlaygroundView: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
+        .motionFade()
     }
 
     // MARK: - Pieces

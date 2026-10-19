@@ -41,14 +41,14 @@ struct OnboardingView: View {
                         onRecheck: coordinator.permissions.refreshPermissionStatuses,
                         onContinue: coordinator.flow.goToMicrophoneStep
                     )
-                    .transition(.opacity)
+                    .motionFade()
                 case .microphone:
                     OnboardingMicrophoneScreen(
                         contentMaxWidth: contentMaxWidth,
                         onBack: coordinator.flow.goToPermissionsStep,
                         onContinue: coordinator.flow.goToModelStep
                     )
-                    .transition(.opacity)
+                    .motionFade()
                 case .model:
                     OnboardingModelScreen(
                         contentMaxWidth: contentMaxWidth,
@@ -83,7 +83,7 @@ struct OnboardingView: View {
                             )
                         }
                     )
-                    .transition(.opacity)
+                    .motionFade()
                 case .api:
                     OnboardingAPIScreen(
                         aiService: aiService,
@@ -111,7 +111,7 @@ struct OnboardingView: View {
                             )
                         }
                     )
-                    .transition(.opacity)
+                    .motionFade()
                 case .experience:
                     OnboardingExperienceScreen(
                         step: coordinator.experienceStep,
@@ -142,7 +142,7 @@ struct OnboardingView: View {
                         },
                         onAppear: coordinator.flow.activateExperienceModeForDemo
                     )
-                    .transition(.opacity)
+                    .motionFade()
                 case .contextAwareness:
                     OnboardingContextAwarenessScreen(
                         contentMaxWidth: contentMaxWidth,
@@ -157,7 +157,7 @@ struct OnboardingView: View {
                             )
                         }
                     )
-                    .transition(.opacity)
+                    .motionFade()
                 case .trust:
                     OnboardingTrustScreen(
                         contentMaxWidth: contentMaxWidth,
@@ -175,7 +175,7 @@ struct OnboardingView: View {
                             }
                         }
                     )
-                    .transition(.opacity)
+                    .motionFade()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -209,7 +209,7 @@ struct OnboardingView: View {
                 .padding(.top, 20)
             }
         }
-        .animation(.easeInOut(duration: 0.22), value: coordinator.stage)
+        .motion(.screen, value: coordinator.stage)
         .onAppear {
             coordinator.flow.ensureDefaultOnboardingTranscriptionProvider()
             coordinator.flow.refreshTranscriptionSetupVerification()

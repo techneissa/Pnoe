@@ -110,7 +110,7 @@ struct WordReplacementView: View {
                     WordReplacementInfoPopover()
                 }
             }
-            .animation(.easeInOut(duration: 0.2), value: shouldShowAddButton)
+            .motion(.reveal, value: shouldShowAddButton)
 
             if !wordReplacements.isEmpty {
                 VStack(spacing: 0) {
@@ -392,18 +392,18 @@ struct ReplacementRow: View {
                         Image(systemName: "pencil.circle.fill")
                             .symbolRenderingMode(.hierarchical)
                             .foregroundStyle(AppTheme.Text.primary)
-                            .contentTransition(.symbolEffect(.replace))
                     }
                     .buttonStyle(.borderless)
+                    .motionHover(cornerRadius: 6)
                     .help("Edit replacement")
 
                     Button(action: onDelete) {
                         Image(systemName: "xmark.circle.fill")
                             .symbolRenderingMode(.hierarchical)
                             .foregroundStyle(AppTheme.Text.primary)
-                            .contentTransition(.symbolEffect(.replace))
                     }
                     .buttonStyle(.borderless)
+                    .motionHover(cornerRadius: 6)
                     .help("Remove replacement")
                 }
                 .focusEffectDisabled()

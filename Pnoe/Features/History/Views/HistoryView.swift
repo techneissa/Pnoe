@@ -8,7 +8,6 @@ struct HistoryView: View {
     }
 
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var searchText = ""
     @State private var detailTranscription: Transcription?
     @FocusState private var isSearchFocused: Bool
@@ -114,10 +113,10 @@ struct HistoryView: View {
                         detailTranscription = updated
                     }
                 )
-                .transition(.opacity)
+                .motionFade()
             }
         }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: detailTranscription?.id)
+        .motion(.screen, value: detailTranscription?.id)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea(.container, edges: .top)
         .sidePanel(

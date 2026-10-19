@@ -12,5 +12,6 @@ struct DashboardIconGlyph: View {
             .symbolRenderingMode(.monochrome)
             .foregroundStyle(color)
             .frame(width: frameSize, height: frameSize)
+            .motionSymbolReplace(value: systemName)
     }
 }

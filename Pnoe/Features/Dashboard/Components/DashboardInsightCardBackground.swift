@@ -52,7 +52,6 @@ struct DashboardInsightButtonStyle: ButtonStyle {
 
 private struct DashboardInsightButtonBody<Label: View>: View {
     @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovered = false
 
     let label: Label
@@ -92,6 +91,7 @@ private struct DashboardInsightButtonBody<Label: View>: View {
             .contentShape(Capsule())
             .opacity(opacity)
             .onHover { isHovered = $0 }
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: isHovered)
+            .onDisappear { isHovered = false }
+            .motion(.hover, value: isHovered)
     }
 }

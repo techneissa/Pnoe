@@ -40,7 +40,7 @@ struct AudioTranscribeView: View {
         }
         .onChange(of: transcriptionManager.lastCompletedItemId) { _, newId in
             if let newId {
-                withAnimation(.easeInOut(duration: 0.3)) {
+                Motion.animate(.disclosure) {
                     expandedItemId = newId
                 }
             }
@@ -63,7 +63,7 @@ struct AudioTranscribeView: View {
                             )
                             .foregroundColor(isDropTargeted ? AppTheme.Accent.primary : .gray.opacity(0.5))
                     )
-                    .animation(.easeInOut(duration: 0.15), value: isDropTargeted)
+                    .motion(.hover, value: isDropTargeted)
 
                 VStack(spacing: 14) {
                     Image(systemName: "arrow.down.doc")
@@ -110,12 +110,12 @@ struct AudioTranscribeView: View {
                             item: item,
                             isExpanded: expandedItemId == item.id,
                             onToggleExpand: {
-                                withAnimation(.easeInOut(duration: 0.2)) {
+                                Motion.animate(.disclosure) {
                                     expandedItemId = expandedItemId == item.id ? nil : item.id
                                 }
                             },
                             onRemove: {
-                                withAnimation(.easeInOut(duration: 0.2)) {
+                                Motion.animate(.reveal) {
                                     transcriptionManager.removeFromQueue(id: item.id)
                                     if expandedItemId == item.id { expandedItemId = nil }
                                 }
@@ -219,7 +219,7 @@ struct AudioTranscribeView: View {
             }
 
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
+                Motion.animate(.reveal) {
                     transcriptionManager.clearAll()
                     expandedItemId = nil
                 }
@@ -325,8 +325,8 @@ struct AudioTranscribeView: View {
                     .foregroundColor(AppTheme.Accent.primary)
             }
             .padding(16)
-            .transition(.opacity)
-            .animation(.easeInOut(duration: 0.15), value: isDropTargeted)
+            .motionFade()
+            .motion(.hover, value: isDropTargeted)
     }
 
     // MARK: - File Handling

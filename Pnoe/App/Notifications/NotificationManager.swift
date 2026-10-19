@@ -68,11 +68,9 @@ final class NotificationManager {
 
         self.notificationWindow = panel
 
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.3
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        Motion.animateWindow(.panel) { _ in
             panel.animator().alphaValue = 1
-        })
+        }
 
         // Schedule a new timer to dismiss the new notification.
         dismissTimer = Timer.scheduledTimer(
@@ -111,16 +109,11 @@ final class NotificationManager {
         dismissTimer?.invalidate()
         dismissTimer = nil
 
-        NSAnimationContext.runAnimationGroup(
-            { context in
-                context.duration = 0.2
-                context.timingFunction = CAMediaTimingFunction(name: .easeIn)
-                window.animator().alphaValue = 0
-            },
-            completionHandler: {
-                window.close()
-
-            })
+        Motion.animateWindow(.panel) { _ in
+            window.animator().alphaValue = 0
+        } completion: {
+            window.close()
+        }
     }
 
     private func dismissNotification(ifCurrent notificationID: UUID) {

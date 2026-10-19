@@ -129,7 +129,7 @@ struct AudioFileRow: View {
                 .font(.caption2.weight(.semibold))
                 .foregroundColor(.secondary)
                 .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                .animation(.easeInOut(duration: 0.2), value: isExpanded)
+                .motion(.disclosure, value: isExpanded)
         }
         .contentShape(Rectangle())
         .onTapGesture { onToggleExpand() }

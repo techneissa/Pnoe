@@ -41,7 +41,7 @@ private struct ModelSettingsTabBar: View {
         HStack(spacing: 10) {
             ForEach(ModelSettingsTab.allCases) { tab in
                 Button {
-                    withAnimation(.easeInOut(duration: 0.16)) {
+                    Motion.animate(.reveal) {
                         selection = tab
                     }
                 } label: {

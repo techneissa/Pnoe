@@ -31,6 +31,7 @@ struct AppIconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
+                .motionSymbolReplace(value: systemName)
                 .font(.system(size: iconSize, weight: .medium))
                 .foregroundColor(isDisabled ? .secondary.opacity(0.45) : .primary.opacity(0.7))
                 .frame(width: size, height: size)
@@ -40,6 +41,7 @@ struct AppIconButton: View {
         }
         .focusEffectDisabled()
         .buttonStyle(.plain)
+        .motionHover(cornerRadius: cornerRadius)
         .disabled(isDisabled)
         .help(help)
         .accessibilityLabel(help)
@@ -77,6 +79,7 @@ struct AppActionButton: View {
         }
         .focusEffectDisabled()
         .buttonStyle(AppActionButtonStyle(kind: kind))
+        .motionHover(cornerRadius: 9)
     }
 }
 

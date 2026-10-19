@@ -328,6 +328,46 @@ final class WorkflowPlaygroundModelTests: XCTestCase {
         XCTAssertEqual(model.finished?.outcome.output, "FAST ONE")
     }
 
+    func testTheRunMovesThroughTheMotionPhases() async throws {
+        let model = model { text, _, _ in
+            try await Task.sleep(nanoseconds: 200_000_000)
+            return PlaygroundOutcome(output: text, duration: 0.2)
+        }
+        XCTAssertEqual(model.motionPhase, .idle)
+        model.input = "hello there"
+        model.start()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(model.motionPhase, .running)
+        try await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertEqual(model.motionPhase, .finished)
+    }
+
+    func testAFallbackIsTheFailureStyleMoment() async {
+        let model = model { text, _, _ in
+            PlaygroundOutcome(output: text, duration: 0.3, fallbackReason: "new_words", rejectedText: "other words")
+        }
+        model.input = "hello there"
+        await model.run()
+        XCTAssertEqual(model.motionPhase, .failed)
+    }
+
+    func testAFailedRunIsTheFailureMoment() async {
+        struct Boom: LocalizedError { var errorDescription: String? { "No model is running." } }
+        let model = model { _, _, _ in throw Boom() }
+        model.input = "hello there"
+        await model.run()
+        XCTAssertEqual(model.motionPhase, .failed)
+    }
+
+    func testASkippedRunIsNeitherAFinishNorAFailure() async {
+        let model = model { text, _, _ in
+            PlaygroundOutcome(output: text, duration: 0, skippedReason: "Too short.")
+        }
+        model.input = "ok"
+        await model.run()
+        XCTAssertEqual(model.motionPhase, .idle)
+    }
+
     func testCancelReturnsToIdle() async throws {
         let model = model { text, _, _ in
             try await Task.sleep(nanoseconds: 2_000_000_000)

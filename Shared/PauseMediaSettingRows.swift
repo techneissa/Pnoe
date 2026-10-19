@@ -8,7 +8,17 @@ struct PauseMediaSettingRows: View {
     @ObservedObject var playbackController: PlaybackController
 
     var body: some View {
-        Toggle("Pause Media While Recording", isOn: $playbackController.isPauseMediaEnabled)
+        Toggle(isOn: $playbackController.isPauseMediaEnabled) {
+            Label {
+                Text("Pause Media While Recording")
+            } icon: {
+                Image(
+                    systemName: Motion.toggleSymbol(
+                        isOn: playbackController.isPauseMediaEnabled, on: "pause.circle.fill", off: "pause.circle")
+                )
+                .motionSymbolReplace(value: playbackController.isPauseMediaEnabled)
+            }
+        }
 
         Text("Does not start music you just paused. Needs the System Audio Recording permission.")
             .font(.caption)
@@ -16,15 +26,21 @@ struct PauseMediaSettingRows: View {
 
         if playbackController.needsPermission {
             HStack {
-                Text("Pausing media needs the System Audio Recording permission, so it was turned off.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Label {
+                    Text("Pausing media needs the System Audio Recording permission, so it was turned off.")
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle")
+                        .motionWiggle(when: true)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 Spacer()
                 Button("Open System Settings") {
                     NSWorkspace.shared.open(PlaybackController.permissionSettingsURL)
                 }
                 .controlSize(.small)
             }
+            .motionFade()
         }
     }
 }

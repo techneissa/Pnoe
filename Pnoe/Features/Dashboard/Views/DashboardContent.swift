@@ -36,7 +36,7 @@ struct DashboardContent: View {
     @State private var selectedInsightPeriod: DashboardInsightPeriod = .allTime
     @State private var isAccessibilityEnabled = AXIsProcessTrusted()
     @ObservedObject private var modeManager = ModeManager.shared
-    @State private var isSystemInfoCopied = false
+    @StateObject private var systemInfoHold = MotionHold()
     @State private var isEditingDisplayName = false
     @State private var displayNameDraft = ""
     @AppStorage("dashboardDisplayName") private var dashboardDisplayName: String = ""
@@ -603,18 +603,21 @@ struct DashboardContent: View {
         )
     }
 
+    private var isSystemInfoCopied: Bool { systemInfoHold.isHeld }
+
     private var footerActionsView: some View {
         HStack(alignment: .center, spacing: 12) {
             Button(action: copySystemInfo) {
                 footerActionLabel(
-                    icon: isSystemInfoCopied ? "checkmark" : "doc.on.doc",
+                    icon: Motion.copySymbol(copied: isSystemInfoCopied),
                     title: isSystemInfoCopied ? "Copied!" : "Copy System Info",
                     color: isSystemInfoCopied ? AppTheme.Sidebar.success : AppTheme.Sidebar.fallback
                 )
             }
             .buttonStyle(.plain)
             .fixedSize(horizontal: true, vertical: true)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSystemInfoCopied)
+            .motion(.copy, value: isSystemInfoCopied)
+            .onDisappear { systemInfoHold.cancel() }
         }
         .focusEffectDisabled()
     }
@@ -637,15 +640,7 @@ struct DashboardContent: View {
     private func copySystemInfo() {
         SystemInfoService.shared.copySystemInfoToClipboard()
 
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            isSystemInfoCopied = true
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                isSystemInfoCopied = false
-            }
-        }
+        systemInfoHold.hold()
     }
 
     private var displayNameBinding: Binding<String> {

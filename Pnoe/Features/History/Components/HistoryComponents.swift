@@ -147,6 +147,8 @@ struct HistoryTranscriptionRow: View {
                 }
         }
         .onHover { isHovered = $0 }
+        .onDisappear { isHovered = false }
+        .motion(.hover, value: isHovered)
     }
 
     @ViewBuilder
@@ -214,6 +216,7 @@ struct HistoryIconButton: View {
                 } else {
                     Image(systemName: systemName)
                         .font(.system(size: 12, weight: .medium))
+                        .motionSymbolReplace(value: systemName)
                 }
             }
             .foregroundStyle(AppTheme.Text.secondary)
@@ -222,6 +225,7 @@ struct HistoryIconButton: View {
         }
         .focusEffectDisabled()
         .buttonStyle(.plain)
+        .motionHover(cornerRadius: AppTheme.Radius.control, suppressed: isSelected)
         .help(help)
         .accessibilityLabel(help)
     }
@@ -279,6 +283,7 @@ struct HistoryCommandButton: View {
         }
         .focusEffectDisabled()
         .buttonStyle(.plain)
+        .motionHover(cornerRadius: AppTheme.Radius.control)
     }
 }
 

@@ -171,6 +171,7 @@ struct QuickPanelEscapeButton: View {
         }
         .focusEffectDisabled()
         .buttonStyle(.plain)
+        .motionHover(cornerRadius: 5)
         .help(help)
         .accessibilityLabel("Escape")
         .accessibilityHint(help)

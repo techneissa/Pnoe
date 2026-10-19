@@ -129,8 +129,10 @@ struct AutoLearnReviewPanel: View {
                             persist(draft, for: proposal)
                         }
                     )
+                    .motionFade()
                 }
             }
+            .motion(.reveal, value: proposals.map(\.id))
             .padding(16)
             .padding(.top, 68)
             .padding(.bottom, 58)
@@ -141,7 +143,12 @@ struct AutoLearnReviewPanel: View {
 
     private var emptyState: some View {
         ContentUnavailableView {
-            Label("No Corrections to Review", systemImage: "checkmark.circle")
+            Label {
+                Text("No Corrections to Review")
+            } icon: {
+                Image(systemName: "checkmark.circle")
+                    .motionBounce(when: true)
+            }
         } description: {
             Text(errorMessage ?? "New manual-review suggestions will appear here.")
         }
@@ -566,9 +573,11 @@ private struct AutoLearnReviewProposalRow: View {
                 .foregroundStyle(isSelected ? AppTheme.Text.primary : AppTheme.Text.muted)
                 .frame(width: 30, height: 26)
                 .background(QuickPanelButtonBackground(isSelected: isSelected))
+                .motion(.change, value: isSelected)
         }
         .focusEffectDisabled()
         .buttonStyle(.plain)
+        .motionHover(cornerRadius: AppTheme.Radius.control, suppressed: isSelected)
         .help(Text(title))
         .accessibilityLabel(title)
         .accessibilityValue(isSelected ? "Selected" : "Not selected")

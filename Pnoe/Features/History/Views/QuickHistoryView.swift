@@ -5,7 +5,6 @@ struct QuickHistoryView: View {
     let onPaste: (Transcription) -> Void
     let onDismiss: () -> Void
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var isSearchFocused: Bool
 
     private var hasSearchQuery: Bool {
@@ -88,7 +87,7 @@ struct QuickHistoryView: View {
             }
             .onChange(of: viewModel.keyboardSelectionID) { _, selectedID in
                 guard let selectedID else { return }
-                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.12)) {
+                Motion.animate(.hover) {
                     proxy.scrollTo(selectedID, anchor: .center)
                 }
             }
@@ -102,7 +101,7 @@ struct QuickHistoryView: View {
                 transcription: transcription,
                 isInfoPresented: $viewModel.isShowingInfo,
                 onBack: {
-                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
+                    Motion.animate(.reveal) {
                         viewModel.isShowingDetail = false
                     }
                 },
@@ -117,7 +116,7 @@ struct QuickHistoryView: View {
         HStack(spacing: 10) {
             HistoryCommandButton("Details", shortcut: "⌘↵") {
                 if viewModel.selectedTranscription != nil {
-                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
+                    Motion.animate(.reveal) {
                         viewModel.isShowingDetail = true
                     }
                 }

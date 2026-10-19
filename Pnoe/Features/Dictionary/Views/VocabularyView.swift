@@ -66,7 +66,7 @@ struct VocabularyView: View {
                     VocabularyInfoPopover()
                 }
             }
-            .animation(.easeInOut(duration: 0.2), value: shouldShowAddButton)
+            .motion(.reveal, value: shouldShowAddButton)
 
             if !vocabularyWords.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {

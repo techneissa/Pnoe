@@ -168,7 +168,8 @@ private struct ContextAwarenessModePill: View {
 }
 
 private struct ContextAwarenessModeHub: View {
-    @State private var borderRotation = Angle.degrees(0)
+    /// The border highlight sits at a fixed angle: nothing on this screen moves while it waits.
+    private let borderRotation = Angle.degrees(200)
 
     var body: some View {
         HStack(spacing: 8) {
@@ -216,10 +217,5 @@ private struct ContextAwarenessModeHub: View {
         )
         .shadow(color: AppTheme.Sidebar.modes.opacity(0.22), radius: 16, y: 8)
         .shadow(color: Color.white.opacity(0.18), radius: 7, y: -1)
-        .onAppear {
-            withAnimation(.linear(duration: 2.6).repeatForever(autoreverses: false)) {
-                borderRotation = .degrees(360)
-            }
-        }
     }
 }

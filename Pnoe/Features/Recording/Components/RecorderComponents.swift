@@ -243,7 +243,7 @@ struct AssistantPanelView: View {
 
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
         DispatchQueue.main.async {
-            withAnimation(.easeOut(duration: 0.18)) {
+            Motion.animate(.change) {
                 if let last = session.messages.last {
                     proxy.scrollTo(last.id, anchor: .bottom)
                 } else {

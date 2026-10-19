@@ -210,7 +210,7 @@ struct ModelManagementView: View {
         HStack(spacing: 12) {
             ForEach(ModelFilter.allCases, id: \.self) { filter in
                 Button(action: {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    Motion.animate(.change) {
                         selectedFilter = filter
                     }
                     activePanel = nil
@@ -319,7 +319,7 @@ struct ModelManagementView: View {
             Spacer()
 
             Button(action: {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                Motion.animate(.change) {
                     selectedFilter = .cloud
                 }
             }) {

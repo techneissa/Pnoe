@@ -30,6 +30,7 @@ struct WhisperModelCardView: View {
 
             // Action Controls
             actionSection
+                .motion(.reveal, value: isDownloaded)
         }
         .padding(16)
         .background(AppMaterialCardBackground())
@@ -114,7 +115,11 @@ struct WhisperModelCardView: View {
                     HStack(spacing: 4) {
                         Text(LocalizedStringKey(isDownloading ? "Cancel" : "Download"))
                             .font(.system(size: 12, weight: .medium))
-                        Image(systemName: isDownloading ? "xmark.circle" : "arrow.down.circle")
+                        Image(
+                            systemName: Motion.symbol(
+                                for: isDownloading ? .running : .idle, idle: "arrow.down.circle", running: "xmark.circle")
+                        )
+                        .motionJobSymbol(isDownloading ? .running : .idle)
                             .font(.system(size: 12, weight: .medium))
                     }
                     .foregroundColor(.white)
@@ -127,6 +132,7 @@ struct WhisperModelCardView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .motionHover(cornerRadius: 14)
             }
 
             if isDownloaded {
@@ -254,4 +260,5 @@ func modelStatusPill(_ text: LocalizedStringKey, systemImage: String) -> some Vi
         .padding(.vertical, 4)
         .background(AppTheme.Surface.card)
         .clipShape(Capsule())
+        .motionFade()
 }

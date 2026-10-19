@@ -392,7 +392,7 @@ struct RecorderRecordButton: View {
         }
         .frame(width: 21, height: 21)
         .contentShape(Circle())
-        .animation(.easeOut(duration: 0.16), value: visualState)
+        .motion(.change, value: visualState)
     }
 
     private var colors: StateColors {
@@ -423,11 +423,13 @@ struct RecorderRecordButton: View {
     private var stateMark: some View {
         switch visualState {
         case .ready, .recording:
-            RoundedRectangle(cornerRadius: 2.2, style: .continuous)
-                .fill(colors.mark)
+            Image(systemName: "stop.fill")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(colors.mark)
                 .frame(width: 8, height: 8)
+                .motionJobSymbol(visualState == .recording ? .running : .idle)
         case .processing:
-            ProcessingIndicator(color: colors.mark)
+            ProcessingIndicator(color: colors.mark, isActive: visualState == .processing)
         }
     }
 
@@ -477,21 +479,17 @@ struct RecorderCloseButton: View {
 
 // MARK: - Processing Indicator
 
+/// The ring that turns while a recording is processed. It turns only while `isActive`.
 struct ProcessingIndicator: View {
-    @State private var rotation: Double = 0
     let color: Color
+    let isActive: Bool
 
     var body: some View {
         Circle()
             .trim(from: 0.1, to: 0.9)
             .stroke(color, lineWidth: 1.5)
             .frame(width: 12, height: 12)
-            .rotationEffect(.degrees(rotation))
-            .onAppear {
-                withAnimation(.linear(duration: 1).repeatForever(autoreverses: false)) {
-                    rotation = 360
-                }
-            }
+            .motionSpin(isActive: isActive)
     }
 }
 
@@ -505,6 +503,7 @@ struct ProgressAnimation: View {
     private let dotSize: CGFloat = 3
     private let dotSpacing: CGFloat = 2
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var currentDot = 0
     @State private var timer: Timer?
 
@@ -522,6 +521,7 @@ struct ProgressAnimation: View {
             }
         }
         .onAppear { startAnimation() }
+        .onChange(of: reduceMotion) { _, _ in startAnimation() }
         .onDisappear {
             timer?.invalidate()
             timer = nil
@@ -531,6 +531,11 @@ struct ProgressAnimation: View {
     private func startAnimation() {
         timer?.invalidate()
         currentDot = 0
+        // The dots sweep only while a job runs, and rest half lit under Reduce Motion.
+        guard Motion.loopRuns(isActive: true, reduceMotion: reduceMotion) else {
+            currentDot = dotCount / 2
+            return
+        }
         timer = Timer.scheduledTimer(withTimeInterval: animationSpeed, repeats: true) { _ in
             currentDot = (currentDot + 1) % (dotCount + 2)
             if currentDot > dotCount { currentDot = -1 }
@@ -593,9 +598,9 @@ struct RecorderStatusDisplay: View {
     var body: some View {
         Group {
             if currentState == .enhancing {
-                ProcessingStatusDisplay(mode: .enhancing, color: palette.ink).transition(.opacity)
+                ProcessingStatusDisplay(mode: .enhancing, color: palette.ink).motionFade()
             } else if currentState == .transcribing {
-                ProcessingStatusDisplay(mode: .transcribing, color: palette.ink).transition(.opacity)
+                ProcessingStatusDisplay(mode: .transcribing, color: palette.ink).motionFade()
             } else if currentState == .recording {
                 AudioVisualizer(
                     levelHistoryProvider: levelHistoryProvider,
@@ -603,14 +608,14 @@ struct RecorderStatusDisplay: View {
                     display: levelDisplay
                 )
                     .scaleEffect(y: menuBarHeight != nil ? min(1.0, (menuBarHeight! - 8) / 25) : 1.0, anchor: .center)
-                    .transition(.opacity)
+                    .motionFade()
             } else {
                 StaticVisualizer(color: palette.ink)
                     .scaleEffect(y: menuBarHeight != nil ? min(1.0, (menuBarHeight! - 8) / 25) : 1.0, anchor: .center)
-                    .transition(.opacity)
+                    .motionFade()
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: currentState)
+        .motion(.change, value: currentState)
     }
 }
 

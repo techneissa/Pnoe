@@ -76,8 +76,10 @@ struct CircularCheckboxStyle: ToggleStyle {
                 .symbolRenderingMode(.hierarchical)
                 .foregroundColor(configuration.isOn ? AppTheme.Selection.foreground : .secondary)
                 .font(.system(size: 18))
+                .motionSymbolReplace(value: configuration.isOn)
         }
         .focusEffectDisabled()
         .buttonStyle(.plain)
+        .motionHover(cornerRadius: 10)
     }
 }
