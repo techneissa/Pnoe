@@ -450,6 +450,58 @@ final class MediaPausingTests: XCTestCase {
         XCTAssertEqual(meter.askedForOwn, [false])
     }
 
+    func testStartSoundOnButNoProbeIgnoresTheEarlierProof() async {
+        // The earlier proof is for start-sound-off. With the sound on, a pause without a probe that heard Pnoe's
+        // own sound falls back to the output flag, however recent the proof.
+        audio.processes = [music]
+        let controller = await makeController(levelCheck: true, heardSound: true, startSound: true)
+        meter.reading = .silent
+
+        let session = controller.beginRecordingSession()
+        await controller.pauseMedia(sessionID: session)
+
+        XCTAssertEqual(presses, 1)
+    }
+
+    func testAPlayerTheProbeDidNotListenToGetsANewLook() async {
+        // Music was playing at the probe; a browser player starts before the pause. The probe's silence was about
+        // the music only, so it does not vouch for the browser.
+        let browser = AudioProcess(pid: 400, objectID: 10, bundleID: "com.google.Chrome", isRunningOutput: true, isRunningInput: false)
+        audio.processes = [music]
+        meter.reading = .silent
+        meter.own = .sound
+        let controller = await makeController(levelCheck: true, startSound: true)
+        controller.beginLevelProbe()
+        try? await Task.sleep(for: .milliseconds(50))  // the probe has listened to the music by now
+        audio.processes = [music, browser]
+
+        let session = controller.beginRecordingSession()
+        await controller.pauseMedia(sessionID: session)
+
+        XCTAssertEqual(presses, 1)
+        XCTAssertEqual(meter.asked.count, 2)
+        XCTAssertEqual(meter.asked.last, [music, browser], "A new look at both players")
+        XCTAssertEqual(meter.askedForOwn, [true, false])
+    }
+
+    func testPlayersTheProbeListenedToKeepItsProof() async {
+        // The probe covered every player now playing, even though one stopped since: its proof holds.
+        let browser = AudioProcess(pid: 400, objectID: 10, bundleID: "com.google.Chrome", isRunningOutput: true, isRunningInput: false)
+        audio.processes = [music, browser]
+        meter.reading = .silent
+        meter.own = .sound
+        let controller = await makeController(levelCheck: true, startSound: true)
+        controller.beginLevelProbe()
+        try? await Task.sleep(for: .milliseconds(50))
+        audio.processes = [music]
+
+        let session = controller.beginRecordingSession()
+        await controller.pauseMedia(sessionID: session)
+
+        XCTAssertEqual(presses, 0)
+        XCTAssertEqual(meter.asked.count, 1)
+    }
+
     func testAStaleProbeIsIgnored() async {
         audio.processes = [music]
         meter.reading = .silent

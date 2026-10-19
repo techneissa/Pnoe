@@ -86,7 +86,12 @@ class PlaybackController: ObservableObject {
     private struct LevelProbe {
         let startedAt: TimeInterval
         let includesOwnSound: Bool
-        let task: Task<AudioLevelMeasurement?, Never>
+        let task: Task<ProbeResult, Never>
+    }
+    /// What a probe heard, and which players it listened to. `measurement` is `nil` when nothing was playing.
+    private struct ProbeResult {
+        let measurement: AudioLevelMeasurement?
+        let playerPIDs: Set<pid_t>
     }
     private var pendingProbe: LevelProbe?
 
@@ -212,8 +217,12 @@ class PlaybackController: ObservableObject {
             startedAt: clock(),
             includesOwnSound: includesOwnSound,
             task: Task { [weak self] in
-                guard let self, let players = await self.knownPlayersPlayingAlone() else { return nil }
-                return await self.measureWithDeadline(levelMeter, players, includingOwnSound: includesOwnSound)
+                guard let self, let players = await self.knownPlayersPlayingAlone() else {
+                    return ProbeResult(measurement: nil, playerPIDs: [])
+                }
+                let measurement = await self.measureWithDeadline(
+                    levelMeter, players, includingOwnSound: includesOwnSound)
+                return ProbeResult(measurement: measurement, playerPIDs: Set(players.map(\.pid)))
             }
         )
     }
@@ -228,15 +237,20 @@ class PlaybackController: ObservableObject {
         var ownSoundExpected = false
         if let probe = pendingProbe, clock() - probe.startedAt < probeFreshness {
             pendingProbe = nil
-            measurement = await probe.task.value
-            ownSoundExpected = probe.includesOwnSound
+            let result = await probe.task.value
+            // The probe vouches only for the players it listened to; a player it did not hear needs a new look.
+            if Set(players.map(\.pid)).isSubset(of: result.playerPIDs) {
+                measurement = result.measurement
+                ownSoundExpected = probe.includesOwnSound
+            }
         } else {
             pendingProbe?.task.cancel()
             pendingProbe = nil
         }
         if measurement == nil {
-            // No listening session overlapped the start sound (nothing was playing when it started, or no sound
-            // was played), so only the earlier proof can vouch for the tap.
+            // No listening session overlapped the start sound for these players (nothing was playing when it
+            // started, no sound was played, or another player started since), so Pnoe's own sound cannot vouch for
+            // the tap.
             measurement = await measureWithDeadline(levelMeter, players, includingOwnSound: false)
             ownSoundExpected = false
         }
@@ -265,6 +279,9 @@ class PlaybackController: ObservableObject {
                 return true
             }
         }
+        // Pnoe's own start sound is on but was not heard in a session of its own for these players: only a session
+        // that heard it may prove the tap, so the output flag decides. The earlier proof is for start-sound-off.
+        if isStartSoundOn() { return true }
         return !hasHeardSound
     }
 
