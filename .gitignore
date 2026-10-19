@@ -112,3 +112,6 @@ GEMINI.md
 .claude/
 .cursor/
 .codex/
+
+# Formatter eval results (JSON and markdown per run)
+Packages/PnoeFormatter/Eval/results/
