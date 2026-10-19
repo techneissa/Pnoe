@@ -160,7 +160,7 @@ final class SystemInfoService {
 
     private func getModeConfigurationInfo(for mode: ModeConfig?) -> String {
         guard let mode else {
-            return "No enabled mode"
+            return "No enabled workflow"
         }
 
         let model = mode.selectedTranscriptionModelName.flatMap { modelName in

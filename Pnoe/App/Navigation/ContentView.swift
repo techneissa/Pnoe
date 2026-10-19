@@ -3,7 +3,7 @@ import SwiftUI
 
 enum ViewType: String, CaseIterable, Identifiable {
     case dashboard = "Dashboard"
-    case modes = "Modes"
+    case modes = "Workflows"
     case models = "AI Models"
     case transcribeAudio = "Transcribe Audio"
     case history = "History"

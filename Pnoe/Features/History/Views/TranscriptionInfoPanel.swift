@@ -112,7 +112,7 @@ struct TranscriptionInfoPanel: View {
                 if let modeName = transcription.modeName {
                     TranscriptionMetadataRow(
                         icon: "bolt.fill",
-                        label: "Mode",
+                        label: "Workflow",
                         value: modeName
                     )
                 }

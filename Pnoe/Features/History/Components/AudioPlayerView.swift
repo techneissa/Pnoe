@@ -510,7 +510,7 @@ struct AudioPlayerView: View {
         }
         .buttonStyle(.plain)
         .opacity(selectedMode == nil ? 0.4 : 1.0)
-        .help(selectedMode.map { "Mode: \($0.name)" } ?? "Select mode")
+        .help(selectedMode.map { "Workflow: \($0.name)" } ?? "Select workflow")
         .popover(isPresented: $showModePopover, arrowEdge: .bottom) {
             ModePopover(selectedModeId: selectedMode?.id) { mode in
                 selectMode(mode)
@@ -636,7 +636,7 @@ struct AudioPlayerView: View {
 
     private func retranscribeAudio() {
         guard let selectedMode else {
-            showErrorNotification(String(localized: "No mode selected"))
+            showErrorNotification(String(localized: "No workflow selected"))
             return
         }
 

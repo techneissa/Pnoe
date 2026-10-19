@@ -76,20 +76,20 @@ enum ShortcutAction: Hashable {
             return String(localized: "Quick Add to Dictionary")
         case .mode(let id):
             if let config = ModeManager.shared.getConfiguration(with: id) {
-                return String(format: String(localized: "%@ Mode"), config.name)
+                return String(format: String(localized: "%@ Workflow"), config.name)
             }
 
             if let template = StarterModeCatalog.templates.first(where: { $0.id == id }) {
-                return String(format: String(localized: "%@ Mode"), template.name)
+                return String(format: String(localized: "%@ Workflow"), template.name)
             }
 
-            return String(localized: "Mode")
+            return String(localized: "Workflow")
         case .recorderPanelEscape:
             return String(localized: "Recorder Cancel")
         case .recorderPanelReturn:
             return String(localized: "Auto Send")
         case .recorderPanelMode(let index):
-            return String(format: String(localized: "Select Mode %@"), Self.displayNumber(forRecorderPanelIndex: index))
+            return String(format: String(localized: "Select Workflow %@"), Self.displayNumber(forRecorderPanelIndex: index))
         }
     }
 

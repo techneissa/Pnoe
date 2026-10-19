@@ -49,7 +49,7 @@ private struct OnboardingContextAwarenessContent: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     Text(
-                        "Pnoe automatically understands what you are working with and selects your preferred setup. You can always configure this by editing or creating new modes."
+                        "Pnoe automatically understands what you are working with and selects your preferred setup. You can always configure this by editing or creating new workflows."
                     )
                     .font(.system(size: 15))
                     .foregroundColor(AppTheme.Text.secondary)
@@ -75,7 +75,7 @@ private struct OnboardingContextAwarenessContent: View {
     }
 
     private var optionSwitchingText: some View {
-        Text("Note: Press Option 1-9 during recording to switch modes manually.")
+        Text("Note: Press Option 1-9 during recording to switch workflows manually.")
             .font(.system(size: 13, weight: .medium))
             .foregroundColor(AppTheme.Text.secondary)
             .multilineTextAlignment(.center)
@@ -90,7 +90,7 @@ private struct ContextAwarenessCenterSlot: View {
             .frame(height: 250)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(
-                "Pnoe modes include Dictation, Enhance, Email, Assistant, Rewrite, Ask, Summarize, and Translate.")
+                "Pnoe workflows include Dictation, Enhance, Email, Assistant, Rewrite, Ask, Summarize, and Translate.")
     }
 }
 
@@ -177,7 +177,7 @@ private struct ContextAwarenessModeHub: View {
                 .foregroundColor(AppTheme.Text.secondary)
                 .frame(width: 18)
 
-            Text("Pnoe Modes")
+            Text("Pnoe Workflows")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(AppTheme.Text.primary)
                 .lineLimit(1)

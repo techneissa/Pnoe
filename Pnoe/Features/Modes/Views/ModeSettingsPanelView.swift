@@ -13,7 +13,7 @@ struct ModeSettingsPanelView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                Text("Modes Settings")
+                Text("Workflows Settings")
                     .font(.headline)
                     .fontWeight(.semibold)
                     .foregroundColor(.primary)
@@ -36,7 +36,7 @@ struct ModeSettingsPanelView: View {
             .overlay(Divider().opacity(0.5), alignment: .bottom)
 
             HStack {
-                Text("Reorder Modes")
+                Text("Reorder Workflows")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
                     + Text(" (drag to reorder)")

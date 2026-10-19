@@ -48,18 +48,16 @@ struct DictionarySettingsPanel: View {
                             )
                         }
 
-                        Toggle(isOn: $usesAIReview) {
-                            HStack(spacing: 4) {
-                                Text("Review with AI")
-                                InfoTip(
-                                    "Off by default. When on, a correction that reached the count above is sent to your AI provider, which decides whether to save it. Without it, Pnoe saves the correction as it is."
-                                )
-                            }
-                        }
-                        .onChange(of: usesAIReview) { _, _ in
-                            Task {
-                                await AutoLearnService.shared.reviewScheduleDidChange()
-                            }
+                        HStack(spacing: 4) {
+                            Toggle("Review with AI", isOn: $usesAIReview)
+                                .onChange(of: usesAIReview) { _, _ in
+                                    Task {
+                                        await AutoLearnService.shared.reviewScheduleDidChange()
+                                    }
+                                }
+                            InfoTip(
+                                "Off by default. When on, a correction that reached the count above is sent to your AI provider, which decides whether to save it. Without it, Pnoe saves the correction as it is."
+                            )
                         }
 
                         // Corrections queued before the count existed still need these controls.

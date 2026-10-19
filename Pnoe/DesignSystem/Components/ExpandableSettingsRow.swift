@@ -49,14 +49,16 @@ struct ExpandableSettingsRow<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
+            HStack(spacing: 4) {
                 if let isEnabled = isEnabled {
                     Toggle(isOn: isEnabled) {
-                        labelView
+                        Text(label)
                     }
                 } else {
-                    labelView
+                    Text(label)
                 }
+
+                infoTip
 
                 Spacer()
 
@@ -101,15 +103,13 @@ struct ExpandableSettingsRow<Content: View>: View {
         }
     }
 
-    private var labelView: some View {
-        HStack(spacing: 4) {
-            Text(label)
-            if let infoMessage = infoMessage {
-                if let infoURL = infoURL {
-                    InfoTip(infoMessage, learnMoreURL: infoURL)
-                } else {
-                    InfoTip(infoMessage)
-                }
+    /// Beside the label and toggle rather than inside them, so tapping it never flips the switch.
+    @ViewBuilder private var infoTip: some View {
+        if let infoMessage = infoMessage {
+            if let infoURL = infoURL {
+                InfoTip(infoMessage, learnMoreURL: infoURL)
+            } else {
+                InfoTip(infoMessage)
             }
         }
     }

@@ -61,7 +61,8 @@ struct ModeView: View {
     @State private var panelID = UUID()
 
     private enum PanelType {
-        case configuration(ConfigurationMode)
+        case templatePicker
+        case configuration(ConfigurationMode, StarterModeTemplate?)
         case settings
     }
 
@@ -79,16 +80,16 @@ struct ModeView: View {
     private var addModeButton: some View {
         AppIconButton(
             systemName: "plus.circle.fill",
-            help: "Add a new mode"
+            help: "Add a new workflow"
         ) {
-            openPanel(mode: .add)
+            openTemplatePicker()
         }
     }
 
     private var settingsButton: some View {
         AppIconButton(
             systemName: "gearshape.fill",
-            help: "Modes Settings"
+            help: "Workflows Settings"
         ) {
             openSettingsPanel()
         }
@@ -97,8 +98,8 @@ struct ModeView: View {
     var body: some View {
         VStack(spacing: 0) {
             AppScreenHeader(
-                title: "Modes",
-                infoMessage: "Modes help you set up Pnoe for different writing tasks, workflows, and scenarios."
+                title: "Workflows",
+                infoMessage: "A workflow sets how Pnoe transcribes, enhances and delivers your speech for a task or app."
             ) {
                 headerControls
             }
@@ -118,17 +119,14 @@ struct ModeView: View {
                                             .foregroundColor(.secondary.opacity(0.6))
 
                                         VStack(spacing: 8) {
-                                            Text("Create your first mode")
+                                            Text("Create your first workflow")
                                                 .font(.system(size: 20, weight: .medium))
                                                 .foregroundColor(.primary)
 
-                                            Text(
-                                                "Set how Pnoe transcribes and formats your speech, then start dictating in any app."
-                                            )
-                                            .font(.system(size: 14))
-                                            .foregroundColor(.secondary)
-                                            .multilineTextAlignment(.center)
-                                            .lineSpacing(2)
+                                            Button("Choose a template") {
+                                                openTemplatePicker()
+                                            }
+                                            .buttonStyle(.link)
                                         }
                                     }
 
@@ -164,8 +162,17 @@ struct ModeView: View {
             ), dismissOnExitCommand: false
         ) {
             switch activePanel {
-            case .configuration(let mode)?:
-                ModeConfigEditorView(mode: mode, modeManager: modeManager, onDismiss: closePanel)
+            case .templatePicker?:
+                WorkflowTemplatePickerView(
+                    options: StarterModeCatalog.templates.map(\.pickerOption),
+                    onSelect: { option in
+                        let template = StarterModeCatalog.templates.first { $0.id == option?.id }
+                        openPanel(mode: .add, template: template)
+                    },
+                    onDismiss: closePanel
+                )
+            case .configuration(let mode, let template)?:
+                ModeConfigEditorView(mode: mode, modeManager: modeManager, template: template, onDismiss: closePanel)
                     .environmentObject(modeWarmupStore)
                     .id(panelID)
             case .settings?:
@@ -183,9 +190,13 @@ struct ModeView: View {
         }
     }
 
-    private func openPanel(mode: ConfigurationMode) {
+    private func openPanel(mode: ConfigurationMode, template: StarterModeTemplate? = nil) {
         panelID = UUID()
-        activePanel = .configuration(mode)
+        activePanel = .configuration(mode, template)
+    }
+
+    private func openTemplatePicker() {
+        activePanel = .templatePicker
     }
 
     private func closePanel() {
