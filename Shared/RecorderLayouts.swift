@@ -12,7 +12,8 @@ struct MiniRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
     let placement: MiniRecorderPlacement
     let hasAssistantResponse: Bool
     let showsCloseButton: Bool
-    let audioMeterProvider: () -> AudioMeter
+    let levelHistoryProvider: () -> LevelHistory
+    let levelDisplay: RecorderLevelDisplay
     let onRecordButtonTapped: () -> Void
     let onCloseTapped: () -> Void
     let modeButton: ModeButton
@@ -50,7 +51,8 @@ struct MiniRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
 
             RecorderStatusDisplay(
                 currentState: recordingState,
-                audioMeterProvider: audioMeterProvider
+                levelHistoryProvider: levelHistoryProvider,
+                levelDisplay: levelDisplay
             )
 
             Spacer(minLength: 0)
@@ -123,7 +125,8 @@ struct NotchRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
     let showsCloseButton: Bool
     let notchWidth: CGFloat
     let notchHeight: CGFloat
-    let audioMeterProvider: () -> AudioMeter
+    let levelHistoryProvider: () -> LevelHistory
+    let levelDisplay: RecorderLevelDisplay
     let onRecordButtonTapped: () -> Void
     let onCloseTapped: () -> Void
     let modeButton: ModeButton
@@ -272,7 +275,8 @@ struct NotchRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
                 Spacer(minLength: 0)
                 RecorderStatusDisplay(
                     currentState: recordingState,
-                    audioMeterProvider: audioMeterProvider,
+                    levelHistoryProvider: levelHistoryProvider,
+                    levelDisplay: levelDisplay,
                     menuBarHeight: notchHeight
                 )
             }

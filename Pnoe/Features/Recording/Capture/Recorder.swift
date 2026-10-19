@@ -20,9 +20,9 @@ class Recorder: NSObject, ObservableObject {
     private var mediaPauseTask: Task<Void, Never>?
     private var audioRestorationTask: Task<Void, Never>?
     private var playbackSessionID: UUID?
-    private let smoothedValuesLock = NSLock()
-    private var smoothedAverage: Float = 0
-    private var smoothedPeak: Float = 0
+    private var levelHistory = LevelHistory()
+    private var smoothedLevel: Float = 0
+    private var levelSamplingTimer: Timer?
 
     /// Audio chunk callback for streaming. Can be updated while recording;
     /// changes are forwarded to the live CoreAudioRecorder.
@@ -93,7 +93,7 @@ class Recorder: NSObject, ObservableObject {
             deviceManager.recordingDidStart(deviceID: deviceID)
             showRecordingDeviceNotification(for: deviceID, resolution: resolution)
             UserDefaults.standard.set(String(deviceID), forKey: "lastUsedMicrophoneDeviceID")
-            resetAudioMeter()
+            startLevelSampling()
         } catch {
             logger.error(
                 "Failed to start recording deviceID=\(deviceID, privacy: .public) file=\(url.lastPathComponent, privacy: .public) error=\(error, privacy: .public)"
@@ -188,55 +188,37 @@ class Recorder: NSObject, ObservableObject {
         }
     }
 
-    func audioMeterSnapshot() -> AudioMeter {
-        guard let recorder else {
-            return AudioMeter(averagePower: 0, peakPower: 0)
+    /// The recent input levels, oldest first, for the recorder's level display.
+    func levelHistorySnapshot() -> LevelHistory {
+        levelHistory
+    }
+
+    /// Takes a level every 1/30 s while recording. The audio thread already stores its decibel
+    /// reading in an atomic; this only reads it, so the real-time path does nothing new.
+    private func startLevelSampling() {
+        resetAudioMeter()
+        levelSamplingTimer?.invalidate()
+        let timer = Timer(timeInterval: 1 / RecorderLevelMetrics.samplesPerSecond, repeats: true) { [weak self] timer in
+            MainActor.assumeIsolated {
+                if let self { self.sampleLevel() } else { timer.invalidate() }
+            }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        levelSamplingTimer = timer
+    }
 
-        // Sample audio levels (thread-safe read)
-        let averagePower = recorder.averagePower
-        let peakPower = recorder.peakPower
-
-        // Normalize values
-        let minVisibleDb: Float = -60.0
-        let maxVisibleDb: Float = 0.0
-
-        let normalizedAverage: Float
-        if averagePower < minVisibleDb {
-            normalizedAverage = 0.0
-        } else if averagePower >= maxVisibleDb {
-            normalizedAverage = 1.0
-        } else {
-            normalizedAverage = (averagePower - minVisibleDb) / (maxVisibleDb - minVisibleDb)
-        }
-
-        let normalizedPeak: Float
-        if peakPower < minVisibleDb {
-            normalizedPeak = 0.0
-        } else if peakPower >= maxVisibleDb {
-            normalizedPeak = 1.0
-        } else {
-            normalizedPeak = (peakPower - minVisibleDb) / (maxVisibleDb - minVisibleDb)
-        }
-
-        // Apply EMA smoothing with thread-safe access
-        smoothedValuesLock.lock()
-        smoothedAverage = smoothedAverage * 0.6 + normalizedAverage * 0.4
-        smoothedPeak = smoothedPeak * 0.6 + normalizedPeak * 0.4
-        let audioMeter = AudioMeter(
-            averagePower: Double(smoothedAverage),
-            peakPower: Double(smoothedPeak)
-        )
-        smoothedValuesLock.unlock()
-
-        return audioMeter
+    private func sampleLevel() {
+        guard let recorder else { return }
+        let level = LevelMapping.level(fromDecibels: recorder.averagePower)
+        smoothedLevel = LevelMapping.smoothed(previous: smoothedLevel, next: level)
+        levelHistory.append(smoothedLevel)
     }
 
     private func resetAudioMeter() {
-        smoothedValuesLock.lock()
-        smoothedAverage = 0
-        smoothedPeak = 0
-        smoothedValuesLock.unlock()
+        levelSamplingTimer?.invalidate()
+        levelSamplingTimer = nil
+        smoothedLevel = 0
+        levelHistory.removeAll()
     }
 
     // MARK: - Cleanup

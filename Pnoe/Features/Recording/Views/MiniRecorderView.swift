@@ -10,6 +10,7 @@ struct MiniRecorderView<S: RecorderStateProvider & ObservableObject>: View {
     @AppStorage(RecorderDisplaySettingsKeys.showLiveTranscript) private var showLiveTranscript = true
     @AppStorage(RecorderDisplaySettingsKeys.liveTranscriptSize) private var liveTranscriptSizeRaw = LiveTranscriptSize.medium.rawValue
     @AppStorage(RecorderDisplaySettingsKeys.theme) private var themeRaw = RecorderTheme.dark.rawValue
+    @AppStorage(RecorderDisplaySettingsKeys.levelDisplay) private var levelDisplayRaw = RecorderLevelDisplay.bars.rawValue
     @AppStorage(RecorderDisplaySettingsKeys.miniPlacement) private var placementRaw = MiniRecorderPlacement.bottom.rawValue
 
     private var shouldShowCloseButton: Bool {
@@ -35,7 +36,8 @@ struct MiniRecorderView<S: RecorderStateProvider & ObservableObject>: View {
             placement: MiniRecorderPlacement(rawValue: placementRaw) ?? .bottom,
             hasAssistantResponse: assistantSession.isVisible,
             showsCloseButton: shouldShowCloseButton,
-            audioMeterProvider: recorder.audioMeterSnapshot,
+            levelHistoryProvider: recorder.levelHistorySnapshot,
+            levelDisplay: RecorderLevelDisplay(rawValue: levelDisplayRaw) ?? .bars,
             onRecordButtonTapped: onRecordButtonTapped,
             onCloseTapped: onCloseTapped,
             modeButton: RecorderModeButton(buttonSize: 22, padding: EdgeInsets()),
