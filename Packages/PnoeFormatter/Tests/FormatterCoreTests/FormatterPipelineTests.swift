@@ -169,7 +169,7 @@ struct FormatterPipelineTests {
         #expect(r.outcome.reason == row.reason)
         // The paste is the code-cleaned take with spoken forms written out, a capital and a final period, never model text.
         let protected = TokenProtector.protect(FillerCleaner.clean(row.raw, context: row.context))
-        let expected = protected.restore(FallbackCleanup.apply(protected.text, context: row.context))
+        let expected = FallbackCleanup.apply(protected, context: row.context)
         #expect(r.outcome.text == expected)
         #expect(r.outcome.text.first?.isUppercase == true || r.outcome.text.first?.isNumber == true || !(r.outcome.text.first?.isLetter ?? true))
     }

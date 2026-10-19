@@ -14,8 +14,9 @@ struct GuardedCleanup {
         let fallbackReason: String?
         /// The system turn that was sent, for the history record.
         let systemPrompt: String
-        /// The model's own text when a check rejected it, so the Playground can show what was refused.
-        /// Nil when the model gave no text (an error, a timeout) or its text was used.
+        /// The model's own text when the pipeline did not use it, so the Playground can show what was refused.
+        /// Nil when the model's text was used or it gave none. A reply that arrives after a timeout can still
+        /// be captured, so the fallback reason may be a timeout or an error.
         var rejectedText: String? = nil
     }
 
@@ -50,8 +51,10 @@ struct GuardedCleanup {
         let result = await GuardedCleanup(runtime: capture, spec: spec)
             .cleanProtected(snippets.text, vocabulary: vocabulary + snippets.terms)
         let generated = await capture.lastText
+        var fallbackText = result.text
+        if result.fallbackReason != nil { fallbackText = snippets.withoutAddedPeriod(fallbackText, original: snippets.text) }
         return Result(
-            text: snippets.restore(result.text),
+            text: snippets.restore(fallbackText),
             fallbackReason: result.fallbackReason,
             systemPrompt: result.systemPrompt,
             rejectedText: result.fallbackReason == nil ? nil : generated.map(snippets.restore))
@@ -65,7 +68,7 @@ struct GuardedCleanup {
         guard let pipeline = try? FormatterPipeline.bundled(runtime: runtime, configuration: configuration) else {
             // No pipeline to run: the same code-only cleanup the pipeline gives a rejected take.
             return Result(
-                text: FallbackCleanup.clean(text, context: .plain),
+                text: FallbackCleanup.clean(text, context: .plain, vocabulary: vocabulary),
                 fallbackReason: FallbackReason.runtimeError.rawValue, systemPrompt: "")
         }
         let prefix = pipeline.prefix
@@ -135,6 +138,19 @@ struct SnippetKeeper {
         text = result
         terms = stand
         placeholders = found
+    }
+
+    /// A fallback that ends in a snippet's stand-in followed by a period the cleanup added gets the period
+    /// taken off again: an expansion such as an email address should paste as it is. A period the speaker's
+    /// text already had after the stand-in stays.
+    func withoutAddedPeriod(_ output: String, original: String) -> String {
+        guard output.hasSuffix(".") else { return output }
+        let body = String(output.dropLast())
+        for index in placeholders.indices {
+            let word = Self.word(for: index)
+            if body.hasSuffix(word), !original.hasSuffix(word + ".") { return body }
+        }
+        return output
     }
 
     func restore(_ output: String) -> String {

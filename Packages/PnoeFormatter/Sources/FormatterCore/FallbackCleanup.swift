@@ -5,10 +5,36 @@ import Foundation
 /// Nothing else changes, so the speaker's words stay as they were said.
 public enum FallbackCleanup {
     private static let sentenceEnds: Set<Character> = [".", "?", "!", "…"]
+    /// A take that ends in one of these pastes as it is: a period after `/etc/app.toml` would belong to the path.
+    private static let noPeriodAfter: Set<ProtectedSpan.Kind> = [.url, .email, .path, .fileName, .identifier]
 
-    /// Capitalizes the first letter and "I", and adds a period when the take does not end in `.`, `?`, `!`
-    /// or `…`. Chat takes get no final period, like short chat takes in `SkipRule`.
+    /// The fallback for a take whose exact spans are already swapped for markers: capital, "I" and final
+    /// period on the marker text, then the spans written back. A take ending in a path, URL, email, file name or
+    /// identifier gets no period; one ending in a number does.
+    public static func apply(_ protected: ProtectedText, context: FormatterContext) -> String {
+        var endsInExactSpan = false
+        if let last = Tokenizer.tokenize(protected.text).last,
+            last.core.hasPrefix(String(TokenProtector.open)),
+            let match = TokenProtector.markerMatches(in: last.core).first,
+            let span = protected.spans.first(where: { $0.id == match.id })
+        {
+            endsInExactSpan = noPeriodAfter.contains(span.kind)
+        }
+        return protected.restore(render(protected.text, context: context, addPeriod: !endsInExactSpan))
+    }
+
+    /// For text with no spans to protect (or a caller that has none): same cleanup, always with a period.
     public static func apply(_ text: String, context: FormatterContext) -> String {
+        render(text, context: context, addPeriod: true)
+    }
+
+    /// The whole fallback for a raw take: filler cleanup, protect, then `apply`. For a caller that has no pipeline.
+    public static func clean(_ text: String, context: FormatterContext, vocabulary: [String] = []) -> String {
+        let cleaned = FillerCleaner.clean(text, context: context)
+        return apply(TokenProtector.protect(cleaned, vocabulary: vocabulary), context: context)
+    }
+
+    private static func render(_ text: String, context: FormatterContext, addPeriod: Bool) -> String {
         var tokens = Tokenizer.tokenize(text)
         guard !tokens.isEmpty else { return "" }
         for index in tokens.indices {
@@ -17,17 +43,15 @@ public enum FallbackCleanup {
                 tokens[index].core = "I" + tokens[index].core.dropFirst()
             }
         }
-        if let firstLetter = tokens[0].core.firstIndex(where: \.isLetter), firstLetter == tokens[0].core.startIndex {
+        // A first word with a capital inside it (iPhone, macOS, eBay) keeps its spelling.
+        if let firstLetter = tokens[0].core.firstIndex(where: \.isLetter), firstLetter == tokens[0].core.startIndex,
+            !tokens[0].core.dropFirst().contains(where: \.isUppercase)
+        {
             tokens[0].core = tokens[0].core.prefix(1).uppercased() + tokens[0].core.dropFirst()
         }
-        if context != .chat, let last = tokens.last, !last.trail.contains(where: { sentenceEnds.contains($0) }) {
+        if addPeriod, context != .chat, let last = tokens.last, !last.trail.contains(where: { sentenceEnds.contains($0) }) {
             tokens[tokens.count - 1].trail += "."
         }
         return Tokenizer.render(tokens)
-    }
-
-    /// The whole fallback for a raw take: filler cleanup, then `apply`. For a caller that has no pipeline.
-    public static func clean(_ text: String, context: FormatterContext) -> String {
-        apply(FillerCleaner.clean(text, context: context), context: context)
     }
 }

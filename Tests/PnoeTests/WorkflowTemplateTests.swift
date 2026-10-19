@@ -179,6 +179,33 @@ final class CleanedTextGuardTests: XCTestCase {
         XCTAssertEqual(prepared.finish(enhanced: result.text), "Send it to alex@example.com please thanks.")
     }
 
+    func testASnippetAtTheStartOrEndOfAFallbackIsRestoredAndGetsNoPeriod() async {
+        let rules = [SnippetRule(trigger: "my email", expansion: "alex@example.com")]
+        let cleanup = GuardedCleanup(runtime: FakeRuntime(throwing: .crashed), spec: spec)
+
+        let atEnd = SnippetProcessor.prepare("please send the signed file to my email", rules: rules, applyingReplacements: { $0 })
+        let endResult = await cleanup.clean(atEnd.textForEnhancement)
+        XCTAssertEqual(atEnd.finish(enhanced: endResult.text), "Please send the signed file to alex@example.com")
+
+        let atStart = SnippetProcessor.prepare("my email is where the signed file should go", rules: rules, applyingReplacements: { $0 })
+        let startResult = await cleanup.clean(atStart.textForEnhancement)
+        XCTAssertEqual(atStart.finish(enhanced: startResult.text), "alex@example.com is where the signed file should go.")
+    }
+
+    func testAFallbackThatEndsInAPathHasNoPeriodAndOneEndingInANumberHasIt() async {
+        let cleanup = GuardedCleanup(runtime: FakeRuntime(throwing: .crashed), spec: spec)
+        let path = await cleanup.clean("um please open the file at /etc/pnoe/config.toml")
+        XCTAssertEqual(path.text, "Please open the file at /etc/pnoe/config.toml")
+        let number = await cleanup.clean("um let us all meet in the lobby at 3")
+        XCTAssertEqual(number.text, "Let us all meet in the lobby at 3.")
+    }
+
+    func testAFallbackKeepsAFirstWordWithACapitalInside() async {
+        let cleanup = GuardedCleanup(runtime: FakeRuntime(throwing: .crashed), spec: spec)
+        let result = await cleanup.clean("um iPhone battery is dying again")
+        XCTAssertEqual(result.text, "iPhone battery is dying again.")
+    }
+
     func testSeveralSnippetsKeepTheirOwnExpansion() async {
         let prepared = SnippetProcessor.prepare(
             "email me at my email or call my number when you can please",
