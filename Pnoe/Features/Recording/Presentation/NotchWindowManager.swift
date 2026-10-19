@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import os
 
@@ -7,6 +8,8 @@ class NotchWindowManager {
     private var windowController: NSWindowController?
     private var panel: NotchRecorderPanel?
 
+    private let assistantSession: AssistantSession
+    private var assistantCancellable: AnyCancellable?
     private let makeView: () -> AnyView
     private let logger = Logger(subsystem: "com.techneissa.pnoe", category: "NotchWindowManager")
 
@@ -18,6 +21,7 @@ class NotchWindowManager {
         onCloseTapped: @escaping () -> Void,
         onAssistantFollowUp: @escaping (String) -> Void
     ) {
+        self.assistantSession = assistantSession
         self.makeView = {
             AnyView(
                 NotchRecorderView(
@@ -45,10 +49,10 @@ class NotchWindowManager {
     /// NSPanel plus one hosting controller per dictation, which is noise next to starting audio
     /// capture and a transcription session in the same code path.
     @discardableResult
-    func show() -> Bool {
-        if panel == nil { initializeWindow() }
+    func show(compact: Bool = false) -> Bool {
+        if panel == nil { initializeWindow(compact: compact) }
         guard let panel else { return false }
-        return panel.show()
+        return panel.show(compact: compact)
     }
 
     /// Tears the window down rather than just ordering it out, so `isVisible` is never used as a
@@ -64,9 +68,9 @@ class NotchWindowManager {
     // Rebuilding gives the SwiftUI content a new identity, so view-local state inside it is
     // reset — currently the assistant follow-up draft and its focus. The conversation itself
     // lives in `AssistantSession`, which is owned by the engine and survives.
-    private func initializeWindow() {
+    private func initializeWindow(compact: Bool) {
         deinitializeWindow()
-        guard let metrics = NotchRecorderPanel.calculateWindowMetrics() else {
+        guard let metrics = NotchRecorderPanel.calculateWindowMetrics(compact: compact) else {
             logger.error("Notch panel not created: no screen available")
             return
         }
@@ -75,10 +79,18 @@ class NotchWindowManager {
         let hostingController = NotchRecorderHostingController(rootView: view)
         newPanel.contentView = hostingController.view
         panel = newPanel
+        // The panel takes the keyboard only while the assistant's text field is on screen.
+        assistantCancellable = assistantSession.$phase
+            .map { $0 != .inactive }
+            .removeDuplicates()
+            .sink { [weak newPanel] visible in
+                newPanel?.acceptsKeyboardInput = RecorderKeyWindowPolicy.canBecomeKey(assistantVisible: visible)
+            }
         windowController = NSWindowController(window: newPanel)
     }
 
     private func deinitializeWindow() {
+        assistantCancellable = nil
         panel?.orderOut(nil)
         windowController?.close()
         windowController = nil

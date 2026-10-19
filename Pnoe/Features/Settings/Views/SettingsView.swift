@@ -22,6 +22,12 @@ struct SettingsView: View {
     @AppStorage(AppLanguagePreference.userDefaultsKey) private var appLanguagePreference = AppLanguagePreference
         .systemValue
     @AppStorage(RecorderDisplaySettingsKeys.showLiveTranscript) private var showLiveTranscript = true
+    @AppStorage(RecorderDisplaySettingsKeys.liveTranscriptSize) private var liveTranscriptSize = LiveTranscriptSize.medium.rawValue
+    @AppStorage(RecorderDisplaySettingsKeys.theme) private var recorderTheme = RecorderTheme.dark.rawValue
+    @AppStorage(RecorderDisplaySettingsKeys.levelDisplay) private var recorderLevelDisplay = RecorderLevelDisplay.bars.rawValue
+    @AppStorage(RecorderDisplaySettingsKeys.display) private var recorderDisplay = RecorderDisplaySelection.active.storedValue
+    @AppStorage(RecorderDisplaySettingsKeys.miniPlacement) private var recorderMiniPlacement = MiniRecorderPlacement.bottom.rawValue
+    @AppStorage(RecorderDisplaySettingsKeys.visibility) private var recorderVisibility = RecorderVisibility.whileRecording.rawValue
     @AppStorage(FinishAndSendSettings.key) private var finishAndSendKey = FinishAndSendKey.none.rawValue
     @State private var showResetOnboardingAlert = false
     @State private var showLanguageRestartAlert = false
@@ -29,6 +35,16 @@ struct SettingsView: View {
     @State private var isImportingSettings = false
 
     @State private var isRestoreClipboardExpanded = false
+
+    /// Connected displays for the picker, plus the chosen one while it is disconnected so the
+    /// picker keeps showing the stored choice.
+    private var recorderDisplayChoices: [String] {
+        var names = RecorderScreenResolver.connectedDisplayNames
+        if case .named(let stored) = RecorderDisplaySelection(storedValue: recorderDisplay), !names.contains(stored) {
+            names.append(stored)
+        }
+        return names
+    }
 
     var body: some View {
         Form {
@@ -222,12 +238,64 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.menu)
 
+                Picker("Recorder Theme", selection: $recorderTheme) {
+                    ForEach(RecorderTheme.allCases) { theme in
+                        Text(theme.displayName).tag(theme.rawValue)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Picker("Level Display", selection: $recorderLevelDisplay) {
+                    ForEach(RecorderLevelDisplay.allCases) { display in
+                        Text(display.displayName).tag(display.rawValue)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Picker(selection: $recorderDisplay) {
+                    Text("Active Screen").tag(RecorderDisplaySelection.active.storedValue)
+                    Text("Main Screen").tag(RecorderDisplaySelection.main.storedValue)
+                    ForEach(recorderDisplayChoices, id: \.self) { name in
+                        Text(name).tag(RecorderDisplaySelection.named(name).storedValue)
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("Recorder Display")
+                        InfoTip(
+                            "The active screen is the one with the focused window. A display that is not connected falls back to the active screen. The Notch style becomes Mini on a built-in display without a notch."
+                        )
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Picker("Mini Position", selection: $recorderMiniPlacement) {
+                    ForEach(MiniRecorderPlacement.allCases) { placement in
+                        Text(placement.displayName).tag(placement.rawValue)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Picker("Show Recorder", selection: $recorderVisibility) {
+                    ForEach(RecorderVisibility.allCases) { visibility in
+                        Text(visibility.displayName).tag(visibility.rawValue)
+                    }
+                }
+                .pickerStyle(.menu)
+
                 Toggle(isOn: $showLiveTranscript) {
                     HStack(spacing: 4) {
                         Text("Live Text Display")
                         InfoTip("Shows live text while recording with realtime models.")
                     }
                 }
+
+                Picker("Live Text Size", selection: $liveTranscriptSize) {
+                    ForEach(LiveTranscriptSize.allCases) { size in
+                        Text(size.displayName).tag(size.rawValue)
+                    }
+                }
+                .pickerStyle(.menu)
+                .disabled(!showLiveTranscript)
             }
 
             Section("General") {

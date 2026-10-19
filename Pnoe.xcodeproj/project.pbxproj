@@ -17,22 +17,6 @@
 		E1F350112F1D10D600790A2C /* whisper.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E1A0BD052EB1E7B800266859 /* whisper.xcframework */; };
 		E1F350122F1D10D600790A2C /* whisper.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E1A0BD052EB1E7B800266859 /* whisper.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		E1F511012FA3B47000F00001 /* SelectedTextKit in Frameworks */ = {isa = PBXBuildFile; productRef = E1F511032FA3B47000F00001 /* SelectedTextKit */; };
-		E1FA00A12FA7000000000001 /* TextFieldPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00A02FA7000000000001 /* TextFieldPolicy.swift */; };
-		E1FA00A22FA7000000000001 /* TextFieldPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00A02FA7000000000001 /* TextFieldPolicy.swift */; };
-		E1FA00C02FA7000000000001 /* SoundCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B02FA7000000000001 /* SoundCatalog.swift */; };
-		E1FA00D02FA7000000000001 /* SoundCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B02FA7000000000001 /* SoundCatalog.swift */; };
-		E1FA00C12FA7000000000001 /* SoundPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B12FA7000000000001 /* SoundPlayer.swift */; };
-		E1FA00D12FA7000000000001 /* SoundPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B12FA7000000000001 /* SoundPlayer.swift */; };
-		E1FA00C22FA7000000000001 /* SoundSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B22FA7000000000001 /* SoundSettings.swift */; };
-		E1FA00D22FA7000000000001 /* SoundSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B22FA7000000000001 /* SoundSettings.swift */; };
-		E1FA00C32FA7000000000001 /* SoundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B32FA7000000000001 /* SoundManager.swift */; };
-		E1FA00D32FA7000000000001 /* SoundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00B32FA7000000000001 /* SoundManager.swift */; };
-		E1FA00F02FA7000000000001 /* ResumableFileDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E02FA7000000000001 /* ResumableFileDownloader.swift */; };
-		E1FA01002FA7000000000001 /* ResumableFileDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E02FA7000000000001 /* ResumableFileDownloader.swift */; };
-		E1FA00F12FA7000000000001 /* FormatterModelArtifact.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E12FA7000000000001 /* FormatterModelArtifact.swift */; };
-		E1FA01012FA7000000000001 /* FormatterModelArtifact.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E12FA7000000000001 /* FormatterModelArtifact.swift */; };
-		E1FA00F22FA7000000000001 /* FormatterModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E22FA7000000000001 /* FormatterModelStore.swift */; };
-		E1FA01022FA7000000000001 /* FormatterModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA00E22FA7000000000001 /* FormatterModelStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -67,14 +51,6 @@
 		E1A0BD052EB1E7B800266859 /* whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = whisper.xcframework; path = "$(HOME)/Pnoe-Dependencies/whisper.cpp/build-apple/whisper.xcframework"; sourceTree = "<group>"; };
 		E1B2DCAA2E3DE70A008DFD68 /* whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = whisper.xcframework; path = "../whisper.cpp/build-apple/whisper.xcframework"; sourceTree = "<group>"; };
 		E1CE28772E4336150082B758 /* whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = whisper.xcframework; path = "../build-apple/whisper.xcframework"; sourceTree = "<group>"; };
-		E1FA00A02FA7000000000001 /* TextFieldPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextFieldPolicy.swift; sourceTree = "<group>"; };
-		E1FA00B02FA7000000000001 /* SoundCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundCatalog.swift; sourceTree = "<group>"; };
-		E1FA00B12FA7000000000001 /* SoundPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundPlayer.swift; sourceTree = "<group>"; };
-		E1FA00B22FA7000000000001 /* SoundSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundSettings.swift; sourceTree = "<group>"; };
-		E1FA00B32FA7000000000001 /* SoundManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundManager.swift; sourceTree = "<group>"; };
-		E1FA00E02FA7000000000001 /* ResumableFileDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResumableFileDownloader.swift; sourceTree = "<group>"; };
-		E1FA00E12FA7000000000001 /* FormatterModelArtifact.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatterModelArtifact.swift; sourceTree = "<group>"; };
-		E1FA00E22FA7000000000001 /* FormatterModelStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatterModelStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -104,6 +80,11 @@
 		E11473D02CBE0F0B00318EE4 /* PnoeUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = PnoeUITests;
+			sourceTree = "<group>";
+		};
+		E1FA00042FA7000000000001 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -183,21 +164,6 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		E1FA00042FA7000000000001 /* Shared */ = {
-			isa = PBXGroup;
-			children = (
-				E1FA00A02FA7000000000001 /* TextFieldPolicy.swift */,
-				E1FA00B02FA7000000000001 /* SoundCatalog.swift */,
-				E1FA00B12FA7000000000001 /* SoundPlayer.swift */,
-				E1FA00B22FA7000000000001 /* SoundSettings.swift */,
-				E1FA00B32FA7000000000001 /* SoundManager.swift */,
-				E1FA00E02FA7000000000001 /* ResumableFileDownloader.swift */,
-				E1FA00E12FA7000000000001 /* FormatterModelArtifact.swift */,
-				E1FA00E22FA7000000000001 /* FormatterModelStore.swift */,
-			);
-			path = Shared;
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -216,6 +182,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				E11473B22CBE0F0A00318EE4 /* Pnoe */,
+				E1FA00042FA7000000000001 /* Shared */,
 			);
 			name = Pnoe;
 			packageProductDependencies = (
@@ -245,6 +212,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				E11473C62CBE0F0B00318EE4 /* PnoeTests */,
+				E1FA00042FA7000000000001 /* Shared */,
 			);
 			name = PnoeTests;
 			packageProductDependencies = (
@@ -361,14 +329,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E1FA00A12FA7000000000001 /* TextFieldPolicy.swift in Sources */,
-				E1FA00C02FA7000000000001 /* SoundCatalog.swift in Sources */,
-				E1FA00C12FA7000000000001 /* SoundPlayer.swift in Sources */,
-				E1FA00C22FA7000000000001 /* SoundSettings.swift in Sources */,
-				E1FA00C32FA7000000000001 /* SoundManager.swift in Sources */,
-				E1FA00F02FA7000000000001 /* ResumableFileDownloader.swift in Sources */,
-				E1FA00F12FA7000000000001 /* FormatterModelArtifact.swift in Sources */,
-				E1FA00F22FA7000000000001 /* FormatterModelStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -376,14 +336,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E1FA00A22FA7000000000001 /* TextFieldPolicy.swift in Sources */,
-				E1FA00D02FA7000000000001 /* SoundCatalog.swift in Sources */,
-				E1FA00D12FA7000000000001 /* SoundPlayer.swift in Sources */,
-				E1FA00D22FA7000000000001 /* SoundSettings.swift in Sources */,
-				E1FA00D32FA7000000000001 /* SoundManager.swift in Sources */,
-				E1FA01002FA7000000000001 /* ResumableFileDownloader.swift in Sources */,
-				E1FA01012FA7000000000001 /* FormatterModelArtifact.swift in Sources */,
-				E1FA01022FA7000000000001 /* FormatterModelStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

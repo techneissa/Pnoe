@@ -142,7 +142,8 @@ final class SystemInfoService {
         if devices.isEmpty {
             return "None detected"
         }
-        return devices.map { $0.name }.joined(separator: ", ")
+        return devices.map { AudioDeviceManager.shared.isDeviceHidden(uid: $0.uid) ? "\($0.name) (hidden)" : $0.name }
+            .joined(separator: ", ")
     }
 
     private func getPrimaryShortcut() -> String {

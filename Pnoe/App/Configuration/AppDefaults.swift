@@ -8,10 +8,6 @@ enum CleanupSettingsKeys {
     static let lastAutomaticAudioCleanupDate = "AudioCleanupLastAutomaticCleanupDate"
 }
 
-enum RecorderDisplaySettingsKeys {
-    static let showLiveTranscript = "ShowLiveTranscript"
-}
-
 enum CloudTranscriptionSettings {
     static let timeoutKey = "CloudTranscriptionTimeout"
     static let defaultTimeout = 30
@@ -30,6 +26,8 @@ enum AutoLearnSettings {
     static let failureMessageKey = "AutoLearnDictionaryFailureMessage"
     static let failureAcknowledgedKey = "AutoLearnDictionaryFailureAcknowledged"
     static let reviewScheduleKey = "AutoLearnDictionaryReviewSchedule"
+    static let repeatThresholdKey = "AutoLearnDictionaryRepeatThreshold"
+    static let usesAIReviewKey = "AutoLearnDictionaryUsesAIReview"
 
     static var isEnabled: Bool {
         UserDefaults.standard.bool(forKey: isEnabledKey)
@@ -44,6 +42,17 @@ enum AutoLearnSettings {
         let value = UserDefaults.standard.string(forKey: modelKey)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return value?.isEmpty == false ? value : nil
+    }
+
+    static var repeatThreshold: AutoLearnRepeatThreshold {
+        AutoLearnRepeatThreshold(
+            rawValue: UserDefaults.standard.integer(forKey: repeatThresholdKey)
+        ) ?? .default
+    }
+
+    /// Off by default: a saved pair needs repeats, not an AI provider.
+    static var usesAIReview: Bool {
+        UserDefaults.standard.bool(forKey: usesAIReviewKey)
     }
 
     static var reviewSchedule: AutoLearnReviewSchedule {
@@ -137,6 +146,7 @@ enum AppDefaults {
             "isSystemMuteEnabled": true,
             "audioResumptionDelay": 0.0,
             "isPauseMediaEnabled": false,
+            "isMediaLevelCheckEnabled": false,
 
             // Recording & Transcription
             "IsTextFormattingEnabled": true,
@@ -145,9 +155,17 @@ enum AppDefaults {
             "AppendTrailingSpace": true,
             "RecorderType": "mini",
             RecorderDisplaySettingsKeys.showLiveTranscript: true,
+            RecorderDisplaySettingsKeys.liveTranscriptSize: LiveTranscriptSize.medium.rawValue,
+            RecorderDisplaySettingsKeys.theme: RecorderTheme.dark.rawValue,
+            RecorderDisplaySettingsKeys.levelDisplay: RecorderLevelDisplay.bars.rawValue,
+            RecorderDisplaySettingsKeys.display: RecorderDisplaySelection.active.storedValue,
+            RecorderDisplaySettingsKeys.miniPlacement: MiniRecorderPlacement.bottom.rawValue,
+            RecorderDisplaySettingsKeys.visibility: RecorderVisibility.whileRecording.rawValue,
             CloudTranscriptionSettings.timeoutKey: CloudTranscriptionSettings.defaultTimeout,
             AutoLearnSettings.isEnabledKey: true,
             AutoLearnSettings.reviewScheduleKey: AutoLearnReviewSchedule.immediately.rawValue,
+            AutoLearnSettings.repeatThresholdKey: AutoLearnRepeatThreshold.default.rawValue,
+            AutoLearnSettings.usesAIReviewKey: false,
 
             // Cleanup
             CleanupSettingsKeys.isTranscriptionCleanupEnabled: false,

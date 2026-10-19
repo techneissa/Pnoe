@@ -4,27 +4,6 @@ import Foundation
 import SwiftUI
 import os
 
-enum RecorderPanelStyle: String, CaseIterable, Identifiable {
-    case notch
-    case mini
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .notch:
-            return String(localized: "Notch")
-        case .mini:
-            return String(localized: "Mini")
-        }
-    }
-
-    static var stored: RecorderPanelStyle {
-        let rawValue = UserDefaults.standard.string(forKey: "RecorderType") ?? RecorderPanelStyle.mini.rawValue
-        return RecorderPanelStyle(rawValue: rawValue) ?? .mini
-    }
-}
-
 @MainActor
 protocol RecorderPanelPresenting: AnyObject {
     var isRecorderPanelVisible: Bool { get }
@@ -36,8 +15,8 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
     @Published var recorderPanelStyle: RecorderPanelStyle = .stored {
         didSet {
             guard oldValue != recorderPanelStyle else { return }
-            rebuildVisiblePanel(previousStyle: oldValue)
             UserDefaults.standard.set(recorderPanelStyle.rawValue, forKey: "RecorderType")
+            rebuildPanels()
         }
     }
 
@@ -54,6 +33,7 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
                 showRecorderPanel()
             } else {
                 hideRecorderPanel()
+                syncIdleIndicator()
             }
         }
     }
@@ -63,6 +43,8 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
     private var panelInvalidationTask: Task<Void, Never>?
     private var didSetupNotifications = false
     private var lifecycleCancellable: AnyCancellable?
+    private var settingsCancellable: AnyCancellable?
+    private var lastIndicatorSettings = RecorderIndicatorSettings.current
 
     private weak var engine: PnoeEngine?
     private var recorder: Recorder?
@@ -80,17 +62,31 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
         self.engine = engine
         self.recorder = recorder
         setupNotifications()
+        syncIdleIndicator()
     }
 
     // MARK: - Recorder Panel Management
 
-    private func showRecorderPanel() {
+    /// The style actually on screen: the chosen one, except that a built-in display without a
+    /// notch gets Mini.
+    private var effectiveStyle: RecorderPanelStyle {
+        RecorderScreenResolver.effectiveStyle(requested: recorderPanelStyle)
+    }
+
+    /// Shows the recorder. `idle` is the compact indicator that stays up between dictations
+    /// when the visibility setting is "Always".
+    private func showRecorderPanel(idle: Bool = false) {
         guard let engine = engine, let recorder = recorder else { return }
 
+        let style = effectiveStyle
         let shown: Bool
 
-        switch recorderPanelStyle {
+        // Only one panel ever exists, so a fallback from Notch to Mini (or back) leaves no
+        // stale window of the other style behind.
+        switch style {
         case .notch:
+            miniWindowManager?.destroyWindow()
+            miniWindowManager = nil
             if notchWindowManager == nil {
                 notchWindowManager = NotchWindowManager(
                     engine: engine,
@@ -113,8 +109,10 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
                     }
                 )
             }
-            shown = notchWindowManager?.show() ?? false
+            shown = notchWindowManager?.show(compact: idle) ?? false
         case .mini:
+            notchWindowManager?.destroyWindow()
+            notchWindowManager = nil
             if miniWindowManager == nil {
                 miniWindowManager = MiniWindowManager(
                     engine: engine,
@@ -137,16 +135,17 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
                     }
                 )
             }
-            shown = miniWindowManager?.show() ?? false
+            shown = miniWindowManager?.show(compact: idle) ?? false
         }
 
         if shown {
-            logger.notice("Showed recorder panel style=\(self.recorderPanelStyle.rawValue, privacy: .public)")
+            logger.notice(
+                "Showed recorder panel style=\(style.rawValue, privacy: .public) idle=\(idle, privacy: .public)")
         } else {
             // Only reachable with no screens at all. Recording still works, so the session is
             // left running rather than cancelled, but it runs without any UI — say so loudly,
             // because this is exactly the symptom users report.
-            logger.error("Recorder panel could not be shown style=\(self.recorderPanelStyle.rawValue, privacy: .public) screens=\(NSScreen.screens.count, privacy: .public)")
+            logger.error("Recorder panel could not be shown style=\(style.rawValue, privacy: .public) screens=\(NSScreen.screens.count, privacy: .public)")
         }
     }
 
@@ -154,11 +153,22 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
         // `dismissRecorderPanel()` calls this directly and then clears the flag, which calls it
         // again, so this deliberately stays at debug level.
         logger.debug("Hiding recorder panel style=\(self.recorderPanelStyle.rawValue, privacy: .public)")
-        switch recorderPanelStyle {
-        case .notch:
-            notchWindowManager?.hide()
-        case .mini:
-            miniWindowManager?.hide()
+        notchWindowManager?.hide()
+        miniWindowManager?.hide()
+    }
+
+    /// Between dictations the indicator is either gone or, with the visibility setting
+    /// "Always", a compact bar. Call after anything that ends a session or changes a setting.
+    private func syncIdleIndicator() {
+        guard engine != nil, !isRecorderPanelVisible else { return }
+
+        if RecorderIndicatorSettings.current.visibility == .always {
+            showRecorderPanel(idle: true)
+        } else {
+            notchWindowManager?.destroyWindow()
+            notchWindowManager = nil
+            miniWindowManager?.destroyWindow()
+            miniWindowManager = nil
         }
     }
 
@@ -191,6 +201,7 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
             notchWindowManager = nil
             miniWindowManager?.destroyWindow()
             miniWindowManager = nil
+            syncIdleIndicator()
             return
         }
 
@@ -198,16 +209,16 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
         showRecorderPanel()
     }
 
-    private func rebuildVisiblePanel(previousStyle: RecorderPanelStyle) {
-        guard isRecorderPanelVisible else { return }
+    /// Drops the current panel and shows a fresh one, for a changed style or placement setting.
+    private func rebuildPanels() {
+        notchWindowManager?.destroyWindow()
+        notchWindowManager = nil
+        miniWindowManager?.destroyWindow()
+        miniWindowManager = nil
 
-        switch previousStyle {
-        case .notch:
-            notchWindowManager?.destroyWindow()
-            notchWindowManager = nil
-        case .mini:
-            miniWindowManager?.destroyWindow()
-            miniWindowManager = nil
+        guard isRecorderPanelVisible else {
+            syncIdleIndicator()
+            return
         }
 
         Task { @MainActor in
@@ -230,7 +241,7 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
                 await cancelRecording()
             case .idle:
                 if engine.assistantSession.canSendFollowUp {
-                    SoundManager.shared.play(.start)
+                    playStartSound()
                     await engine.toggleRecord(
                         modeId: modeId,
                         isAssistantFollowUp: true
@@ -242,10 +253,16 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
                 await dismissRecorderPanel()
             }
         } else {
-            SoundManager.shared.play(.start)
+            playStartSound()
             isRecorderPanelVisible = true
             await engine.toggleRecord(modeId: modeId)
         }
+    }
+
+    /// The level check listens from the moment the start sound is played, so the sound is in its window.
+    private func playStartSound() {
+        PlaybackController.shared.beginLevelProbe()
+        SoundManager.shared.play(.start)
     }
 
     func finishRecordingAndSend() async {
@@ -267,6 +284,7 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
         hideRecorderPanel()
         isRecorderPanelVisible = false
         engine.assistantSession.reset()
+        syncIdleIndicator()
     }
 
     func resetOnLaunch() async {
@@ -276,6 +294,7 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
         hideRecorderPanel()
         isRecorderPanelVisible = false
         engine.assistantSession.reset()
+        syncIdleIndicator()
     }
 
     func cancelRecording() async {
@@ -308,6 +327,18 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
             name: .dismissRecorderPanel,
             object: nil
         )
+        // Display, placement and visibility are read when a panel is built, so a change rebuilds it.
+        settingsCancellable = NotificationCenter.default
+            .publisher(for: UserDefaults.didChangeNotification)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    guard let self else { return }
+                    let settings = RecorderIndicatorSettings.current
+                    guard settings != self.lastIndicatorSettings else { return }
+                    self.lastIndicatorSettings = settings
+                    self.rebuildPanels()
+                }
+            }
         lifecycleCancellable = LifecycleObserver.shared.publisher(
             for: [.systemDidWake, .displaysDidWake, .screenConfigurationChanged]
         ).sink { [weak self] event in
