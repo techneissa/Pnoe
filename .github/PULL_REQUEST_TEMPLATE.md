@@ -1,20 +1,5 @@
-# ⚠️ This Project Does Not Accept Pull Requests
+Thanks for the pull request!
 
-Thank you for your interest in contributing to Pnoe!
+Pnoe is a personal project, so unsolicited pull requests may not be merged. If this change isn't tied to an issue yet, please open one first so we can talk about it. Issues and ideas are always welcome.
 
-However, **this project is not currently accepting pull requests.**
-
-## Please close this PR
-
-## Alternative ways to contribute:
-
-- 🐛 **Report bugs**: Open an [issue](../../issues) with detailed information
-- 💡 **Suggest features**: Share your ideas via [issues](../../issues) or [discussions](../../discussions)
-- 🍴 **Fork the project**: You're welcome to create and maintain your own fork
-- 📖 **Improve documentation**: Suggest corrections or clarifications via issues
-
-Thank you for understanding, and I appreciate your interest in Pnoe!
-
----
-
-For more information, see [CONTRIBUTING.md](../CONTRIBUTING.md)
+See [CONTRIBUTING.md](../CONTRIBUTING.md).

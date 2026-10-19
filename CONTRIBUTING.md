@@ -1,78 +1,13 @@
 # Contributing to Pnoe
 
-First off, thank you for considering contributing to Pnoe! It's people like you that make Pnoe such a great tool.
+Pnoe is a personal project. I build it for how I work, so I may not merge pull requests I didn't ask for, even good ones.
 
-## ⚠️ Pull Requests Not Accepted
+Issues and ideas are welcome:
 
-**As of now, this project is not accepting pull requests.** Pnoe is open source, and you're welcome to fork and modify it for your own use.
+- **Bugs:** open an issue with what happened, what you expected and the steps to reproduce it.
+- **Ideas:** open an issue describing what you'd like and why.
+- **Forking:** Pnoe is GPL-3.0, so you're free to fork it and take it your own way.
 
-**You can still contribute by:**
-- 🐛 **Reporting bugs** - Open an issue with detailed information
-- 💡 **Suggesting features** - Share your ideas via issues or discussions
-- 🍴 **Forking the project** - Feel free to create your own version
-- 📖 **Improving documentation** - Suggest clarifications or corrections via issues
+If you want to send a pull request anyway, open an issue first so we can talk about it. See [BUILDING.md](BUILDING.md) for how to build the app.
 
-Thank you for understanding!
-
-## Code of Conduct
-
-By participating in this project, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
-
-## How Can I Contribute?
-
-### Reporting Bugs
-
-- Before submitting a bug report, please check if the issue has already been reported
-- Use the bug report template when creating an issue
-- Include as much relevant information as possible
-- Include steps to reproduce the issue
-
-### Suggesting Enhancements
-
-- Open an issue using the feature request template
-- Clearly describe the feature and its benefits
-- Discuss potential implementation approaches
-- Consider the feature's impact on existing functionality
-
-### Development Process
-
-1. Ensure you have all the requirements installed:
-   - macOS 15.0 or later
-   - Latest version of Xcode
-   - Latest version of Swift
-   - whisper.cpp properly set up
-
-2. Follow our coding standards:
-   - Use Swift style guidelines
-   - Write meaningful commit messages
-   - Include comments where necessary
-   - Add tests for new features
-
-3. Testing:
-   - Run existing tests
-   - Add new tests for new functionality
-   - Ensure all tests pass before submitting PR
-
-## Style Guidelines
-
-- Follow Swift style guidelines
-- Use meaningful variable and function names
-- Keep functions focused and concise
-- Comment complex logic
-- Write self-documenting code where possible
-
-## Community
-
-- Join our discussions
-- Help other contributors
-- Share your ideas
-- Be respectful and constructive
-
-## Questions?
-
-If you have any questions or need clarification, feel free to:
-1. Open an issue
-2. Start a discussion
-3. Reach out to the maintainers
-
-Thank you for contributing to Pnoe! 🎉 
+By taking part you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).

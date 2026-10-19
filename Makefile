@@ -44,8 +44,11 @@ setup: whisper
 	@echo "Whisper framework is ready at $(FRAMEWORK_PATH)"
 	@echo "Please ensure your Xcode project references the framework from this new location."
 
+# Debug build signed with the project's team. A free Personal Team cannot sign iCloud/CloudKit,
+# so this uses the entitlements without them (like `make local`) until iCloud sync is enabled.
 build: setup
-	xcodebuild -project Pnoe.xcodeproj -scheme Pnoe -configuration Debug CODE_SIGN_IDENTITY="" \
+	xcodebuild -project Pnoe.xcodeproj -scheme Pnoe -configuration Debug \
+		CODE_SIGN_ENTITLEMENTS="$(CURDIR)/Pnoe/Pnoe.debug.entitlements" \
 		-skipPackagePluginValidation \
 		-skipMacroValidation \
 		build

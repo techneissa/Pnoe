@@ -37,11 +37,17 @@ Local builds do not include iCloud dictionary sync. Ad-hoc builds may require ma
 
 - `make check` — verify required tools
 - `make whisper` — prepare `whisper.xcframework`
-- `make build` — build the standard Debug configuration
-- `make dev` — build and launch `Pnoe Dev.app`
+- `make build` — build the Debug configuration, signed with the project's Apple team
+- `make dev` — `make build`, then launch `Pnoe Dev.app`
 - `make run` — launch `~/Downloads/Pnoe.app`, or the first app found in DerivedData
 - `make clean` — remove `~/Pnoe-Dependencies`
 - `make help` — list all commands
+
+## Signing with the project team
+
+`make build`, `make dev` and Debug builds in Xcode sign with the project's development team (`6CTUQH4ST8`, a free Personal Team) and `Pnoe.debug.entitlements`. A free team cannot sign iCloud/CloudKit entitlements, so these builds do not use `Pnoe.entitlements`, which keeps the iCloud container for dictionary sync until that is enabled. Debug builds never connect to CloudKit.
+
+Signing needs a provisioning profile for the team on your Mac. If `make build` stops with "No profiles for 'com.techneissa.Pnoe.dev' were found", open `Pnoe.xcodeproj` in Xcode once with the team signed in under Settings > Accounts and build there, or pass `-allowProvisioningUpdates` to `xcodebuild`. If you are not the maintainer, use `make local`.
 
 ## Build with Xcode
 
@@ -50,7 +56,7 @@ make setup
 open Pnoe.xcodeproj
 ```
 
-Select the `Pnoe` scheme. Run builds `Pnoe Dev.app`; Archive uses Release. `LOCAL_BUILD` applies only through `make local`.
+Select the `Pnoe` scheme. Run builds `Pnoe Dev.app`; Archive uses Release, which still requests the iCloud entitlements and needs a paid team. `LOCAL_BUILD` applies only through `make local`.
 
 ## Troubleshooting
 
