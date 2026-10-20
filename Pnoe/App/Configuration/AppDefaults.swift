@@ -138,8 +138,6 @@ enum AppDefaults {
             OnboardingSettings.preparedV2Key: false,
 
             // Clipboard
-            "restoreClipboardAfterPaste": true,
-            "clipboardRestoreDelay": 2.0,
             "useAppleScriptPaste": false,
 
             // Audio & Media
@@ -189,6 +187,7 @@ enum AppDefaults {
             "PrewarmModelOnWake": true,
 
         ])
+        UserDefaults.standard.register(defaults: ClipboardPasteSettings.registeredDefaults)
 
         PasteMethod.migrateLegacyUserDefaultIfNeeded()
     }

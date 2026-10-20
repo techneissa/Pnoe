@@ -52,8 +52,9 @@ final class SystemInfoService {
             Audio Resumption Delay: \(UserDefaults.standard.double(forKey: "audioResumptionDelay"))s
 
             CLIPBOARD & PASTE SETTINGS:
-            Restore Clipboard After Paste: \(UserDefaults.standard.bool(forKey: "restoreClipboardAfterPaste"))
-            Clipboard Restore Delay: \(UserDefaults.standard.double(forKey: "clipboardRestoreDelay"))s
+            Restore Clipboard After Paste: \(ClipboardPasteSettings.restoresClipboard())
+            Clipboard Restore Delay: \(ClipboardPasteSettings.restoreDelay())s
+            Add Dictated Text To Clipboard History: \(ClipboardPasteSettings.addsToHistory())
             Paste Method: \(PasteMethod.current().displayName)
 
             DATA CLEANUP SETTINGS:
