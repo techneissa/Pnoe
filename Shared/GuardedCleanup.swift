@@ -49,7 +49,7 @@ struct GuardedCleanup {
     /// refuses, so the take pastes the plain transcript like any other runtime error.
     static func makeBuiltIn(modelID: String, engine: BuiltInEngine = .shared) async -> GuardedCleanup {
         let spec = await engine.spec(forModelID: modelID) ?? RuntimeModelSpec(identifier: modelID)
-        return GuardedCleanup(runtime: engine.runtime, spec: spec)
+        return GuardedCleanup(runtime: engine.runtime(for: spec), spec: spec)
     }
 
     func clean(_ text: String, vocabulary: [String] = []) async -> Result {

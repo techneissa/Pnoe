@@ -76,6 +76,23 @@ public struct FormatterModelCatalog: Sendable {
         Self.ggufModels(configuration)
     }
 
+    /// The models a file-based runtime can load: the GGUF files `installedGGUFModels()` lists, and the MLX folders
+    /// found in the same places (Hugging Face cache, LM Studio's folder, the folders the user chose). Disk only.
+    public func installedFileModels() async -> [FormatterModelEntry] {
+        let configuration = self.configuration
+        return await Task.detached(priority: .utility) { Self.fileModels(configuration) }.value
+    }
+
+    /// `installedFileModels()` on the calling thread.
+    public func installedFileModelsNow() -> [FormatterModelEntry] {
+        Self.fileModels(configuration)
+    }
+
+    private static func fileModels(_ configuration: Configuration) -> [FormatterModelEntry] {
+        var seen = Set<String>()
+        return scanFiles(configuration).filter { ($0.kind == .gguf || $0.kind == .mlx) && seen.insert($0.id).inserted }
+    }
+
     private static func ggufModels(_ configuration: Configuration) -> [FormatterModelEntry] {
         var seen = Set<String>()
         return scanFiles(configuration).filter { $0.kind == .gguf && seen.insert($0.id).inserted }

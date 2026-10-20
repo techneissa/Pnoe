@@ -33,12 +33,15 @@ enum ChatTemplate: Equatable, Sendable {
     /// into the token cap, and every take falls back.
     static let emptyThinkingBlock = "<think>\n\n</think>\n\n"
 
-    /// `rendered` (llama.cpp's output for a template it knows) with the empty think block appended when the
-    /// template supports thinking and the text ends in the generation prompt.
+    /// `rendered` (llama.cpp's output for a template it knows) with the rest of an empty think block appended when
+    /// the template supports thinking and the text ends in the generation prompt: the whole block, or only
+    /// `\n</think>\n\n` when the template already opened it (`<think>\n`); nothing when it is closed already.
     static func closingThinking(_ rendered: String, template: String, addGenerationPrompt: Bool) -> String {
         guard addGenerationPrompt, template.contains("<think>"), !rendered.hasSuffix(emptyThinkingBlock) else {
             return rendered
         }
+        let opened = "<think>\n"
+        if rendered.hasSuffix(opened) { return rendered + String(emptyThinkingBlock.dropFirst(opened.count)) }
         return rendered + emptyThinkingBlock
     }
 

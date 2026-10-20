@@ -1,8 +1,8 @@
 import Foundation
 
 /// A file or folder the maintainer picked with "Choose file or folder…". The path is trusted: a `.gguf` file
-/// is a GGUF model whatever its name, a folder with `config.json` and safetensors is an MLX model, and any other
-/// folder is searched for GGUF files.
+/// is a GGUF model whatever its name, a folder with `config.json`, safetensors and a sign of MLX (a `quantization` entry in the config or an MLX or
+/// bit-width name) is an MLX model, and any other folder is searched for GGUF files.
 public struct UserChosenModelScanner: Sendable {
     public var paths: [URL]
 

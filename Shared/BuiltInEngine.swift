@@ -14,9 +14,9 @@ enum BuiltInEngineError: Error, Equatable {
     case failed(String)
 }
 
-/// The Built-in engine as the app uses it: one long-lived runtime that talks to the embedded XPC service,
-/// shared by every workflow so the model stays loaded between takes. The runtime is `XPCFormatterRuntime`;
-/// tests pass a `FakeRuntime`.
+/// The Built-in engine as the app uses it: one long-lived runtime that talks to the embedded XPC services (llama.cpp
+/// and MLX), shared by every workflow so the model stays loaded between takes. The runtime is a
+/// `RoutingFormatterRuntime` over two `XPCFormatterRuntime`s; tests pass a `FakeRuntime`.
 final class BuiltInEngine: @unchecked Sendable {
     /// The engine every workflow uses. The first use starts the memory-pressure watch and the unload at quit.
     static let shared: BuiltInEngine = {
@@ -33,6 +33,8 @@ final class BuiltInEngine: @unchecked Sendable {
 
     /// The runtime every request goes through; it counts the requests in flight (a load or a generation).
     let runtime: any FormatterRuntime
+    /// The runtime without the counter, to bind a workflow's model to its backend.
+    private let base: any FormatterRuntime
     private let activity: ActivityCounter
     private let chosenFiles: @Sendable () -> [URL]
     private let artifact: @Sendable () -> FormatterModelArtifact
@@ -47,18 +49,27 @@ final class BuiltInEngine: @unchecked Sendable {
     ) {
         let activity = ActivityCounter()
         self.activity = activity
+        base = runtime
         self.runtime = CountingRuntime(wrapping: runtime, activity: activity)
         self.chosenFiles = chosenFiles
         self.artifact = artifact
         self.catalog = catalog
     }
 
-    private static func makeServiceRuntime() -> XPCFormatterRuntime {
+    /// Two embedded services behind one runtime: GGUF files go to the llama.cpp service, MLX folders to the MLX
+    /// service (`spec.backend`). Each service is its own process with its own idle timer, crash count and
+    /// unload, so an MLX crash never reaches llama.cpp or the app, and neither engine is linked into the other.
+    private static func makeServiceRuntime() -> RoutingFormatterRuntime {
         var configuration = XPCFormatterRuntime.Configuration()
         // A cold start loads about 3 GB. A take that would wait longer than this pastes the plain transcript,
         // and the load goes on in the service for the next take.
         configuration.maxPrepareWait = .seconds(12)
-        return XPCFormatterRuntime(configuration: configuration)
+        return RoutingFormatterRuntime(
+            backends: [
+                .llama: XPCFormatterRuntime(endpoint: .service(), id: .llama, configuration: configuration),
+                .mlx: XPCFormatterRuntime(endpoint: .mlxService, id: .mlx, configuration: configuration),
+            ],
+            fallback: .llama)
     }
 
     // MARK: Models
@@ -79,6 +90,14 @@ final class BuiltInEngine: @unchecked Sendable {
         await BuiltInModels.spec(forID: id, chosenFiles: chosenFiles(), artifact: artifact(), catalog: catalog())
     }
 
+    /// The runtime for a workflow that uses `spec`: loading and generating go to the service that runs that model,
+    /// so a take on a GGUF model is never sent to the MLX service because another workflow prepared an MLX model
+    /// with the same prompt in between (every Cleaned Text workflow shares its prefix). Counted like `runtime`.
+    func runtime(for spec: RuntimeModelSpec) -> any FormatterRuntime {
+        guard let router = base as? RoutingFormatterRuntime else { return runtime }
+        return CountingRuntime(wrapping: router.bound(to: spec), activity: activity)
+    }
+
     // MARK: Free-form requests
 
     /// One system prompt and one user message, answered in full: the workflows that rewrite the text (Checklist,
@@ -88,6 +107,7 @@ final class BuiltInEngine: @unchecked Sendable {
         let deadline = ContinuousClock.now + .seconds(timeout)
         guard let spec = await spec(forModelID: modelID) else { throw BuiltInEngineError.modelMissing }
         let prefix = PromptPrefix(messages: [ChatMessage(role: .system, content: system)])
+        let runtime = self.runtime(for: spec)
         do {
             try await runtime.prepare(spec, prefix: prefix, deadline: deadline)
             let request = GenerationRequest(
@@ -125,11 +145,10 @@ final class BuiltInEngine: @unchecked Sendable {
     @discardableResult
     func preloadIfUsed(isEnabled: Bool, providerName: String?, modelID: String?) -> Task<Void, Never>? {
         guard isEnabled, providerName == BuiltInModels.providerName, let modelID, !modelID.isEmpty else { return nil }
-        let runtime = self.runtime
         return Task.detached(priority: .utility) { [self] in
-            guard let spec = await spec(forModelID: modelID),
-                let pipeline = try? FormatterPipeline.bundled(runtime: runtime)
-            else { return }
+            guard let spec = await spec(forModelID: modelID) else { return }
+            let runtime = self.runtime(for: spec)
+            guard let pipeline = try? FormatterPipeline.bundled(runtime: runtime) else { return }
             // The Cleaned Text prefix: a Cleaned Text take finds it ready, and any other template replaces only
             // the cached prefix, not the loaded model.
             try? await runtime.prepare(spec, prefix: pipeline.prefix, deadline: .now + .seconds(120))

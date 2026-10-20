@@ -31,6 +31,41 @@ struct FormatterModelCatalogTests {
         #expect(Set(entries.map(\.id)).count == 4)
     }
 
+    @Test("file models: GGUF files and MLX folders from the cache, LM Studio and chosen paths, no Ollama tags")
+    func fileModels() async throws {
+        let home = try TemporaryDirectory()
+        let hubBlob = try home.file("hub/models--org--m-GGUF/blobs/b", bytes: 11)
+        try home.symlink("hub/models--org--m-GGUF/snapshots/r1/m-Q4_K_M.gguf", to: hubBlob)
+        try home.file("hub/models--org--m-GGUF/refs/main", contents: "r1")
+        // An MLX build in the cache, one in LM Studio's folder and a folder the user chose.
+        let config = try home.file("cfg", contents: #"{"quantization":{"bits":4}}"#)
+        let weights = try home.file("w", bytes: 40)
+        try home.symlink("hub/models--mlx-community--Qwen3-4B-4bit/snapshots/r1/config.json", to: config)
+        try home.symlink("hub/models--mlx-community--Qwen3-4B-4bit/snapshots/r1/model.safetensors", to: weights)
+        try home.file("hub/models--mlx-community--Qwen3-4B-4bit/refs/main", contents: "r1")
+        try home.file("lm/mlx-community/gemma-4-e2b-it-4bit/config.json", contents: #"{"quantization":{"bits":4}}"#)
+        try home.file("lm/mlx-community/gemma-4-e2b-it-4bit/model.safetensors", bytes: 50)
+        try home.file("mine/my-model/config.json", contents: #"{"quantization":{"bits":4}}"#)
+        try home.file("mine/my-model/model.safetensors", bytes: 60)
+
+        let catalog = FormatterModelCatalog(configuration: .init(
+            ollamaEndpoint: URL(string: "http://catalog-files.test:11434")!,
+            environment: [:],
+            homeDirectory: home.url,
+            huggingFaceHubDirectory: home.url.appendingPathComponent("hub"),
+            lmStudioModelsDirectory: home.url.appendingPathComponent("lm"),
+            userChosenPaths: [home.url.appendingPathComponent("mine/my-model")]
+        ))
+        let entries = await catalog.installedFileModels()
+        #expect(Set(entries.map(\.kind)) == [.gguf, .mlx])
+        #expect(entries.filter { $0.kind == .mlx }.count == 3)
+        #expect(entries.filter { $0.kind == .mlx }.allSatisfy { $0.spec.backend == .mlx })
+        #expect(entries.filter { $0.kind == .gguf }.allSatisfy { $0.spec.backend == nil })
+        #expect(entries.map(\.id) == catalog.installedFileModelsNow().map(\.id))
+        // The GGUF-only list is unchanged.
+        #expect(await catalog.installedGGUFModels().allSatisfy { $0.kind == .gguf })
+    }
+
     @Test("with Ollama down and empty stores the list is empty")
     func empty() async throws {
         let home = try TemporaryDirectory()

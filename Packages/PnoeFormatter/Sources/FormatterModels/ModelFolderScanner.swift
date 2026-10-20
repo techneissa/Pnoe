@@ -16,7 +16,8 @@ struct ModelFolderScanner {
         var source: FormatterModelSource
         /// The start of every entry id from this folder, for example `hf:org/name`.
         var idPrefix: String
-        /// A folder the user picked is trusted: no name rule for MLX, no auxiliary-file filter.
+        /// A folder the user picked is trusted: no org rule for MLX (but it still needs a quantization entry or an MLX
+        /// name), no auxiliary-file filter.
         var trusted = false
     }
 
@@ -99,8 +100,13 @@ struct ModelFolderScanner {
 
         let config = Self.readConfig(at: configURL)
         let bits = (config?["quantization"] as? [String: Any])?["bits"] as? Int
-        if !options.trusted {
-            let named = ModelNameRules.looksLikeMLXName(org: options.org, name: options.repo)
+        let named = ModelNameRules.looksLikeMLXName(org: options.org, name: options.repo)
+        if options.trusted {
+            // A folder the user picked skips the org rule, but `config.json` plus safetensors is also what a plain
+            // Hugging Face checkpoint looks like, which MLX cannot load. It needs a sign of MLX: a `quantization`
+            // entry (mlx-lm writes one) or a name that says MLX or a bit width.
+            guard config?["quantization"] != nil || named else { return nil }
+        } else {
             let isMLXCommunity = options.org?.lowercased() == "mlx-community"
             guard isMLXCommunity || (named && config?["quantization"] != nil) else { return nil }
         }
@@ -117,7 +123,7 @@ struct ModelFolderScanner {
             sizeBytes: sizes.reduce(0, +),
             source: options.source,
             quantization: quantization,
-            spec: RuntimeModelSpec(modelURL: root)
+            spec: RuntimeModelSpec(modelURL: root, backend: .mlx)
         )
     }
 

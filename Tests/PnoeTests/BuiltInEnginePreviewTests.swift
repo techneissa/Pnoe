@@ -8,6 +8,13 @@ import XCTest
 /// `TEST_RUNNER_PNOE_BUILTIN_PNG_DIR`) and defaults to a temporary folder.
 @MainActor
 final class BuiltInEnginePreviewTests: XCTestCase {
+    /// An offscreen test is not the app, so the source logos are looked up in the built app next to the test bundle.
+    override func setUp() {
+        super.setUp()
+        let app = Bundle(for: Self.self).bundleURL.deletingLastPathComponent().appendingPathComponent("Pnoe Dev.app")
+        if let bundle = Bundle(url: app) { BuiltInSourceIcon.logoBundle = bundle }
+    }
+
     private var outputDirectory: URL {
         if let path = ProcessInfo.processInfo.environment["PNOE_BUILTIN_PNG_DIR"], !path.isEmpty {
             return URL(fileURLWithPath: path, isDirectory: true)
@@ -22,6 +29,19 @@ final class BuiltInEnginePreviewTests: XCTestCase {
         BuiltInModelRow(id: "d", name: "notes-cleanup", quantization: "Q5_K_M", sizeText: "2.7 GB", source: .userChosen),
         BuiltInModelRow(id: "e", name: "Gemma 4 E2B", quantization: "Q4_K_M", sizeText: "3.1 GB", source: .downloaded),
         BuiltInModelRow(id: "f", name: "Llama-3.2-1B-Instruct", quantization: "Q2_K", sizeText: "0.6 GB", source: .huggingFaceCache),
+    ]
+
+    /// GGUF and MLX models side by side, as the picker lists them when both kinds are on the Mac.
+    private static let mixed = [
+        BuiltInModelRow(id: "a", name: "gemma-4-E2B-it", quantization: "Q4_K_M", sizeText: "3.1 GB", source: .huggingFaceCache),
+        BuiltInModelRow(
+            id: "m1", name: "gemma-4-e2b-it", quantization: "4bit", sizeText: "2.4 GB", source: .huggingFaceCache, kind: .mlx),
+        BuiltInModelRow(id: "c", name: "Qwen3-4B-Instruct-2507", quantization: "Q8_0", sizeText: "4.3 GB", source: .lmStudio),
+        BuiltInModelRow(
+            id: "m2", name: "Qwen3-4B-Instruct-2507", quantization: "8bit", sizeText: "4.3 GB", source: .lmStudio, kind: .mlx),
+        BuiltInModelRow(
+            id: "m3", name: "Llama-3.2-3B-Instruct", quantization: "4bit", sizeText: "1.8 GB", source: .userChosen, kind: .mlx),
+        BuiltInModelRow(id: "o", name: "gemma3:4b-it", quantization: "Q4_K_M", sizeText: "3.3 GB", source: .ollamaStore),
     ]
 
     private struct Harness: View {
@@ -57,8 +77,10 @@ final class BuiltInEnginePreviewTests: XCTestCase {
     /// What the popover looks like: its content on the material a popover is drawn on.
     private struct PopoverCard: View {
         let query: String
+        var rows = BuiltInEnginePreviewTests.installed
+        var selectedID = "a"
         var body: some View {
-            BuiltInModelPopoverContent(rows: BuiltInEnginePreviewTests.installed, selectedID: "a", initialQuery: query, startsShown: true, onSelect: { _ in }, onClose: {})
+            BuiltInModelPopoverContent(rows: rows, selectedID: selectedID, initialQuery: query, startsShown: true, onSelect: { _ in }, onClose: {})
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
                 .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.15)))
                 .padding(20)
@@ -107,6 +129,21 @@ final class BuiltInEnginePreviewTests: XCTestCase {
         try render(PopoverCard(query: "q4"), size: NSSize(width: 440, height: 270), to: "builtin-popover-search-dark", dark: true)
         try render(PopoverCard(query: ""), size: NSSize(width: 440, height: 400), to: "builtin-popover-all")
         try render(PopoverCard(query: "zzz"), size: NSSize(width: 440, height: 130), to: "builtin-popover-empty")
+    }
+
+    func testRenderMLXModelsInThePickerAndThePopover() throws {
+        // An MLX model chosen: the closed picker shows its "MLX" badge next to the quantization.
+        let closed = Harness(providers: providers, rows: Self.mixed, selection: "m1", download: nil)
+        try render(closed, size: NSSize(width: 560, height: 360), to: "mlx-picker")
+        try render(closed, size: NSSize(width: 560, height: 360), to: "mlx-picker-dark", dark: true)
+        // The open popover lists GGUF and MLX models together, each with its source icon.
+        let popover = PopoverCard(query: "", rows: Self.mixed, selectedID: "m1")
+        try render(popover, size: NSSize(width: 440, height: 420), to: "mlx-popover")
+        try render(popover, size: NSSize(width: 440, height: 420), to: "mlx-popover-dark", dark: true)
+        // Searching "mlx" keeps the MLX models only.
+        let search = PopoverCard(query: "mlx", rows: Self.mixed, selectedID: "m1")
+        try render(search, size: NSSize(width: 440, height: 250), to: "mlx-popover-search")
+        try render(search, size: NSSize(width: 440, height: 250), to: "mlx-popover-search-dark", dark: true)
     }
 
     func testRenderTheMissingModelAndTheEmptyList() throws {

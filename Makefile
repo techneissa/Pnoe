@@ -84,6 +84,7 @@ local: check setup
 		DEVELOPMENT_TEAM="" \
 		PNOE_APP_ENTITLEMENTS="$(CURDIR)/Pnoe/Pnoe.local.entitlements" \
 		PNOE_XPC_ENTITLEMENTS="$(CURDIR)/PnoeFormatterXPC/PnoeFormatterXPC.local.entitlements" \
+		PNOE_MLX_XPC_ENTITLEMENTS="$(CURDIR)/PnoeFormatterMLXXPC/PnoeFormatterMLXXPC.local.entitlements" \
 		SWIFT_ACTIVE_COMPILATION_CONDITIONS='$$(inherited) LOCAL_BUILD' \
 		-skipPackagePluginValidation \
 		-skipMacroValidation \

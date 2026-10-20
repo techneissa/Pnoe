@@ -77,6 +77,15 @@ struct ChatTemplateTests {
         #expect(ChatTemplate.closingThinking(prompt, template: "<|im_start|>", addGenerationPrompt: true) == prompt)
     }
 
+    @Test("a template that already opened the think block only gets the rest of it, and a closed one nothing")
+    func finishesAnOpenThinkBlock() {
+        let template = "<|Assistant|><think>\n"
+        let opened = "<|User|>hi<|Assistant|><think>\n"
+        #expect(ChatTemplate.closingThinking(opened, template: template, addGenerationPrompt: true) == opened + "\n</think>\n\n")
+        let closed = opened + "\n</think>\n\n"
+        #expect(ChatTemplate.closingThinking(closed, template: template, addGenerationPrompt: true) == closed)
+    }
+
     @Test("the prefix is still a text prefix of the whole prompt once the think block is added")
     func splitKeepsWorkingWithThinking() throws {
         let qwen = "<think><|im_start|>"

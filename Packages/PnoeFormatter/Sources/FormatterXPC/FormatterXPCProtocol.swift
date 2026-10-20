@@ -3,6 +3,9 @@ import Foundation
 
 /// The mach service name of the embedded XPC service that hosts the model.
 public let formatterXPCServiceName = "com.techneissa.Pnoe.PnoeFormatterXPC"
+/// The MLX service, a second embedded service with the same protocol: the llama service never links MLX, and
+/// an MLX crash never reaches it or the app.
+public let mlxFormatterXPCServiceName = "com.techneissa.Pnoe.PnoeFormatterMLXXPC"
 public let formatterXPCErrorDomain = "com.techneissa.Pnoe.FormatterXPC"
 
 /// What travels over the connection, as JSON in `NSData`: plain `Codable` values, no object graphs, so a
