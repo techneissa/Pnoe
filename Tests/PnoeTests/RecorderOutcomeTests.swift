@@ -160,6 +160,63 @@ final class RecorderOutcomeTests: XCTestCase {
         XCTAssertEqual(log, ["paste", "outcome done"])
     }
 
+    func testDismissingDuringThePasteLeavesNothingStuckAndALateResultChangesNothing() async throws {
+        let stage = Stage(.pasting)
+        stage.flow.interrupt()
+        XCTAssertEqual(stage.state, .idle, "the dismiss clears the pasting state")
+        // The recorder is gone; the paste result that arrives later has nothing to show.
+        stage.visible = false
+        XCTAssertFalse(stage.flow.show(.done))
+        try await settle()
+        XCTAssertEqual(stage.states, [.pasting, .idle])
+        XCTAssertEqual(stage.hides, 0)
+    }
+
+    func testAnEmptyOrWhiteSpaceTakeHasNothingToPasteOrRun() {
+        XCTAssertFalse(RecorderOutcomeFlow.hasText(nil))
+        XCTAssertFalse(RecorderOutcomeFlow.hasText(""))
+        XCTAssertFalse(RecorderOutcomeFlow.hasText("  \n\t "))
+        XCTAssertTrue(RecorderOutcomeFlow.hasText(" hello "))
+    }
+
+    func testTheCheckMarkOfACustomCommandWaitsForItToSucceed() async {
+        var log: [String] = []
+        let result = await RecorderOutcomeFlow.report(
+            afterCommand: {
+                log.append("run")
+                return Task {
+                    try? await Task.sleep(nanoseconds: 50_000_000)
+                    log.append("finished")
+                    return true
+                }
+            },
+            into: { log.append("outcome \($0)") })
+        XCTAssertEqual(result, true)
+        XCTAssertEqual(log, ["run", "finished", "outcome done"])
+    }
+
+    func testAFailedCustomCommandShowsTheError() async {
+        var outcomes: [RecorderOutcome] = []
+        let result = await RecorderOutcomeFlow.report(
+            afterCommand: { Task { false } }, into: { outcomes.append($0) })
+        XCTAssertEqual(result, false)
+        XCTAssertEqual(outcomes, [.failed])
+    }
+
+    func testACustomCommandThatNeverReturnsShowsTheErrorAfterTheTimeout() async {
+        var outcomes: [RecorderOutcome] = []
+        let stuck = Task<Bool, Never> {
+            while !Task.isCancelled { try? await Task.sleep(nanoseconds: 100_000_000) }
+            return true
+        }
+        let result = await RecorderOutcomeFlow.report(
+            afterCommand: { stuck }, timeout: 0.1, into: { outcomes.append($0) })
+        stuck.cancel()
+        XCTAssertNil(result)
+        XCTAssertEqual(outcomes, [.failed])
+        XCTAssertEqual(RecorderOutcomeFlow.commandTimeout, 12)
+    }
+
     func testAPasteThatNeverReturnsShowsTheErrorAfterTheTimeout() async {
         var outcomes: [RecorderOutcome] = []
         let stuck = Task<Bool, Never> {

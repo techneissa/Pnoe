@@ -46,7 +46,7 @@ final class TranscriptionDelivery {
             return
         }
 
-        if let text = request.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if let text = request.text, RecorderOutcomeFlow.hasText(text) {
             let sendKey = request.sendAfterPaste ? FinishAndSendSettings.selectedKey : request.output.autoSendKey
             await paste(text, sendKey: sendKey, takeHadError: request.responseError != nil, actions: actions)
         } else {
@@ -86,7 +86,7 @@ final class TranscriptionDelivery {
     }
 
     private func deliverCustomCommand(_ item: Request, actions: Actions) async {
-        guard let text = item.text else {
+        guard let text = item.text, RecorderOutcomeFlow.hasText(text) else {
             notifyCustomCommandFailure(CustomCommandDeliveryError.noTextToDeliver)
             SoundManager.shared.play(.stop)
             actions.setState(.failed)
@@ -104,14 +104,25 @@ final class TranscriptionDelivery {
 
         let finishAndSendKey: FinishAndSendKey = item.sendAfterPaste ? FinishAndSendSettings.selectedKey : .none
         SoundManager.shared.play(.stop)
-        actions.setState(item.responseError == nil ? .done : .failed)
+        actions.setState(.pasting)
 
-        Task {
-            await runCustomCommand(command: command, commandText: text, finishAndSendKey: finishAndSendKey)
+        // The check mark waits for the command to succeed; a failure shows the red error.
+        let takeHadError = item.responseError != nil
+        Task { @MainActor in
+            _ = await RecorderOutcomeFlow.report(
+                afterCommand: {
+                    Task { @MainActor in
+                        await self.runCustomCommand(
+                            command: command, commandText: text, finishAndSendKey: finishAndSendKey)
+                    }
+                },
+                takeHadError: takeHadError,
+                into: { actions.setState($0.state) })
         }
     }
 
-    private func runCustomCommand(command: String, commandText: String, finishAndSendKey: FinishAndSendKey) async {
+    /// Runs the command; true when it succeeded.
+    private func runCustomCommand(command: String, commandText: String, finishAndSendKey: FinishAndSendKey) async -> Bool {
         let startTime = Date()
         logger.notice("Custom command started")
 
@@ -146,8 +157,10 @@ final class TranscriptionDelivery {
                 try await Task.sleep(nanoseconds: 150_000_000)
                 CursorPaster.performSendKey(finishAndSendKey)
             }
+            return true
         } catch {
             notifyCustomCommandFailure(error, duration: Date().timeIntervalSince(startTime))
+            return false
         }
     }
 

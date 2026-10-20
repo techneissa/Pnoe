@@ -106,12 +106,34 @@ final class RecorderOutcomeFlow {
         return true
     }
 
-    /// A new recording starts, or the recorder is closed: drop the outcome and its pending hide.
+    /// A new recording starts, or the recorder is closed: drop the outcome (or the paste that was about
+    /// to become one) and the pending hide, so no state is left that nothing will end.
     func interrupt() {
         pendingHide?.cancel()
         pendingHide = nil
         generation += 1
-        if currentState().isOutcome { setState(.idle) }
+        let state = currentState()
+        if state.isOutcome || state == .pasting { setState(.idle) }
+    }
+
+    /// Whether a take has anything to paste or run: not nil, empty or only white space.
+    static func hasText(_ text: String?) -> Bool {
+        guard let text else { return false }
+        return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// How long a custom command may run before the recorder shows the error (the runner stops it at 10 s).
+    static let commandTimeout: TimeInterval = 12
+
+    /// Runs the custom command and reports `.done` only after it succeeded, `.failed` when it failed
+    /// (or the take had an error, or it took too long). Returns whether it succeeded, nil on a timeout.
+    static func report(
+        afterCommand run: () -> Task<Bool, Never>,
+        takeHadError: Bool = false,
+        timeout: TimeInterval = RecorderOutcomeFlow.commandTimeout,
+        into reporter: @escaping (RecorderOutcome) -> Void
+    ) async -> Bool? {
+        await report(afterPaste: run, landed: { $0 }, takeHadError: takeHadError, timeout: timeout, into: reporter)
     }
 
     /// How long the recorder waits for a paste result before it shows the error.
