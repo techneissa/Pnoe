@@ -4,8 +4,7 @@ import Foundation
 import os
 
 class CursorPaster {
-    private typealias ClipboardItemSnapshot = [(NSPasteboard.PasteboardType, Data)]
-    private typealias ClipboardSnapshot = [ClipboardItemSnapshot]
+    private typealias ClipboardSnapshot = PasteClipboard.Snapshot
     private static let logger = Logger(subsystem: "com.techneissa.pnoe", category: "CursorPaster")
 
     enum PasteResult: Equatable {
@@ -25,7 +24,6 @@ class CursorPaster {
 
     private static let prePasteDelay: TimeInterval = 0.20
     private static let pasteShortcutEventDelay: TimeInterval = 0.01
-    private static let minimumClipboardRestoreDelay: TimeInterval = 0.25
 
     @MainActor
     private static var pasteQueueTask: Task<Void, Never>?
@@ -70,16 +68,19 @@ class CursorPaster {
         let method = PasteMethod.current()
         let textToDeliver = method == .directTyping ? DirectTextTyper.normalizedText(text) : text
         let pasteboard: NSPasteboard? = method.usesClipboard ? NSPasteboard.general : nil
-        let shouldRestoreClipboard = pasteboard != nil
-            && UserDefaults.standard.bool(forKey: "restoreClipboardAfterPaste")
+        let shouldRestoreClipboard = pasteboard != nil && ClipboardPasteSettings.restoresClipboard()
+        let marksTransient = ClipboardPasteSettings.marksDictationTransient(
+            restoring: shouldRestoreClipboard,
+            addToHistory: ClipboardPasteSettings.addsToHistory()
+        )
         let savedContents: ClipboardSnapshot
         if let pasteboard {
-            savedContents = shouldRestoreClipboard ? snapshotClipboard(from: pasteboard) : []
+            savedContents = shouldRestoreClipboard ? PasteClipboard.snapshot(of: pasteboard) : []
 
             guard
                 ClipboardManager.setClipboard(
                     textToDeliver,
-                    transient: shouldRestoreClipboard,
+                    transient: marksTransient,
                     sessionID: shouldRestoreClipboard ? sessionID : nil
                 )
             else {
@@ -126,17 +127,6 @@ class CursorPaster {
         )
     }
 
-    private static func snapshotClipboard(from pasteboard: NSPasteboard) -> ClipboardSnapshot {
-        (pasteboard.pasteboardItems ?? []).map { item in
-            item.types.compactMap { type in
-                if let data = item.data(forType: type) {
-                    return (type, data)
-                }
-                return nil
-            }
-        }
-    }
-
     @MainActor
     private static func deliverText(_ text: String, method: PasteMethod, sessionID: String) async -> PasteResult {
         switch method {
@@ -169,45 +159,19 @@ class CursorPaster {
         sessionID: String,
         on pasteboard: NSPasteboard
     ) -> Task<Void, Never> {
-        let delay = min(
-            max(
-                UserDefaults.standard.double(forKey: "clipboardRestoreDelay"),
-                minimumClipboardRestoreDelay
-            ),
-            5.0
-        )
+        // The paste command was posted before this wait starts, so the target app has the whole delay to read the
+        // pasteboard; the minimum keeps even a very short setting clear of the command's own key events.
+        let delay = ClipboardPasteSettings.restoreDelay()
         return Task { @MainActor in
             await wait(delay)
-            guard pasteboardStillOwnedByPasteSession(pasteboard, expectedText: expectedText, sessionID: sessionID)
-            else {
+            switch PasteClipboard.restore(savedContents, expectedText: expectedText, sessionID: sessionID, on: pasteboard) {
+            case .restored:
+                logger.notice("Clipboard restored id=\(sessionID, privacy: .public)")
+            case .skippedClipboardChanged:
                 logger.notice("Clipboard restore skipped: clipboard changed id=\(sessionID, privacy: .public)")
-                return
-            }
-            pasteboard.clearContents()
-            if !savedContents.isEmpty, !pasteboard.writeObjects(pasteboardItems(from: savedContents)) {
+            case .failed:
                 logger.error("Clipboard restore failed id=\(sessionID, privacy: .public)")
-                return
             }
-            logger.notice("Clipboard restored id=\(sessionID, privacy: .public)")
-        }
-    }
-
-    private static func pasteboardStillOwnedByPasteSession(
-        _ pasteboard: NSPasteboard,
-        expectedText: String,
-        sessionID: String
-    ) -> Bool {
-        pasteboard.string(forType: .string) == expectedText
-            && pasteboard.string(forType: ClipboardManager.pasteSessionType) == sessionID
-    }
-
-    private static func pasteboardItems(from snapshot: ClipboardSnapshot) -> [NSPasteboardItem] {
-        snapshot.map { itemSnapshot in
-            let item = NSPasteboardItem()
-            for (type, data) in itemSnapshot {
-                item.setData(data, forType: type)
-            }
-            return item
         }
     }
 

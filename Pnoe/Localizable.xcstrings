@@ -2098,6 +2098,116 @@
         }
       }
     },
+    "500ms (default)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "500ms (Standard)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "500ms (par défaut)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "500ms（默认）"
+          }
+        }
+      }
+    },
+    "Add dictated text to clipboard history" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diktierten Text zum Zwischenablageverlauf hinzufügen"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajouter le texte dicté à l’historique du presse-papiers"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将听写文本添加到剪贴板历史"
+          }
+        }
+      }
+    },
+    "Add dictated text to clipboard history lets history apps such as Maccy, Raycast or Paste record the dictation before your earlier item comes back. A history app that checks the clipboard less often than the delay may miss it; a longer delay helps. A short delay (500ms by default) keeps pasting fast." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit „Diktierten Text zum Zwischenablageverlauf hinzufügen“ können Verlaufs-Apps wie Maccy, Raycast oder Paste das Diktat erfassen, bevor dein früherer Eintrag zurückkommt. Eine Verlaufs-App, die die Zwischenablage seltener als die Verzögerung prüft, übersieht es eventuell; eine längere Verzögerung hilft. Eine kurze Verzögerung (standardmäßig 500ms) hält das Einfügen schnell."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "« Ajouter le texte dicté à l’historique du presse-papiers » permet aux apps d’historique comme Maccy, Raycast ou Paste d’enregistrer la dictée avant le retour de votre élément précédent. Une app d’historique qui vérifie le presse-papiers moins souvent que le délai peut la manquer ; un délai plus long aide. Un délai court (500ms par défaut) garde le collage rapide."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“将听写文本添加到剪贴板历史”让 Maccy、Raycast、Paste 等历史应用能在你之前的内容恢复前记录听写文本。如果历史应用检查剪贴板的间隔比延迟更长，可能会漏掉；调长延迟会有帮助。较短的延迟（默认 500ms）能让粘贴保持迅速。"
+          }
+        }
+      }
+    },
+    "After pasting" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nach dem Einfügen"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Après le collage"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粘贴后"
+          }
+        }
+      }
+    },
+    "Default and AppleScript paste through the clipboard. The first choice leaves the dictated text there. The second puts back what you copied before, after the delay below. Direct Typing leaves the clipboard unchanged." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard und AppleScript fügen über die Zwischenablage ein. Die erste Auswahl lässt den diktierten Text dort. Die zweite stellt nach der unten gewählten Verzögerung wieder her, was du zuvor kopiert hattest. Direkte Texteingabe verändert die Zwischenablage nicht."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les méthodes Par défaut et AppleScript collent via le presse-papiers. Le premier choix y laisse le texte dicté. Le second remet ce que vous aviez copié avant, après le délai ci-dessous. La saisie directe ne modifie pas le presse-papiers."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认和 AppleScript 方式通过剪贴板粘贴。第一个选项把听写文本留在剪贴板；第二个选项在下方延迟后恢复你之前复制的内容。直接输入不会改动剪贴板。"
+          }
+        }
+      }
+    },
     "Fixes punctuation, capitals and fillers and aims to keep your words; a result that fails Pnoe's checks is replaced by the plain transcript." : {
       "localizations" : {
         "de" : {
@@ -2120,6 +2230,28 @@
         }
       }
     },
+    "Keep the dictated text on the clipboard" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diktierten Text in der Zwischenablage behalten"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Garder le texte dicté dans le presse-papiers"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将听写文本保留在剪贴板"
+          }
+        }
+      }
+    },
     "Meeting Notes" : {
       "localizations" : {
         "de" : {
@@ -2138,6 +2270,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "会议笔记"
+          }
+        }
+      }
+    },
+    "Put back what I copied before" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuvor Kopiertes wiederherstellen"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remettre ce que j’avais copié avant"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复我之前复制的内容"
           }
         }
       }
@@ -8936,29 +9090,6 @@
         }
       }
     },
-    "Default and AppleScript temporarily use the clipboard to paste transcription. When enabled, this restores your previous clipboard content after the selected delay. Direct Typing leaves the clipboard unchanged." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Standard und AppleScript verwenden vorübergehend die Zwischenablage zum Einfügen der Transkription. Wenn aktiviert, wird der vorherige Inhalt nach der gewählten Verzögerung wiederhergestellt. Direkte Texteingabe verändert die Zwischenablage nicht."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Les méthodes Par défaut et AppleScript utilisent temporairement le presse-papiers pour coller la transcription. Cette option restaure son contenu précédent après le délai choisi. La saisie directe ne modifie pas le presse-papiers."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "默认和 AppleScript 会暂时使用剪贴板来粘贴转录。启用后，会在所选延迟后恢复剪贴板之前的内容。直接输入不会更改剪贴板。"
-          }
-        }
-      }
-    },
     "Default Workflow Can’t Be Deleted" : {
       "comment" : "An alert that appears when the user tries to delete a workflow that is set as the default workflow.",
       "isCommentAutoGenerated" : true,
@@ -14377,28 +14508,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "音频保留时长"
-          }
-        }
-      }
-    },
-    "Keep Clipboard Content" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zwischenablage-Inhalt beibehalten"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Conserver le contenu du presse-papiers"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保留剪贴板内容"
           }
         }
       }

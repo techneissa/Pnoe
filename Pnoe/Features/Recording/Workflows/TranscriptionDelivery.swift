@@ -18,7 +18,6 @@ final class TranscriptionDelivery {
 
     struct Actions {
         let setState: (RecordingState) -> Void
-        let dismiss: () async -> Void
         let sendFollowUp: (String, Transcription) async -> Void
         let showResponse: (String, String?) async -> Void
         let failResponse: (String) async -> Void
@@ -26,7 +25,7 @@ final class TranscriptionDelivery {
 
     func deliver(_ request: Request, actions: Actions) async {
         guard request.transcription.transcriptionStatus == TranscriptionStatus.completed.rawValue else {
-            await actions.dismiss()
+            actions.setState(.failed)
             return
         }
 
@@ -47,11 +46,13 @@ final class TranscriptionDelivery {
             return
         }
 
-        if let text = request.text {
+        if let text = request.text, RecorderOutcomeFlow.hasText(text) {
             let sendKey = request.sendAfterPaste ? FinishAndSendSettings.selectedKey : request.output.autoSendKey
-            await paste(text, sendKey: sendKey, actions: actions)
+            await paste(text, sendKey: sendKey, takeHadError: request.responseError != nil, actions: actions)
         } else {
-            await actions.dismiss()
+            // Nothing was said: there is nothing to paste.
+            SoundManager.shared.play(.stop)
+            actions.setState(.failed)
         }
     }
 
@@ -61,6 +62,8 @@ final class TranscriptionDelivery {
         guard let text = item.text?.trimmingCharacters(in: .whitespacesAndNewlines),
             !text.isEmpty
         else {
+            // Nothing was said: back to idle, which keeps the conversation open, with no error icon.
+            actions.setState(.idle)
             return
         }
 
@@ -83,10 +86,10 @@ final class TranscriptionDelivery {
     }
 
     private func deliverCustomCommand(_ item: Request, actions: Actions) async {
-        guard let text = item.text else {
+        guard let text = item.text, RecorderOutcomeFlow.hasText(text) else {
             notifyCustomCommandFailure(CustomCommandDeliveryError.noTextToDeliver)
             SoundManager.shared.play(.stop)
-            await actions.dismiss()
+            actions.setState(.failed)
             return
         }
 
@@ -95,20 +98,31 @@ final class TranscriptionDelivery {
         else {
             notifyCustomCommandFailure(CustomCommandDeliveryError.commandNotConfigured)
             SoundManager.shared.play(.stop)
-            await actions.dismiss()
+            actions.setState(.failed)
             return
         }
 
         let finishAndSendKey: FinishAndSendKey = item.sendAfterPaste ? FinishAndSendSettings.selectedKey : .none
         SoundManager.shared.play(.stop)
-        await actions.dismiss()
+        actions.setState(.pasting)
 
-        Task {
-            await runCustomCommand(command: command, commandText: text, finishAndSendKey: finishAndSendKey)
+        // The check mark waits for the command to succeed; a failure shows the red error.
+        let takeHadError = item.responseError != nil
+        Task { @MainActor in
+            _ = await RecorderOutcomeFlow.report(
+                afterCommand: {
+                    Task { @MainActor in
+                        await self.runCustomCommand(
+                            command: command, commandText: text, finishAndSendKey: finishAndSendKey)
+                    }
+                },
+                takeHadError: takeHadError,
+                into: { actions.setState($0.state) })
         }
     }
 
-    private func runCustomCommand(command: String, commandText: String, finishAndSendKey: FinishAndSendKey) async {
+    /// Runs the command; true when it succeeded.
+    private func runCustomCommand(command: String, commandText: String, finishAndSendKey: FinishAndSendKey) async -> Bool {
         let startTime = Date()
         logger.notice("Custom command started")
 
@@ -143,8 +157,10 @@ final class TranscriptionDelivery {
                 try await Task.sleep(nanoseconds: 150_000_000)
                 CursorPaster.performSendKey(finishAndSendKey)
             }
+            return true
         } catch {
             notifyCustomCommandFailure(error, duration: Date().timeIntervalSince(startTime))
+            return false
         }
     }
 
@@ -163,19 +179,26 @@ final class TranscriptionDelivery {
         String(format: "%.3f", duration)
     }
 
-    private func paste(_ text: String, sendKey: FinishAndSendKey, actions: Actions) async {
+    /// Starts the paste, and shows the check mark (or the error symbol when it did not land or the AI
+    /// step failed) once it has landed. Nothing waits for the paste: this returns at once, so the
+    /// history save and the completion notice run as before, and a new recording can start while the
+    /// paste lands; its outcome is then dropped by the engine.
+    private func paste(_ text: String, sendKey: FinishAndSendKey, takeHadError: Bool, actions: Actions) async {
         let appendSpace = UserDefaults.standard.bool(forKey: "AppendTrailingSpace")
         let pastedText = text + (appendSpace ? " " : "")
-        actions.setState(.idle)
         SoundManager.shared.play(.stop)
-        await actions.dismiss()
+        actions.setState(.pasting)
 
         let pasteTask = CursorPaster.startPasteAtCursor(pastedText)
 
         Task { @MainActor in
-            let pasteOutcome = await pasteTask.value
+            let pasteOutcome = await RecorderOutcomeFlow.report(
+                afterPaste: { pasteTask },
+                landed: { $0.result.didPostPasteCommand },
+                takeHadError: takeHadError,
+                into: { actions.setState($0.state) })
 
-            if sendKey.isEnabled && pasteOutcome.result.didPostPasteCommand {
+            if sendKey.isEnabled, let pasteOutcome, pasteOutcome.result.didPostPasteCommand {
                 try? await Task.sleep(nanoseconds: 150_000_000)
                 if let generation = pasteOutcome.autoLearnGeneration {
                     await AutoLearnService.shared.cancelForAutoSend(generation: generation)

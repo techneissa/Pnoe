@@ -140,6 +140,83 @@ final class MotionTests: XCTestCase {
         XCTAssertFalse(Motion.hoverIsLit(pointerInside: true, isEnabled: true, suppressed: true))
     }
 
+    // MARK: - Turning
+
+    func testAnElementTurnsOnlyWhileThePointerIsOverIt() {
+        XCTAssertTrue(Motion.hoverTurns(pointerInside: true, reduceMotion: false))
+        XCTAssertFalse(Motion.hoverTurns(pointerInside: false, reduceMotion: false))
+    }
+
+    func testReduceMotionNeverTurns() {
+        XCTAssertFalse(Motion.hoverTurns(pointerInside: true, reduceMotion: true))
+        XCTAssertFalse(Motion.hoverTurns(pointerInside: false, reduceMotion: true))
+    }
+
+    func testTheAngleRestsUntilItTurns() {
+        let turn = MotionTurn(rest: 200, period: 2.6)
+        XCTAssertEqual(turn.angle(at: 0), 200)
+        XCTAssertEqual(turn.angle(at: 50), 200)
+        XCTAssertFalse(turn.isMoving(at: 50))
+    }
+
+    func testATurningAngleDoesOneTurnPerPeriodAtSteadySpeed() {
+        var turn = MotionTurn(rest: 200, period: 2.6)
+        turn.setTurning(true, at: 10)
+        // Past the short ramp up, the speed is 360 / 2.6 degrees per second.
+        let later = turn.angle(at: 20) - turn.angle(at: 10 + 2.6)
+        XCTAssertEqual(later, 360 / 2.6 * (20 - 12.6), accuracy: 1e-6)
+        XCTAssertEqual(turn.currentSpeed(at: 20), 360 / 2.6, accuracy: 1e-9)
+        XCTAssertTrue(turn.isMoving(at: 20))
+        // One full period at full speed adds a whole turn.
+        XCTAssertEqual(turn.angle(at: 15 + 2.6) - turn.angle(at: 15), 360, accuracy: 1e-6)
+    }
+
+    func testTheAngleEasesToAStopWithoutAJumpAndStaysStill() {
+        var turn = MotionTurn(rest: 0, period: 2.6)
+        turn.setTurning(true, at: 0)
+        let leaving = 5.0
+        let before = turn.angle(at: leaving)
+        turn.setTurning(false, at: leaving)
+        // No jump at the moment the pointer leaves, and the speed falls steadily to zero.
+        XCTAssertEqual(turn.angle(at: leaving), before, accuracy: 1e-9)
+        XCTAssertEqual(turn.currentSpeed(at: leaving), 360 / 2.6, accuracy: 1e-9)
+        let half = leaving + turn.rampDuration / 2
+        XCTAssertEqual(turn.currentSpeed(at: half), 360 / 2.6 / 2, accuracy: 1e-9)
+        // It only ever moves forward, and comes to rest after `rampDuration`.
+        var last = before
+        for step in 1...20 {
+            let angle = turn.angle(at: leaving + Double(step) * turn.rampDuration / 10)
+            XCTAssertGreaterThanOrEqual(angle, last)
+            last = angle
+        }
+        let stopped = turn.angle(at: leaving + turn.rampDuration)
+        XCTAssertEqual(stopped - before, 360 / 2.6 * turn.rampDuration / 2, accuracy: 1e-9)
+        XCTAssertEqual(turn.angle(at: leaving + 100), stopped, accuracy: 1e-9)
+        XCTAssertFalse(turn.isMoving(at: leaving + 100))
+    }
+
+    func testAStopCanBeInterruptedByTurningAgain() {
+        var turn = MotionTurn(rest: 0, period: 2.6)
+        turn.setTurning(true, at: 0)
+        turn.setTurning(false, at: 5)
+        let midStop = 5 + turn.rampDuration / 2
+        let angle = turn.angle(at: midStop)
+        turn.setTurning(true, at: midStop)
+        XCTAssertEqual(turn.angle(at: midStop), angle, accuracy: 1e-9)
+        XCTAssertEqual(turn.currentSpeed(at: midStop), 360 / 2.6 / 2, accuracy: 1e-9)
+        XCTAssertEqual(turn.currentSpeed(at: midStop + 1), 360 / 2.6, accuracy: 1e-9)
+    }
+
+    func testStoppingAtOnceKeepsTheAngleAndRests() {
+        var turn = MotionTurn(rest: 0, period: 2.6)
+        turn.setTurning(true, at: 0)
+        let angle = turn.angle(at: 3)
+        turn.stop(at: 3)
+        XCTAssertEqual(turn.angle(at: 3), angle, accuracy: 1e-9)
+        XCTAssertEqual(turn.angle(at: 30), angle, accuracy: 1e-9)
+        XCTAssertFalse(turn.isMoving(at: 3))
+    }
+
     // MARK: - Where the app uses them
 
     func testTheDownloadRowFollowsTheDownloadThroughItsPhases() {

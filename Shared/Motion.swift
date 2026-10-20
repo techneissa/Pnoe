@@ -14,6 +14,7 @@ import SwiftUI
 /// | A job starts (recording, transcribing, Run, a download) | Symbol replace; pulse on its symbol while it runs | `motionJobSymbol`, `motionSymbolReplace` |
 /// | A job finishes | Replace with a check mark, one bounce; a transient chip fades out | `motionJobSymbol`, `motionFade` |
 /// | A job fails (or a Playground run falls back) | Replace with the error symbol, one wiggle | `motionJobSymbol` |
+/// | A take ends in the recorder (pasted, cancelled, failed) | The processing indicator shrinks to nothing, then the check mark (or the red error symbol) grows to full size, no overshoot, and holds for `Motion.outcomeHold` | `MotionOutcomeSwap` |
 /// | A control changes state on a click (toggle, eye, media pausing) | Symbol replace, magic where the two symbols share a shape | `motionSymbolReplace` |
 /// | A value is copied or saved | Copy → check mark, back after about 1 s | `Motion.copiedHold` |
 /// | A panel opens or closes | Fade with a small move from its edge | `motionPanel` |
@@ -22,10 +23,12 @@ import SwiftUI
 /// | A picker or toggle changes | The control's own motion; the dependent value cross-fades | `Motion.change` |
 /// | A screen or stage changes (onboarding, history detail) | Cross-fade | `Motion.screen` |
 /// | A pointer enters a clickable control or row | About 10 % fill on the control itself, no size jump | `motionHover` |
+/// | A pointer rests on a decorative element that turns while it is over it | Turns while the pointer is over it, eases to a stop when it leaves | `MotionTurning` |
 ///
 /// Timing: at most 200 ms for any state change (hover 120, disclosure and copy 150, symbol
 /// replace 180, panel, finish, failure, reveal and screen 200). A loop (pulse, spin) runs only
 /// while its job runs: gate it on the running flag, never on `true`. A bounce or wiggle plays once.
+/// The recorder's outcome swap is two steps of 90 ms (shrink, then grow).
 enum Motion: CaseIterable, Sendable {
     /// A pointer enters or leaves a control or row, a drop target lights.
     case hover
@@ -47,6 +50,10 @@ enum Motion: CaseIterable, Sendable {
     case finish
     /// A job fails (the error symbol wiggles).
     case failure
+    /// The recorder's processing indicator shrinks to nothing when a take ends.
+    case outcomeShrink
+    /// The recorder's check mark or error symbol grows to full size.
+    case outcomeGrow
     /// A whole screen or stage changes.
     case screen
     /// A progress value moves; data, so short and linear.
@@ -66,13 +73,14 @@ enum Motion: CaseIterable, Sendable {
         case .symbolReplace: return 0.18
         case .reveal, .panel, .finish, .failure, .screen: return 0.2
         case .progress: return 0.1
+        case .outcomeShrink, .outcomeGrow: return 0.09
         }
     }
 
     var curve: Curve {
         switch self {
-        case .hover, .press, .reveal, .finish, .failure: return .easeOut
-        case .disclosure, .copy, .symbolReplace, .change, .panel, .screen: return .easeInOut
+        case .hover, .press, .reveal, .finish, .failure, .outcomeGrow: return .easeOut
+        case .disclosure, .copy, .symbolReplace, .change, .panel, .screen, .outcomeShrink: return .easeInOut
         case .progress: return .linear
         }
     }
@@ -82,6 +90,10 @@ enum Motion: CaseIterable, Sendable {
 
     /// How long a copy or save keeps its check mark before the control goes back.
     static let copiedHold: TimeInterval = 1.0
+
+    /// How long the recorder keeps the check mark or the error symbol that ends a take before it
+    /// hides. Short on purpose: nobody waits for it, and a new recording replaces it at once.
+    static let outcomeHold: TimeInterval = 0.6
 
     /// The system Reduce Motion setting.
     static var systemReducesMotion: Bool {
@@ -121,6 +133,12 @@ enum Motion: CaseIterable, Sendable {
 
     static func loopRuns(isActive: Bool, reduceMotion: Bool) -> Bool {
         isActive && !reduceMotion
+    }
+
+    /// Whether an element that turns while the pointer is over it is turning: only while the
+    /// pointer is over it, and never under Reduce Motion (it stays still).
+    static func hoverTurns(pointerInside: Bool, reduceMotion: Bool) -> Bool {
+        loopRuns(isActive: pointerInside, reduceMotion: reduceMotion)
     }
 
     /// The AppKit timing function of this moment, for window and layer animation.
@@ -206,6 +224,123 @@ extension Motion {
     /// The symbol of an on/off control whose two symbols share a shape (eye and eye.slash).
     static func toggleSymbol(isOn: Bool, on: String, off: String) -> String {
         isOn ? on : off
+    }
+}
+
+// MARK: - Outcome swap
+
+/// The scales of the two parts of the recorder's outcome swap at a moment: the processing indicator
+/// shrinks to nothing, then the check mark (or error symbol) grows to full size. No overshoot: both
+/// stay between 0 and 1.
+struct MotionOutcomeScales: Equatable {
+    let old: CGFloat
+    let new: CGFloat
+}
+
+extension Motion {
+    /// The timing curve of this moment as a unit cubic Bézier (the definitions SwiftUI uses for
+    /// `.easeInOut` and `.easeOut`), sampled at `x` from 0 to 1.
+    func progress(at x: Double) -> Double {
+        let (x1, y1, x2, y2): (Double, Double, Double, Double)
+        switch curve {
+        case .easeInOut: (x1, y1, x2, y2) = (0.42, 0, 0.58, 1)
+        case .easeOut: (x1, y1, x2, y2) = (0, 0, 0.58, 1)
+        case .linear: return min(1, max(0, x))
+        }
+        if x <= 0 { return 0 }
+        if x >= 1 { return 1 }
+        let target = x
+        func bezier(_ t: Double, _ a: Double, _ b: Double) -> Double {
+            let u = 1 - t
+            return 3 * u * u * t * a + 3 * u * t * t * b + t * t * t
+        }
+        var low = 0.0, high = 1.0
+        for _ in 0..<40 {
+            let mid = (low + high) / 2
+            if bezier(mid, x1, x2) < target { low = mid } else { high = mid }
+        }
+        return bezier((low + high) / 2, y1, y2)
+    }
+
+    /// The outcome swap `elapsed` seconds after the take ended: the indicator shrinks for
+    /// `outcomeShrink`, then the icon grows for `outcomeGrow`. Under Reduce Motion the icon is simply
+    /// there (same end state).
+    static func outcomeScales(at elapsed: TimeInterval, reduceMotion: Bool = Motion.systemReducesMotion)
+        -> MotionOutcomeScales
+    {
+        if reduceMotion { return MotionOutcomeScales(old: 0, new: 1) }
+        let shrink = Motion.outcomeShrink.baseDuration
+        let grow = Motion.outcomeGrow.baseDuration
+        if elapsed <= 0 { return MotionOutcomeScales(old: 1, new: 0) }
+        if elapsed < shrink {
+            return MotionOutcomeScales(old: CGFloat(1 - Motion.outcomeShrink.progress(at: elapsed / shrink)), new: 0)
+        }
+        if elapsed < shrink + grow {
+            return MotionOutcomeScales(old: 0, new: CGFloat(Motion.outcomeGrow.progress(at: (elapsed - shrink) / grow)))
+        }
+        return MotionOutcomeScales(old: 0, new: 1)
+    }
+}
+
+/// The recorder's end-of-take swap: `old` (the processing indicator) shrinks to nothing, then `new`
+/// (the check mark or error symbol) grows from small to full size, and it holds. Under Reduce Motion
+/// `new` simply appears. A view that first shows with `showsOutcome` already true shows `new` at once.
+struct MotionOutcomeSwap<Old: View, New: View>: View {
+    private enum Phase { case old, shrinking, growing, new }
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let showsOutcome: Bool
+    let old: Old
+    let new: New
+    @State private var phase: Phase
+    @State private var scale: CGFloat = 1
+
+    init(showsOutcome: Bool, @ViewBuilder old: () -> Old, @ViewBuilder new: () -> New) {
+        self.showsOutcome = showsOutcome
+        self.old = old()
+        self.new = new()
+        _phase = State(initialValue: showsOutcome ? .new : .old)
+    }
+
+    var body: some View {
+        Group {
+            switch phase {
+            case .old: old
+            case .shrinking: old.scaleEffect(scale)
+            case .growing: new.scaleEffect(scale)
+            case .new: new
+            }
+        }
+        .task(id: showsOutcome) { await advance() }
+    }
+
+    @MainActor
+    private func advance() async {
+        guard showsOutcome else {
+            phase = .old
+            scale = 1
+            return
+        }
+        guard phase == .old else { return }
+        if reduceMotion {
+            phase = .new
+            return
+        }
+        phase = .shrinking
+        scale = 1
+        Motion.animate(.outcomeShrink, reduceMotion: false) { scale = 0 }
+        try? await Task.sleep(nanoseconds: UInt64(Motion.outcomeShrink.baseDuration * 1_000_000_000))
+        guard !Task.isCancelled else { return }
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        withTransaction(instant) {
+            phase = .growing
+            scale = 0
+        }
+        Motion.animate(.outcomeGrow, reduceMotion: false) { scale = 1 }
+        try? await Task.sleep(nanoseconds: UInt64(Motion.outcomeGrow.baseDuration * 1_000_000_000))
+        guard !Task.isCancelled else { return }
+        phase = .new
     }
 }
 
@@ -398,6 +533,134 @@ private struct MotionSpinModifier: ViewModifier {
         } else {
             // A zero-length animation replaces the repeating one, so the spinner stops.
             withAnimation(.linear(duration: 0)) { angle = 0 }
+        }
+    }
+}
+
+// MARK: - Turning
+
+/// The angle of something that turns at a steady speed while it is active and eases to a stop when it
+/// is not (and eases back up to speed when it turns again), as a pure function of time. The speed
+/// changes at a constant rate over `rampDuration`, so the angle never jumps. No view, no clock: the
+/// caller passes the time.
+struct MotionTurn: Equatable, Sendable {
+    /// Degrees per second at full speed.
+    let speed: Double
+    /// Seconds to go from rest to full speed, or back.
+    let rampDuration: TimeInterval
+
+    private var angle0: Double
+    private var speed0 = 0.0
+    private var time0 = 0.0
+    private var target = 0.0
+
+    init(rest angle: Double = 0, period: TimeInterval, rampDuration: TimeInterval = Motion.hover.baseDuration) {
+        speed = 360 / period
+        self.rampDuration = rampDuration
+        angle0 = angle
+    }
+
+    /// The angle at `time` (seconds, any fixed origin), in degrees, not wrapped.
+    func angle(at time: TimeInterval) -> Double {
+        let elapsed = max(0, time - time0)
+        let change = target - speed0
+        let rampTime = rampDuration > 0 && speed > 0 ? abs(change) / speed * rampDuration : 0
+        if elapsed >= rampTime {
+            let rampAngle = rampTime > 0 ? speed0 * rampTime + 0.5 * change * rampTime : 0
+            return angle0 + rampAngle + target * (elapsed - rampTime)
+        }
+        return angle0 + speed0 * elapsed + 0.5 * (change / rampTime) * elapsed * elapsed
+    }
+
+    /// The speed at `time`, degrees per second.
+    func currentSpeed(at time: TimeInterval) -> Double {
+        let elapsed = max(0, time - time0)
+        let change = target - speed0
+        let rampTime = rampDuration > 0 && speed > 0 ? abs(change) / speed * rampDuration : 0
+        return elapsed >= rampTime ? target : speed0 + change * (elapsed / rampTime)
+    }
+
+    /// Whether the angle still moves at `time`.
+    func isMoving(at time: TimeInterval) -> Bool {
+        target != 0 || currentSpeed(at: time) != 0
+    }
+
+    /// Stops at once, where the angle is at `time` (Reduce Motion).
+    mutating func stop(at time: TimeInterval) {
+        angle0 = angle(at: time)
+        speed0 = 0
+        time0 = time
+        target = 0
+    }
+
+    /// Starts turning (`true`) or eases to a stop (`false`) from where the angle is at `time`.
+    mutating func setTurning(_ turning: Bool, at time: TimeInterval) {
+        let newTarget = turning ? speed : 0
+        guard newTarget != target else { return }
+        let now = angle(at: time)
+        let nowSpeed = currentSpeed(at: time)
+        angle0 = now
+        speed0 = nowSpeed
+        time0 = time
+        target = newTarget
+    }
+}
+
+/// A view that hands its content an angle which turns while `isActive` and eases to a stop when it
+/// goes false; it rests at `rest` degrees. Gate `isActive` on the real state (a pointer over the
+/// view) and it never loops on its own. Redraws only while the angle moves, and never turns under
+/// Reduce Motion.
+struct MotionTurning<Content: View>: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let isActive: Bool
+    let period: TimeInterval
+    let content: (Angle) -> Content
+    @State private var turn: MotionTurn
+    @State private var redraws = false
+    @State private var settle: Task<Void, Never>?
+
+    init(
+        isActive: Bool, period: TimeInterval = 2.6, rest: Angle = .zero,
+        @ViewBuilder content: @escaping (Angle) -> Content
+    ) {
+        self.isActive = isActive
+        self.period = period
+        self.content = content
+        _turn = State(initialValue: MotionTurn(rest: rest.degrees, period: period))
+    }
+
+    private var turns: Bool { Motion.hoverTurns(pointerInside: isActive, reduceMotion: reduceMotion) }
+
+    var body: some View {
+        TimelineView(.animation(paused: !redraws)) { context in
+            content(.degrees(turn.angle(at: context.date.timeIntervalSinceReferenceDate)))
+        }
+        .onChange(of: turns) { _, _ in update() }
+        .onDisappear {
+            settle?.cancel()
+            turn.stop(at: Date.timeIntervalSinceReferenceDate)
+            redraws = false
+        }
+    }
+
+    private func update() {
+        let now = Date.timeIntervalSinceReferenceDate
+        settle?.cancel()
+        if reduceMotion {
+            // Nothing turns under Reduce Motion, so there is no ease: the angle stops where it is.
+            turn.stop(at: now)
+            redraws = false
+            return
+        }
+        turn.setTurning(turns, at: now)
+        if turns {
+            redraws = true
+        } else {
+            settle = Task {
+                try? await Task.sleep(nanoseconds: UInt64((turn.rampDuration + 0.05) * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                redraws = false
+            }
         }
     }
 }
