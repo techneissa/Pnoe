@@ -168,10 +168,34 @@ private struct ContextAwarenessModePill: View {
 }
 
 private struct ContextAwarenessModeHub: View {
-    /// The border highlight sits at a fixed angle: nothing on this screen moves while it waits.
-    private let borderRotation = Angle.degrees(200)
+    /// Where the border highlight rests: nothing on this screen moves until the pointer is over the hub.
+    private static let restingAngle = Angle.degrees(200)
+    /// Seconds for one turn of the border while the pointer is over the hub.
+    private static let turnPeriod: TimeInterval = 2.6
+
+    @State private var pointerInside = false
 
     var body: some View {
+        MotionTurning(isActive: pointerInside, period: Self.turnPeriod, rest: Self.restingAngle) { angle in
+            hub(borderAngle: angle)
+        }
+        .contentShape(Capsule())
+        .onContinuousHover { phase in
+            switch phase {
+            case .active: pointerInside = true
+            case .ended: pointerInside = false
+            }
+        }
+        .onDisappear { pointerInside = false }
+    }
+
+    /// The shape of the three strokes. A rounded rectangle with the largest radius, not a `Capsule`:
+    /// a stroked `Capsule` draws a straight vertical line outside each rounded end.
+    private var outline: some Shape {
+        RoundedRectangle(cornerRadius: .infinity, style: .circular)
+    }
+
+    private func hub(borderAngle: Angle) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "sparkles.square.fill.on.square")
                 .font(.system(size: 14, weight: .semibold))
@@ -190,11 +214,11 @@ private struct ContextAwarenessModeHub: View {
                 .fill(AppTheme.Surface.control.opacity(0.92))
         )
         .overlay(
-            Capsule()
+            outline
                 .stroke(AppTheme.Border.subtle.opacity(0.88), lineWidth: 1)
         )
         .overlay(
-            Capsule()
+            outline
                 .stroke(
                     AngularGradient(
                         colors: [
@@ -205,13 +229,13 @@ private struct ContextAwarenessModeHub: View {
                             AppTheme.Border.subtle.opacity(0.20),
                         ],
                         center: .center,
-                        angle: borderRotation
+                        angle: borderAngle
                     ),
                     lineWidth: 1.6
                 )
         )
         .overlay(
-            Capsule()
+            outline
                 .stroke(Color.white.opacity(0.28), lineWidth: 0.7)
                 .padding(1.5)
         )

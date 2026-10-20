@@ -22,6 +22,7 @@ import SwiftUI
 /// | A picker or toggle changes | The control's own motion; the dependent value cross-fades | `Motion.change` |
 /// | A screen or stage changes (onboarding, history detail) | Cross-fade | `Motion.screen` |
 /// | A pointer enters a clickable control or row | About 10 % fill on the control itself, no size jump | `motionHover` |
+/// | A pointer rests on a decorative element that turns while it is over it | Turns while the pointer is over it, eases to a stop when it leaves | `MotionTurning` |
 ///
 /// Timing: at most 200 ms for any state change (hover 120, disclosure and copy 150, symbol
 /// replace 180, panel, finish, failure, reveal and screen 200). A loop (pulse, spin) runs only
@@ -121,6 +122,12 @@ enum Motion: CaseIterable, Sendable {
 
     static func loopRuns(isActive: Bool, reduceMotion: Bool) -> Bool {
         isActive && !reduceMotion
+    }
+
+    /// Whether an element that turns while the pointer is over it is turning: only while the
+    /// pointer is over it, and never under Reduce Motion (it stays still).
+    static func hoverTurns(pointerInside: Bool, reduceMotion: Bool) -> Bool {
+        loopRuns(isActive: pointerInside, reduceMotion: reduceMotion)
     }
 
     /// The AppKit timing function of this moment, for window and layer animation.
@@ -398,6 +405,134 @@ private struct MotionSpinModifier: ViewModifier {
         } else {
             // A zero-length animation replaces the repeating one, so the spinner stops.
             withAnimation(.linear(duration: 0)) { angle = 0 }
+        }
+    }
+}
+
+// MARK: - Turning
+
+/// The angle of something that turns at a steady speed while it is active and eases to a stop when it
+/// is not (and eases back up to speed when it turns again), as a pure function of time. The speed
+/// changes at a constant rate over `rampDuration`, so the angle never jumps. No view, no clock: the
+/// caller passes the time.
+struct MotionTurn: Equatable, Sendable {
+    /// Degrees per second at full speed.
+    let speed: Double
+    /// Seconds to go from rest to full speed, or back.
+    let rampDuration: TimeInterval
+
+    private var angle0: Double
+    private var speed0 = 0.0
+    private var time0 = 0.0
+    private var target = 0.0
+
+    init(rest angle: Double = 0, period: TimeInterval, rampDuration: TimeInterval = Motion.hover.baseDuration) {
+        speed = 360 / period
+        self.rampDuration = rampDuration
+        angle0 = angle
+    }
+
+    /// The angle at `time` (seconds, any fixed origin), in degrees, not wrapped.
+    func angle(at time: TimeInterval) -> Double {
+        let elapsed = max(0, time - time0)
+        let change = target - speed0
+        let rampTime = rampDuration > 0 && speed > 0 ? abs(change) / speed * rampDuration : 0
+        if elapsed >= rampTime {
+            let rampAngle = rampTime > 0 ? speed0 * rampTime + 0.5 * change * rampTime : 0
+            return angle0 + rampAngle + target * (elapsed - rampTime)
+        }
+        return angle0 + speed0 * elapsed + 0.5 * (change / rampTime) * elapsed * elapsed
+    }
+
+    /// The speed at `time`, degrees per second.
+    func currentSpeed(at time: TimeInterval) -> Double {
+        let elapsed = max(0, time - time0)
+        let change = target - speed0
+        let rampTime = rampDuration > 0 && speed > 0 ? abs(change) / speed * rampDuration : 0
+        return elapsed >= rampTime ? target : speed0 + change * (elapsed / rampTime)
+    }
+
+    /// Whether the angle still moves at `time`.
+    func isMoving(at time: TimeInterval) -> Bool {
+        target != 0 || currentSpeed(at: time) != 0
+    }
+
+    /// Stops at once, where the angle is at `time` (Reduce Motion).
+    mutating func stop(at time: TimeInterval) {
+        angle0 = angle(at: time)
+        speed0 = 0
+        time0 = time
+        target = 0
+    }
+
+    /// Starts turning (`true`) or eases to a stop (`false`) from where the angle is at `time`.
+    mutating func setTurning(_ turning: Bool, at time: TimeInterval) {
+        let newTarget = turning ? speed : 0
+        guard newTarget != target else { return }
+        let now = angle(at: time)
+        let nowSpeed = currentSpeed(at: time)
+        angle0 = now
+        speed0 = nowSpeed
+        time0 = time
+        target = newTarget
+    }
+}
+
+/// A view that hands its content an angle which turns while `isActive` and eases to a stop when it
+/// goes false; it rests at `rest` degrees. Gate `isActive` on the real state (a pointer over the
+/// view) and it never loops on its own. Redraws only while the angle moves, and never turns under
+/// Reduce Motion.
+struct MotionTurning<Content: View>: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let isActive: Bool
+    let period: TimeInterval
+    let content: (Angle) -> Content
+    @State private var turn: MotionTurn
+    @State private var redraws = false
+    @State private var settle: Task<Void, Never>?
+
+    init(
+        isActive: Bool, period: TimeInterval = 2.6, rest: Angle = .zero,
+        @ViewBuilder content: @escaping (Angle) -> Content
+    ) {
+        self.isActive = isActive
+        self.period = period
+        self.content = content
+        _turn = State(initialValue: MotionTurn(rest: rest.degrees, period: period))
+    }
+
+    private var turns: Bool { Motion.hoverTurns(pointerInside: isActive, reduceMotion: reduceMotion) }
+
+    var body: some View {
+        TimelineView(.animation(paused: !redraws)) { context in
+            content(.degrees(turn.angle(at: context.date.timeIntervalSinceReferenceDate)))
+        }
+        .onChange(of: turns) { _, _ in update() }
+        .onDisappear {
+            settle?.cancel()
+            turn.stop(at: Date.timeIntervalSinceReferenceDate)
+            redraws = false
+        }
+    }
+
+    private func update() {
+        let now = Date.timeIntervalSinceReferenceDate
+        settle?.cancel()
+        if reduceMotion {
+            // Nothing turns under Reduce Motion, so there is no ease: the angle stops where it is.
+            turn.stop(at: now)
+            redraws = false
+            return
+        }
+        turn.setTurning(turns, at: now)
+        if turns {
+            redraws = true
+        } else {
+            settle = Task {
+                try? await Task.sleep(nanoseconds: UInt64((turn.rampDuration + 0.05) * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                redraws = false
+            }
         }
     }
 }
