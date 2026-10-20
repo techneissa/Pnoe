@@ -319,13 +319,33 @@ struct ProcessingStatusDisplay: View {
     }
 }
 
+// MARK: - Outcome Icon
+
+/// The check mark (in `color`) or the red error symbol that replaces the processing indicator when a
+/// take ends. It arrives through `MotionOutcomeSwap` (shrink the indicator, grow the icon); this view
+/// is only the icon.
+struct RecorderOutcomeIcon: View {
+    let outcome: RecorderOutcome
+    let color: Color
+    var size: CGFloat = 16
+
+    var body: some View {
+        Image(systemName: Motion.symbol(for: outcome.phase, idle: ""))
+            .symbolVariant(outcome == .failed ? .fill : .none)
+            .font(.system(size: size, weight: .semibold))
+            .foregroundStyle(outcome == .failed ? Color(nsColor: .systemRed) : color)
+            .frame(height: 28)  // matches the processing display and the level meter
+            .accessibilityLabel(outcome == .done ? Text("Done") : Text("Failed"))
+    }
+}
+
 // MARK: - Record Button
 
 extension RecordingState {
     /// Whether the record button (or the dot, which is one) reacts to a click.
     var allowsRecordButton: Bool {
         switch self {
-        case .idle, .recording:
+        case .idle, .recording, .pasting, .done, .failed:
             return true
         case .starting, .transcribing, .enhancing, .busy:
             return false
@@ -334,7 +354,7 @@ extension RecordingState {
 
     var recordButtonLabel: String {
         switch self {
-        case .idle:
+        case .idle, .pasting, .done, .failed:
             return String(localized: "Start recording")
         case .starting:
             return String(localized: "Starting recording")
@@ -361,8 +381,12 @@ struct RecorderRecordButton: View {
             return .ready
         case .recording:
             return .recording
-        case .transcribing, .enhancing:
+        case .transcribing, .enhancing, .pasting:
             return .processing
+        case .done:
+            return .outcome(.done)
+        case .failed:
+            return .outcome(.failed)
         }
     }
 
@@ -410,7 +434,7 @@ struct RecorderRecordButton: View {
                 border: red.opacity(0.98),
                 mark: .white
             )
-        case .processing:
+        case .processing, .outcome:
             return StateColors(
                 surface: palette.ink.opacity(0.13),
                 border: palette.ink.opacity(0.18),
@@ -428,8 +452,15 @@ struct RecorderRecordButton: View {
                 .foregroundStyle(colors.mark)
                 .frame(width: 8, height: 8)
                 .motionJobSymbol(visualState == .recording ? .running : .idle)
-        case .processing:
-            ProcessingIndicator(color: colors.mark, isActive: visualState == .processing)
+        case .processing, .outcome:
+            // One branch for both, so the swap keeps its state when the take ends.
+            MotionOutcomeSwap(showsOutcome: recordingState.isOutcome) {
+                // Shown only while the take is processed and for the 90 ms it shrinks, so it keeps turning.
+                ProcessingIndicator(color: colors.mark, isActive: true)
+            } new: {
+                RecorderOutcomeIcon(outcome: recordingState.outcome ?? .done, color: colors.mark, size: 10)
+                    .frame(width: 12, height: 12)
+            }
         }
     }
 
@@ -439,6 +470,7 @@ struct RecorderRecordButton: View {
         case ready
         case recording
         case processing
+        case outcome(RecorderOutcome)
     }
 
     private struct StateColors {
@@ -599,8 +631,11 @@ struct RecorderStatusDisplay: View {
         Group {
             if currentState == .enhancing {
                 ProcessingStatusDisplay(mode: .enhancing, color: palette.ink).motionFade()
-            } else if currentState == .transcribing {
+            } else if currentState == .transcribing || currentState == .pasting {
                 ProcessingStatusDisplay(mode: .transcribing, color: palette.ink).motionFade()
+            } else if currentState.isOutcome {
+                // The outcome shows on the record button (the Dot has its own); the centre stays empty.
+                Color.clear.frame(height: 28).motionFade()
             } else if currentState == .recording {
                 AudioVisualizer(
                     levelHistoryProvider: levelHistoryProvider,
@@ -719,7 +754,7 @@ struct RecorderDotView: View {
 
     static func showsTimer(for state: RecordingState) -> Bool {
         switch state {
-        case .recording, .transcribing, .enhancing: return true
+        case .recording, .transcribing, .enhancing, .pasting, .done, .failed: return true
         case .idle, .starting, .busy: return false
         }
     }
@@ -729,8 +764,8 @@ struct RecorderDotView: View {
     private var isAnimated: Bool {
         switch recordingState {
         case .recording: return true
-        case .transcribing, .enhancing: return !reducesMotion
-        case .idle, .starting, .busy: return false
+        case .transcribing, .enhancing, .pasting: return !reducesMotion
+        case .idle, .starting, .busy, .done, .failed: return false
         }
     }
 
@@ -768,9 +803,15 @@ struct RecorderDotView: View {
                     Circle().fill(red.opacity(haloOpacity)).frame(width: diameter, height: diameter).scaleEffect(halo)
                     Circle().fill(red).frame(width: diameter, height: diameter)
                 })
-        case .transcribing, .enhancing:
+        case .transcribing, .enhancing, .pasting, .done, .failed:
             let pulse = reducesMotion ? 0.7 : 0.45 + 0.4 * (0.5 + 0.5 * sin(date.timeIntervalSinceReferenceDate * 2 * .pi / 1.2))
-            return AnyView(Circle().fill(palette.ink.opacity(pulse)).frame(width: diameter, height: diameter))
+            // One branch for the processing dot and the outcome, so the swap keeps its state.
+            return AnyView(
+                MotionOutcomeSwap(showsOutcome: recordingState.isOutcome) {
+                    Circle().fill(palette.ink.opacity(pulse)).frame(width: diameter, height: diameter)
+                } new: {
+                    RecorderOutcomeIcon(outcome: recordingState.outcome ?? .done, color: palette.ink, size: diameter + 4)
+                })
         case .idle, .starting, .busy:
             return AnyView(Circle().fill(palette.ink.opacity(0.45)).frame(width: diameter, height: diameter))
         }

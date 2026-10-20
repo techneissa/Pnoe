@@ -278,9 +278,11 @@ final class RecorderStyleTests: XCTestCase {
         XCTAssertFalse(RecorderDotView.showsTimer(for: .starting))
     }
 
-    func testOnlyIdleAndRecordingAcceptAClickOnTheRecordControl() {
+    func testOnlyIdleRecordingAndTheOutcomesAcceptAClickOnTheRecordControl() {
         XCTAssertTrue(RecordingState.idle.allowsRecordButton)
         XCTAssertTrue(RecordingState.recording.allowsRecordButton)
+        XCTAssertTrue(RecordingState.done.allowsRecordButton)
+        XCTAssertTrue(RecordingState.failed.allowsRecordButton)
         for state in [RecordingState.starting, .transcribing, .enhancing, .busy] {
             XCTAssertFalse(state.allowsRecordButton, "\(state)")
         }

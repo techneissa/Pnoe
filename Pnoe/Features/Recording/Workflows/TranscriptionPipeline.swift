@@ -44,10 +44,10 @@ class TranscriptionPipeline {
     ///   - audioURL: The recorded audio file.
     ///   - transcriptionConfiguration: Mode-resolved transcription engine settings for this phase.
     ///   - session: An active streaming session if one was prepared, otherwise nil.
-    ///   - onStateChange: Called when the pipeline moves to a new recording state (e.g. `.enhancing`).
+    ///   - onStateChange: Called when the pipeline moves to a new recording state (e.g. `.enhancing`), or ends the
+    ///     take with `.done` (pasted) or `.failed`.
     ///   - shouldCancel: Returns true if the user requested cancellation.
     ///   - onCancel: Called when cancellation is detected to cancel active session state.
-    ///   - onDismiss: Called when delivery should close the recorder panel.
     func run(
         transcription: Transcription,
         audioURL: URL,
@@ -62,7 +62,6 @@ class TranscriptionPipeline {
         onStateChange: @escaping (RecordingState) -> Void,
         shouldCancel: () -> Bool,
         onCancel: @escaping () async -> Void,
-        onDismiss: @escaping () async -> Void,
         assistant: AssistantHooks = .inactive
     ) async {
         let model = transcriptionConfiguration.model
@@ -285,7 +284,6 @@ class TranscriptionPipeline {
             ),
             actions: TranscriptionDelivery.Actions(
                 setState: onStateChange,
-                dismiss: onDismiss,
                 sendFollowUp: assistant.sendFollowUp,
                 showResponse: assistant.showResponse,
                 failResponse: assistant.failResponse
