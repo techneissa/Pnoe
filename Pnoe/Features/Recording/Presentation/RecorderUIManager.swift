@@ -245,6 +245,10 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
                 await engine.toggleRecord(modeId: modeId)
             case .starting, .transcribing, .enhancing:
                 await cancelRecording()
+            case .done, .failed:
+                // The take ended a moment ago: start the next one at once, the outcome goes.
+                playStartSound()
+                await engine.toggleRecord(modeId: modeId)
             case .idle:
                 if engine.assistantSession.canSendFollowUp {
                     playStartSound()
@@ -287,6 +291,7 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
     func dismissRecorderPanel() async {
         guard let engine = engine else { return }
 
+        engine.dismissOutcome()
         hideRecorderPanel()
         isRecorderPanelVisible = false
         engine.assistantSession.reset()
@@ -305,13 +310,20 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
 
     func cancelRecording() async {
         guard let engine = engine else { return }
+        let cancelsATake: Bool
         switch engine.recordingState {
         case .starting, .recording, .transcribing, .enhancing:
             SoundManager.shared.play(.cancel)
-        case .idle, .busy:
-            break
+            cancelsATake = true
+        case .idle, .busy, .done, .failed:
+            cancelsATake = false
         }
         await engine.cancelRecording()
+        // A cancelled take shows the error symbol for a moment; the assistant panel and a recorder
+        // that has nothing to cancel just close.
+        if cancelsATake, !engine.assistantSession.isVisible, engine.showCancelledOutcome() {
+            return
+        }
         await dismissRecorderPanel()
     }
 
@@ -375,7 +387,7 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
             switch engine?.recordingState {
             case .starting, .recording, .transcribing, .enhancing:
                 await cancelRecording()
-            case .idle, .busy, nil:
+            case .idle, .busy, .done, .failed, nil:
                 await dismissRecorderPanel()
             }
         }

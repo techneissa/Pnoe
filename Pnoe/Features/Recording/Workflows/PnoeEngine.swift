@@ -126,6 +126,15 @@ class PnoeEngine: NSObject, ObservableObject {
     let assistantChat: AssistantChatService?
     private let pipeline: TranscriptionPipeline
 
+    /// How a take ends in the recorder: a check mark when it was pasted, the error symbol when it
+    /// was cancelled or failed, for a moment, then the recorder hides.
+    private lazy var outcomeFlow = RecorderOutcomeFlow(
+        currentState: { [weak self] in self?.recordingState ?? .idle },
+        setState: { [weak self] in self?.recordingState = $0 },
+        isRecorderVisible: { [weak self] in self?.recorderUIManager?.isRecorderPanelVisible ?? false },
+        hide: { [weak self] in await self?.recorderUIManager?.dismissRecorderPanel() }
+    )
+
     let logger = Logger(subsystem: "com.techneissa.pnoe", category: "PnoeEngine")
 
     init(
@@ -226,6 +235,8 @@ class PnoeEngine: NSObject, ObservableObject {
             let canContinueAssistantSession = isAssistantFollowUp && assistantSession.canSendFollowUp
             let recordingUseCase: RecordingUseCase = canContinueAssistantSession ? .assistantFollowUp : .newSession
 
+            // A check mark or error symbol still showing from the last take goes at once.
+            outcomeFlow.interrupt()
             activePipelineTranscriptionID = nil
             shouldCancelRecording = false
             partialTranscript = ""
@@ -323,7 +334,7 @@ class PnoeEngine: NSObject, ObservableObject {
                                 self.activeRecordingStartID = nil
                                 self.clearActiveRecordingContext()
                                 await self.cleanupResources()
-                                await self.recorderUIManager?.dismissRecorderPanel()
+                                await self.endTakeWithFailure()
                                 return
                             }
 
@@ -440,7 +451,7 @@ class PnoeEngine: NSObject, ObservableObject {
                                 NotificationManager.shared.showNotification(
                                     title: String(localized: "Recording failed to start"), type: .error)
                             }
-                            await self.recorderUIManager?.dismissRecorderPanel()
+                            await self.endTakeWithFailure()
                         }
                     }
                 } else {
@@ -525,7 +536,28 @@ class PnoeEngine: NSObject, ObservableObject {
             duration: 7.0,
             actionButton: (actionLabel, action)
         )
-        await recorderUIManager?.dismissRecorderPanel()
+        await endTakeWithFailure()
+    }
+
+    /// Shows the error symbol for a moment, then hides the recorder; hides it at once when this
+    /// take's recorder is already gone.
+    private func endTakeWithFailure() async {
+        if !outcomeFlow.show(.failed) {
+            await recorderUIManager?.dismissRecorderPanel()
+        }
+    }
+
+    /// Shows the error symbol for a take that was cancelled. Returns false when the recorder is
+    /// already hidden or a new take replaced it.
+    @discardableResult
+    func showCancelledOutcome() -> Bool {
+        outcomeFlow.show(.failed)
+    }
+
+    /// Drops a check mark or error symbol that is still showing (the recorder closes, or a new
+    /// recording starts).
+    func dismissOutcome() {
+        outcomeFlow.interrupt()
     }
 
     // MARK: - Recording Context
@@ -570,7 +602,7 @@ class PnoeEngine: NSObject, ObservableObject {
             transcription.text = String(localized: "Transcription Failed: No model selected")
             transcription.transcriptionStatus = TranscriptionStatus.failed.rawValue
             try? modelContext.save()
-            recordingState = .idle
+            if !outcomeFlow.show(.failed) { recordingState = .idle }
             activePipelineUseCase = .newSession
             return
         }
@@ -613,7 +645,11 @@ class PnoeEngine: NSObject, ObservableObject {
             sendAfterPaste: sendAfterPaste,
             onStateChange: { [weak self] state in
                 guard let self, self.activePipelineTranscriptionID == transcriptionID else { return }
-                self.recordingState = state
+                if let outcome = state.outcome {
+                    self.outcomeFlow.show(outcome)
+                } else {
+                    self.recordingState = state
+                }
             },
             shouldCancel: { [weak self] in
                 guard let self else { return false }
@@ -623,10 +659,6 @@ class PnoeEngine: NSObject, ObservableObject {
             onCancel: { [weak self, session] in
                 guard let self else { return }
                 self.cancelPipelineSession(transcriptionID: transcriptionID, session: session)
-            },
-            onDismiss: { [weak self] in
-                guard let self, self.activePipelineTranscriptionID == transcriptionID else { return }
-                await self.recorderUIManager?.dismissRecorderPanel()
             },
             assistant: TranscriptionPipeline.AssistantHooks(
                 isFollowUp: activePipelineUseCase.isAssistantFollowUp,
@@ -689,6 +721,7 @@ class PnoeEngine: NSObject, ObservableObject {
     // MARK: - Cancellation
 
     func cancelRecording() async {
+        outcomeFlow.interrupt()
         let shouldFinishSessionImmediately: Bool
         switch recordingState {
         case .starting, .recording:
@@ -700,7 +733,7 @@ class PnoeEngine: NSObject, ObservableObject {
             partialTranscript = ""
             recordingState = .idle
             shouldFinishSessionImmediately = false
-        case .idle, .busy:
+        case .idle, .busy, .done, .failed:
             partialTranscript = ""
             shouldCancelRecording = false
             recordingState = .idle
@@ -713,6 +746,7 @@ class PnoeEngine: NSObject, ObservableObject {
     }
 
     func resetRecordingSession() async {
+        outcomeFlow.interrupt()
         cancelCurrentSession()
         activeRecordingStartID = nil
         activePipelineTranscriptionID = nil

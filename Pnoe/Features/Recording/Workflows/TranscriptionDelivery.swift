@@ -18,7 +18,6 @@ final class TranscriptionDelivery {
 
     struct Actions {
         let setState: (RecordingState) -> Void
-        let dismiss: () async -> Void
         let sendFollowUp: (String, Transcription) async -> Void
         let showResponse: (String, String?) async -> Void
         let failResponse: (String) async -> Void
@@ -26,7 +25,7 @@ final class TranscriptionDelivery {
 
     func deliver(_ request: Request, actions: Actions) async {
         guard request.transcription.transcriptionStatus == TranscriptionStatus.completed.rawValue else {
-            await actions.dismiss()
+            actions.setState(.failed)
             return
         }
 
@@ -47,11 +46,13 @@ final class TranscriptionDelivery {
             return
         }
 
-        if let text = request.text {
+        if let text = request.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let sendKey = request.sendAfterPaste ? FinishAndSendSettings.selectedKey : request.output.autoSendKey
-            await paste(text, sendKey: sendKey, actions: actions)
+            await paste(text, sendKey: sendKey, takeHadError: request.responseError != nil, actions: actions)
         } else {
-            await actions.dismiss()
+            // Nothing was said: there is nothing to paste.
+            SoundManager.shared.play(.stop)
+            actions.setState(.failed)
         }
     }
 
@@ -86,7 +87,7 @@ final class TranscriptionDelivery {
         guard let text = item.text else {
             notifyCustomCommandFailure(CustomCommandDeliveryError.noTextToDeliver)
             SoundManager.shared.play(.stop)
-            await actions.dismiss()
+            actions.setState(.failed)
             return
         }
 
@@ -95,13 +96,13 @@ final class TranscriptionDelivery {
         else {
             notifyCustomCommandFailure(CustomCommandDeliveryError.commandNotConfigured)
             SoundManager.shared.play(.stop)
-            await actions.dismiss()
+            actions.setState(.failed)
             return
         }
 
         let finishAndSendKey: FinishAndSendKey = item.sendAfterPaste ? FinishAndSendSettings.selectedKey : .none
         SoundManager.shared.play(.stop)
-        await actions.dismiss()
+        actions.setState(item.responseError == nil ? .done : .failed)
 
         Task {
             await runCustomCommand(command: command, commandText: text, finishAndSendKey: finishAndSendKey)
@@ -163,19 +164,22 @@ final class TranscriptionDelivery {
         String(format: "%.3f", duration)
     }
 
-    private func paste(_ text: String, sendKey: FinishAndSendKey, actions: Actions) async {
+    /// Pastes the text, then shows the check mark (or the error symbol when the paste did not land
+    /// or the AI step failed). The paste starts first and the outcome waits for it, so the outcome
+    /// never delays the paste.
+    private func paste(_ text: String, sendKey: FinishAndSendKey, takeHadError: Bool, actions: Actions) async {
         let appendSpace = UserDefaults.standard.bool(forKey: "AppendTrailingSpace")
         let pastedText = text + (appendSpace ? " " : "")
-        actions.setState(.idle)
         SoundManager.shared.play(.stop)
-        await actions.dismiss()
 
-        let pasteTask = CursorPaster.startPasteAtCursor(pastedText)
+        let pasteOutcome = await RecorderOutcomeFlow.report(
+            afterPaste: { CursorPaster.startPasteAtCursor(pastedText) },
+            landed: { $0.result.didPostPasteCommand },
+            takeHadError: takeHadError,
+            into: { actions.setState($0.state) })
 
-        Task { @MainActor in
-            let pasteOutcome = await pasteTask.value
-
-            if sendKey.isEnabled && pasteOutcome.result.didPostPasteCommand {
+        if sendKey.isEnabled && pasteOutcome.result.didPostPasteCommand {
+            Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 150_000_000)
                 if let generation = pasteOutcome.autoLearnGeneration {
                     await AutoLearnService.shared.cancelForAutoSend(generation: generation)

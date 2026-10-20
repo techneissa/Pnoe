@@ -14,6 +14,7 @@ import SwiftUI
 /// | A job starts (recording, transcribing, Run, a download) | Symbol replace; pulse on its symbol while it runs | `motionJobSymbol`, `motionSymbolReplace` |
 /// | A job finishes | Replace with a check mark, one bounce; a transient chip fades out | `motionJobSymbol`, `motionFade` |
 /// | A job fails (or a Playground run falls back) | Replace with the error symbol, one wiggle | `motionJobSymbol` |
+/// | A take ends in the recorder (pasted, cancelled, failed) | The processing indicator is replaced by a check mark with one bounce, or the error symbol with one wiggle, for `Motion.outcomeHold` | `motionBounce`, `motionWiggle`, `motionFade` |
 /// | A control changes state on a click (toggle, eye, media pausing) | Symbol replace, magic where the two symbols share a shape | `motionSymbolReplace` |
 /// | A value is copied or saved | Copy → check mark, back after about 1 s | `Motion.copiedHold` |
 /// | A panel opens or closes | Fade with a small move from its edge | `motionPanel` |
@@ -82,6 +83,10 @@ enum Motion: CaseIterable, Sendable {
 
     /// How long a copy or save keeps its check mark before the control goes back.
     static let copiedHold: TimeInterval = 1.0
+
+    /// How long the recorder keeps the check mark or the error symbol that ends a take before it
+    /// hides. Short on purpose: nobody waits for it, and a new recording replaces it at once.
+    static let outcomeHold: TimeInterval = 0.6
 
     /// The system Reduce Motion setting.
     static var systemReducesMotion: Bool {

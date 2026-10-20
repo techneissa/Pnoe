@@ -319,13 +319,42 @@ struct ProcessingStatusDisplay: View {
     }
 }
 
+// MARK: - Outcome Icon
+
+/// The check mark (one bounce) or the error symbol (one wiggle) that replaces the processing
+/// indicator when a take ends. The effect plays when the view appears, which is when the outcome
+/// is reached, and not at all under Reduce Motion.
+struct RecorderOutcomeIcon: View {
+    let outcome: RecorderOutcome
+    let color: Color
+    var size: CGFloat = 16
+
+    var body: some View {
+        switch outcome {
+        case .done:
+            symbol.motionBounce(when: true)
+        case .failed:
+            symbol.motionWiggle(when: true)
+        }
+    }
+
+    private var symbol: some View {
+        Image(systemName: Motion.symbol(for: outcome.phase, idle: ""))
+            .symbolVariant(outcome == .failed ? .fill : .none)
+            .font(.system(size: size, weight: .semibold))
+            .foregroundStyle(color)
+            .frame(height: 28)  // matches the processing display and the level meter
+            .accessibilityLabel(outcome == .done ? Text("Done") : Text("Failed"))
+    }
+}
+
 // MARK: - Record Button
 
 extension RecordingState {
     /// Whether the record button (or the dot, which is one) reacts to a click.
     var allowsRecordButton: Bool {
         switch self {
-        case .idle, .recording:
+        case .idle, .recording, .done, .failed:
             return true
         case .starting, .transcribing, .enhancing, .busy:
             return false
@@ -334,7 +363,7 @@ extension RecordingState {
 
     var recordButtonLabel: String {
         switch self {
-        case .idle:
+        case .idle, .done, .failed:
             return String(localized: "Start recording")
         case .starting:
             return String(localized: "Starting recording")
@@ -363,6 +392,10 @@ struct RecorderRecordButton: View {
             return .recording
         case .transcribing, .enhancing:
             return .processing
+        case .done:
+            return .outcome(.done)
+        case .failed:
+            return .outcome(.failed)
         }
     }
 
@@ -410,7 +443,7 @@ struct RecorderRecordButton: View {
                 border: red.opacity(0.98),
                 mark: .white
             )
-        case .processing:
+        case .processing, .outcome:
             return StateColors(
                 surface: palette.ink.opacity(0.13),
                 border: palette.ink.opacity(0.18),
@@ -430,6 +463,9 @@ struct RecorderRecordButton: View {
                 .motionJobSymbol(visualState == .recording ? .running : .idle)
         case .processing:
             ProcessingIndicator(color: colors.mark, isActive: visualState == .processing)
+        case .outcome(let outcome):
+            RecorderOutcomeIcon(outcome: outcome, color: colors.mark, size: 10)
+                .frame(width: 12, height: 12)
         }
     }
 
@@ -439,6 +475,7 @@ struct RecorderRecordButton: View {
         case ready
         case recording
         case processing
+        case outcome(RecorderOutcome)
     }
 
     private struct StateColors {
@@ -601,6 +638,8 @@ struct RecorderStatusDisplay: View {
                 ProcessingStatusDisplay(mode: .enhancing, color: palette.ink).motionFade()
             } else if currentState == .transcribing {
                 ProcessingStatusDisplay(mode: .transcribing, color: palette.ink).motionFade()
+            } else if let outcome = currentState.outcome {
+                RecorderOutcomeIcon(outcome: outcome, color: palette.ink).motionFade()
             } else if currentState == .recording {
                 AudioVisualizer(
                     levelHistoryProvider: levelHistoryProvider,
@@ -719,7 +758,7 @@ struct RecorderDotView: View {
 
     static func showsTimer(for state: RecordingState) -> Bool {
         switch state {
-        case .recording, .transcribing, .enhancing: return true
+        case .recording, .transcribing, .enhancing, .done, .failed: return true
         case .idle, .starting, .busy: return false
         }
     }
@@ -730,7 +769,7 @@ struct RecorderDotView: View {
         switch recordingState {
         case .recording: return true
         case .transcribing, .enhancing: return !reducesMotion
-        case .idle, .starting, .busy: return false
+        case .idle, .starting, .busy, .done, .failed: return false
         }
     }
 
@@ -771,6 +810,10 @@ struct RecorderDotView: View {
         case .transcribing, .enhancing:
             let pulse = reducesMotion ? 0.7 : 0.45 + 0.4 * (0.5 + 0.5 * sin(date.timeIntervalSinceReferenceDate * 2 * .pi / 1.2))
             return AnyView(Circle().fill(palette.ink.opacity(pulse)).frame(width: diameter, height: diameter))
+        case .done:
+            return AnyView(RecorderOutcomeIcon(outcome: .done, color: palette.ink, size: diameter + 4))
+        case .failed:
+            return AnyView(RecorderOutcomeIcon(outcome: .failed, color: palette.ink, size: diameter + 4))
         case .idle, .starting, .busy:
             return AnyView(Circle().fill(palette.ink.opacity(0.45)).frame(width: diameter, height: diameter))
         }

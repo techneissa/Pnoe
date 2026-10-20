@@ -238,7 +238,7 @@ struct NotchRecorderLayout<ModeButton: View, AssistantPanel: View>: View {
         switch recordingState {
         case .recording:
             return liveContent != nil ? .liveText : .active
-        case .transcribing, .enhancing:
+        case .transcribing, .enhancing, .done, .failed:
             return .active
         default:
             // With the visibility setting "Always" the idle indicator keeps the recording layout.
