@@ -56,6 +56,7 @@ struct PnoeApp: App {
             Snippet.self,
         ])
         let resolvedContainer: ModelContainer
+        var usesInMemoryStorage = false
 
         // Attempt 1: Try persistent storage
         do {
@@ -64,6 +65,7 @@ struct PnoeApp: App {
             // Attempt 2: Try in-memory storage
             do {
                 resolvedContainer = try Self.createInMemoryContainer(schema: schema, logger: logger)
+                usesInMemoryStorage = true
                 logger.warning("Using in-memory storage as fallback. Data will not persist between sessions.")
 
                 DispatchQueue.main.async {
@@ -91,6 +93,11 @@ struct PnoeApp: App {
 
         container = resolvedContainer
         DictionaryService.cleanUpDictionaryContent(context: resolvedContainer.mainContext, source: "launch")
+        // Does nothing unless the user turned on Sync through iCloud Drive. An empty fallback store
+        // must never be synced: it would read as the user deleting everything.
+        if !usesInMemoryStorage {
+            DictionarySyncController.shared.configure(container: resolvedContainer)
+        }
 
         // Initialize services with proper sharing of instances
         let aiService = AIService()

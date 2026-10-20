@@ -20,6 +20,7 @@ struct DictionarySettingsPanel: View {
     @State private var pendingCorrectionCount = 0
     @State private var pendingImport: DictionaryImportPayload?
     @State private var transferAlert: DictionaryTransferAlert?
+    @ObservedObject private var driveSync = DictionarySyncController.shared
 
     var body: some View {
         QuickPanelScaffold {
@@ -99,6 +100,25 @@ struct DictionarySettingsPanel: View {
                     }
                 } header: {
                     AutoLearnSectionHeader()
+                }
+
+                // Interim sync between Macs through a file in iCloud Drive, until the CloudKit sync of
+                // issue #5 can be built (it needs a paid Apple Developer membership). Hidden where the
+                // dictionary store already syncs through CloudKit (signed release builds).
+                if DictionarySyncController.isAvailable {
+                    Section {
+                        DictionarySyncRow(
+                            isOn: Binding(get: { driveSync.isEnabled }, set: { driveSync.setEnabled($0) }),
+                            status: driveSync.status,
+                            symbolPhase: driveSync.symbolPhase
+                        ) {
+                            InfoTip(
+                                "Off by default. Keeps your vocabulary, word replacements and snippets in one file in the Pnoe folder of your iCloud Drive, and merges it with the same file on your other Macs. The newest edit of each item wins, and a deletion reaches the other Macs too. Turn it on in Pnoe on each Mac."
+                            )
+                        }
+                    } header: {
+                        Text("Sync")
+                    }
                 }
 
                 Section {
