@@ -83,7 +83,7 @@ final class RecorderOutcomeRenderTests: XCTestCase {
         }
     }
 
-    private func render(_ view: AnyView, size: CGSize, name: String, dark: Bool, scale: CGFloat = 3) throws {
+    private func render(_ view: AnyView, size: CGSize, name: String, dark: Bool, showsRed: Bool, scale: CGFloat = 3) throws {
         _ = NSApplication.shared
         let host = NSHostingView(rootView: view)
         host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
@@ -112,6 +112,20 @@ final class RecorderOutcomeRenderTests: XCTestCase {
         }
         XCTAssertGreaterThan(distinctColors.count, 4, "\(name) rendered blank")
 
+        // The error symbol is red; nothing else in a recorder is.
+        var redPixels = 0
+        for x in 0..<rep.pixelsWide {
+            for y in 0..<rep.pixelsHigh {
+                guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+                if c.redComponent > 0.8 && c.greenComponent < 0.3 && c.blueComponent < 0.3 { redPixels += 1 }
+            }
+        }
+        if showsRed {
+            XCTAssertGreaterThan(redPixels, 20, "\(name) has no red error symbol")
+        } else {
+            XCTAssertEqual(redPixels, 0, "\(name) shows red")
+        }
+
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
         let png = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
         try png.write(to: outputDirectory.appendingPathComponent("\(name).png"))
@@ -128,7 +142,7 @@ final class RecorderOutcomeRenderTests: XCTestCase {
                     let (view, size) = recorder(style, state: state, theme: theme)
                     try render(
                         view, size: size, name: "\(style.rawValue)-\(theme.rawValue)-\(label)",
-                        dark: theme == .dark)
+                        dark: theme == .dark, showsRed: state == .failed)
                     count += 1
                 }
             }

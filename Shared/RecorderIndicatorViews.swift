@@ -321,8 +321,8 @@ struct ProcessingStatusDisplay: View {
 
 // MARK: - Outcome Icon
 
-/// The check mark (one bounce) or the error symbol (one wiggle) that replaces the processing
-/// indicator when a take ends. The effect plays when the view appears, which is when the outcome
+/// The check mark (one bounce, in `color`) or the error symbol (one wiggle, system red) that replaces
+/// the processing indicator when a take ends. The effect plays when the view appears, which is when the outcome
 /// is reached, and not at all under Reduce Motion.
 struct RecorderOutcomeIcon: View {
     let outcome: RecorderOutcome
@@ -342,7 +342,7 @@ struct RecorderOutcomeIcon: View {
         Image(systemName: Motion.symbol(for: outcome.phase, idle: ""))
             .symbolVariant(outcome == .failed ? .fill : .none)
             .font(.system(size: size, weight: .semibold))
-            .foregroundStyle(color)
+            .foregroundStyle(outcome == .failed ? Color(nsColor: .systemRed) : color)
             .frame(height: 28)  // matches the processing display and the level meter
             .accessibilityLabel(outcome == .done ? Text("Done") : Text("Failed"))
     }
@@ -386,12 +386,16 @@ struct RecorderRecordButton: View {
 
     private var visualState: VisualState {
         switch recordingState {
-        case .idle, .starting, .busy, .done, .failed:
+        case .idle, .starting, .busy:
             return .ready
         case .recording:
             return .recording
         case .transcribing, .enhancing:
             return .processing
+        case .done:
+            return .outcome(.done)
+        case .failed:
+            return .outcome(.failed)
         }
     }
 
@@ -439,7 +443,7 @@ struct RecorderRecordButton: View {
                 border: red.opacity(0.98),
                 mark: .white
             )
-        case .processing:
+        case .processing, .outcome:
             return StateColors(
                 surface: palette.ink.opacity(0.13),
                 border: palette.ink.opacity(0.18),
@@ -459,6 +463,9 @@ struct RecorderRecordButton: View {
                 .motionJobSymbol(visualState == .recording ? .running : .idle)
         case .processing:
             ProcessingIndicator(color: colors.mark, isActive: visualState == .processing)
+        case .outcome(let outcome):
+            RecorderOutcomeIcon(outcome: outcome, color: colors.mark, size: 10)
+                .frame(width: 12, height: 12)
         }
     }
 
@@ -468,6 +475,7 @@ struct RecorderRecordButton: View {
         case ready
         case recording
         case processing
+        case outcome(RecorderOutcome)
     }
 
     private struct StateColors {
@@ -630,8 +638,9 @@ struct RecorderStatusDisplay: View {
                 ProcessingStatusDisplay(mode: .enhancing, color: palette.ink).motionFade()
             } else if currentState == .transcribing {
                 ProcessingStatusDisplay(mode: .transcribing, color: palette.ink).motionFade()
-            } else if let outcome = currentState.outcome {
-                RecorderOutcomeIcon(outcome: outcome, color: palette.ink).motionFade()
+            } else if currentState.isOutcome {
+                // The outcome shows on the record button (the Dot has its own); the centre stays empty.
+                Color.clear.frame(height: 28).motionFade()
             } else if currentState == .recording {
                 AudioVisualizer(
                     levelHistoryProvider: levelHistoryProvider,
