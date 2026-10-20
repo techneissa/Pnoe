@@ -386,16 +386,12 @@ struct RecorderRecordButton: View {
 
     private var visualState: VisualState {
         switch recordingState {
-        case .idle, .starting, .busy:
+        case .idle, .starting, .busy, .done, .failed:
             return .ready
         case .recording:
             return .recording
         case .transcribing, .enhancing:
             return .processing
-        case .done:
-            return .outcome(.done)
-        case .failed:
-            return .outcome(.failed)
         }
     }
 
@@ -443,7 +439,7 @@ struct RecorderRecordButton: View {
                 border: red.opacity(0.98),
                 mark: .white
             )
-        case .processing, .outcome:
+        case .processing:
             return StateColors(
                 surface: palette.ink.opacity(0.13),
                 border: palette.ink.opacity(0.18),
@@ -463,9 +459,6 @@ struct RecorderRecordButton: View {
                 .motionJobSymbol(visualState == .recording ? .running : .idle)
         case .processing:
             ProcessingIndicator(color: colors.mark, isActive: visualState == .processing)
-        case .outcome(let outcome):
-            RecorderOutcomeIcon(outcome: outcome, color: colors.mark, size: 10)
-                .frame(width: 12, height: 12)
         }
     }
 
@@ -475,7 +468,6 @@ struct RecorderRecordButton: View {
         case ready
         case recording
         case processing
-        case outcome(RecorderOutcome)
     }
 
     private struct StateColors {
