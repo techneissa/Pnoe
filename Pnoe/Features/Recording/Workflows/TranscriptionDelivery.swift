@@ -185,7 +185,7 @@ final class TranscriptionDelivery {
                 takeHadError: takeHadError,
                 into: { actions.setState($0.state) })
 
-            if sendKey.isEnabled && pasteOutcome.result.didPostPasteCommand {
+            if sendKey.isEnabled, let pasteOutcome, pasteOutcome.result.didPostPasteCommand {
                 try? await Task.sleep(nanoseconds: 150_000_000)
                 if let generation = pasteOutcome.autoLearnGeneration {
                     await AutoLearnService.shared.cancelForAutoSend(generation: generation)

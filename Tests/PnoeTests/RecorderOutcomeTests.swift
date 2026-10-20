@@ -156,8 +156,45 @@ final class RecorderOutcomeTests: XCTestCase {
             },
             landed: { $0 },
             into: { log.append("outcome \($0)") })
-        XCTAssertTrue(result)
+        XCTAssertEqual(result, true)
         XCTAssertEqual(log, ["paste", "outcome done"])
+    }
+
+    func testAPasteThatNeverReturnsShowsTheErrorAfterTheTimeout() async {
+        var outcomes: [RecorderOutcome] = []
+        let stuck = Task<Bool, Never> {
+            while !Task.isCancelled { try? await Task.sleep(nanoseconds: 100_000_000) }
+            return true
+        }
+        let started = Date()
+        let result = await RecorderOutcomeFlow.report(
+            afterPaste: { stuck }, landed: { $0 }, timeout: 0.1, into: { outcomes.append($0) })
+        stuck.cancel()
+        XCTAssertNil(result)
+        XCTAssertEqual(outcomes, [.failed])
+        XCTAssertLessThan(Date().timeIntervalSince(started), 1)
+        XCTAssertEqual(RecorderOutcomeFlow.pasteTimeout, 3)
+    }
+
+    func testAPasteResultThatArrivesAfterTheTimeoutIsIgnored() async throws {
+        var outcomes: [RecorderOutcome] = []
+        let late = Task<Bool, Never> {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            return true
+        }
+        let result = await RecorderOutcomeFlow.report(
+            afterPaste: { late }, landed: { $0 }, timeout: 0.05, into: { outcomes.append($0) })
+        XCTAssertNil(result)
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(outcomes, [.failed], "the late result must not show a check mark")
+    }
+
+    func testAPasteThatReturnsInTimeIsNotCutShort() async {
+        var outcomes: [RecorderOutcome] = []
+        let result = await RecorderOutcomeFlow.report(
+            afterPaste: { Task { true } }, landed: { $0 }, timeout: 0.5, into: { outcomes.append($0) })
+        XCTAssertEqual(result, true)
+        XCTAssertEqual(outcomes, [.done])
     }
 
     func testAPasteThatDidNotLandIsAFailure() async {

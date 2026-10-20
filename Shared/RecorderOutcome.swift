@@ -114,17 +114,38 @@ final class RecorderOutcomeFlow {
         if currentState().isOutcome { setState(.idle) }
     }
 
+    /// How long the recorder waits for a paste result before it shows the error.
+    static let pasteTimeout: TimeInterval = 3
+
     /// Starts the paste first, waits until it has landed, and only then reports `.done` (or
     /// `.failed` when it did not land or the take had an error on the way). Returns the paste's
     /// own result for the caller's follow-up. The report never starts or delays the paste.
+    /// When no result has come back after `timeout`, reports `.failed` (as far as Pnoe knows the paste
+    /// did not land), returns nil, and ignores a result that arrives later.
     static func report<Result>(
         afterPaste startPaste: () -> Task<Result, Never>,
-        landed: (Result) -> Bool,
+        landed: @escaping (Result) -> Bool,
         takeHadError: Bool = false,
-        into reporter: (RecorderOutcome) -> Void
-    ) async -> Result {
-        let result = await startPaste().value
-        reporter(landed(result) && !takeHadError ? .done : .failed)
-        return result
+        timeout: TimeInterval = RecorderOutcomeFlow.pasteTimeout,
+        into reporter: @escaping (RecorderOutcome) -> Void
+    ) async -> Result? {
+        let paste = startPaste()
+        var finished = false
+        return await withCheckedContinuation { (continuation: CheckedContinuation<Result?, Never>) in
+            Task { @MainActor in
+                let result = await paste.value
+                guard !finished else { return }
+                finished = true
+                reporter(landed(result) && !takeHadError ? .done : .failed)
+                continuation.resume(returning: result)
+            }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                guard !finished else { return }
+                finished = true
+                reporter(.failed)
+                continuation.resume(returning: nil)
+            }
+        }
     }
 }
