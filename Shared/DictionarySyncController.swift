@@ -1,52 +1,44 @@
-import AppKit
 import Foundation
 import OSLog
 import SwiftData
 
-enum DictionarySyncPhase: Equatable, Sendable {
-    case off
-    case idle
-    case syncing
-    /// No iCloud Drive folder on this Mac. The switch stays on and Pnoe tries again later.
-    case driveOff
-    /// The sync file is in iCloud and being downloaded.
-    case waitingForDownload
-    /// The sync file can't be read; it is left as it is.
-    case unreadable
-    case failed
-}
-
-struct DictionarySyncStatus: Equatable, Sendable {
-    var phase: DictionarySyncPhase
-    /// The last sync that went through, kept while a later one fails.
-    var lastSyncAt: Date?
-
-    var motionPhase: MotionPhase {
-        switch phase {
-        case .off, .idle: return .idle
-        case .syncing: return .running
-        case .driveOff, .waitingForDownload, .unreadable, .failed: return .failed
-        }
+/// How the last sync went, as the settings row shows it.
+struct DictionarySyncResultLine: Equatable, Sendable {
+    enum Kind: Equatable, Sendable {
+        case success(added: Int, updated: Int, removed: Int)
+        case cancelled
+        case failure(String)
     }
+
+    var kind: Kind
+    var at: Date
 }
 
-/// Runs the opt-in dictionary sync through iCloud Drive and tells the settings row where it is.
-///
-/// While the switch is off it does nothing: no observer, no file access, no timer. While it is on, a
-/// pass runs at launch, on switch-on, when the app becomes active, when the file changes on disk and a
-/// few seconds after the dictionary changed. A pass that can't finish is tried again after five minutes.
+/// The entries a pass would remove, waiting for the user to choose.
+struct DictionarySyncReview: Identifiable, Equatable, Sendable {
+    let id = UUID()
+    let removals: [DictionarySyncRemoval]
+
+    static let sampleSize = 5
+
+    var count: Int { removals.count }
+    /// A few names for the confirmation text.
+    var sampleNames: [String] { removals.prefix(Self.sampleSize).map(\.title) }
+    var moreCount: Int { max(0, removals.count - Self.sampleSize) }
+}
+
+/// The dictionary sync file and its "Sync now" button. Nothing here runs by itself: no watcher, no timer,
+/// no pass at launch. A pass runs when the user clicks Sync now, and only on the file the user chose.
 @MainActor
 final class DictionarySyncController: ObservableObject {
     static let shared = DictionarySyncController()
 
-    static let enabledKey = "dictionaryDriveSyncEnabled"
-    static let lastSyncKey = "dictionaryDriveSyncLastSync"
+    static let lastResultKey = "dictionarySyncLastResult"
 
-    /// Whether this build shows the switch. The dictionary store of a signed release build syncs through
-    /// CloudKit (issue #5), which this sync stands in for until a paid Apple Developer membership makes
-    /// that build possible. There the switch is hidden and this controller never starts. Builds where
-    /// CloudKit is off (Debug, `make local`) show it. When #5 lands, remove this sync and move its data
-    /// into CloudKit.
+    /// Whether this build shows the sync file. The dictionary store of a signed release build syncs
+    /// through CloudKit (issue #5), which this file stands in for until a paid Apple Developer membership
+    /// makes that build possible. There the section is hidden. Builds where CloudKit is off (Debug,
+    /// `make local`) show it. When #5 lands, remove this sync and move its data into CloudKit.
     static var isAvailable: Bool {
         #if DEBUG || LOCAL_BUILD
             true
@@ -55,41 +47,40 @@ final class DictionarySyncController: ObservableObject {
         #endif
     }
 
-    static let debounce: Duration = .seconds(3)
-    static let retryDelay: Duration = .seconds(300)
-
-    @Published private(set) var isEnabled: Bool
-    @Published private(set) var status: DictionarySyncStatus
-    /// The symbol phase: pulses while a pass runs, shows a check for a second after one finished.
+    @Published private(set) var syncFile: DictionarySyncFileDescription?
+    @Published private(set) var isWorking = false
+    @Published private(set) var result: DictionarySyncResultLine?
+    /// Set while a pass waits for the user to choose what to do with entries it would remove.
+    @Published private(set) var review: DictionarySyncReview?
+    /// The symbol phase: pulses while a pass runs, shows a check after one finished.
     @Published private(set) var symbolPhase: MotionPhase = .idle
 
+    /// Builds the engine for a sync file; `nil` when there is no store to sync (the app fell back to
+    /// in-memory storage, or `configure` was not called).
+    var engineFactory: ((URL, DictionarySyncLocalStateFile) -> DictionarySyncEngine?)?
+
     private static let logger = Logger(subsystem: "com.techneissa.pnoe", category: "DictionarySync")
+
     private let defaults: UserDefaults
-    private let makeDrive: () -> any DictionarySyncDrive
-    private let stateFileURL: URL
-    private var container: ModelContainer?
-    private var drive: (any DictionarySyncDrive)?
-    private var engine: DictionarySyncEngine?
-    private var observers: [NSObjectProtocol] = []
-    private var scheduled: Task<Void, Never>?
-    private var retry: Task<Void, Never>?
+    private let location: RememberedLocation
+    private let stateFile: DictionarySyncLocalStateFile
+    private let clock: @Sendable () -> Date
+    private var cancellation = DictionarySyncCancellation()
+    private var reviewContinuation: CheckedContinuation<DictionarySyncDeletionChoice?, Never>?
     private var checkHold: Task<Void, Never>?
-    private var isRunning = false
-    private var runAgain = false
+    private var passTask: Task<Void, Never>?
 
     init(
         defaults: UserDefaults = .standard,
-        makeDrive: @escaping () -> any DictionarySyncDrive = { FolderDrive() },
-        stateFileURL: URL = DictionarySyncController.defaultStateFileURL
+        stateFileURL: URL = DictionarySyncController.defaultStateFileURL,
+        clock: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.defaults = defaults
-        self.makeDrive = makeDrive
-        self.stateFileURL = stateFileURL
-        let enabled = defaults.bool(forKey: Self.enabledKey)
-        isEnabled = enabled
-        status = DictionarySyncStatus(
-            phase: enabled ? .idle : .off,
-            lastSyncAt: defaults.object(forKey: Self.lastSyncKey) as? Date)
+        self.stateFile = DictionarySyncLocalStateFile(url: stateFileURL)
+        self.location = RememberedLocation(defaults: defaults, key: DictionaryLocationKeys.syncFile)
+        self.clock = clock
+        syncFile = location.resolve().map { DictionarySyncFileDescription.describing($0) }
+        result = Self.loadResult(defaults)
     }
 
     nonisolated static var defaultStateFileURL: URL {
@@ -98,124 +89,133 @@ final class DictionarySyncController: ObservableObject {
             .appendingPathComponent("dictionary-sync-state.json")
     }
 
-    /// Called once at launch with the app's store. Starts the sync if the switch was left on.
-    func configure(container: ModelContainer) {
-        self.container = container
-        if isEnabled { start() }
-    }
-
-    func setEnabled(_ enabled: Bool) {
-        guard enabled != isEnabled else { return }
-        isEnabled = enabled
-        defaults.set(enabled, forKey: Self.enabledKey)
-        if enabled {
-            status.phase = .idle
-            start()
-        } else {
-            stop()
+    /// Called once at launch with the app's persistent store. It only remembers the store; it starts nothing.
+    func configure(container: ModelContainer, storeURL: URL, identityURL: URL) {
+        let clock = self.clock
+        engineFactory = { file, stateFile in
+            DictionarySyncEngine(
+                store: DictionarySyncStore(modelContainer: container),
+                drive: SyncFileDrive(fileURL: file),
+                stateFile: stateFile,
+                storeIdentity: { DictionaryStoreIdentity.token(storeURL: storeURL, tokenURL: identityURL) },
+                clock: clock)
         }
     }
 
-    // MARK: Start and stop
+    var canSync: Bool { syncFile != nil && !isWorking && engineFactory != nil }
 
-    private func start() {
-        guard Self.isAvailable, let container, engine == nil else { return }
-        let drive = makeDrive()
-        self.drive = drive
-        engine = DictionarySyncEngine(
-            store: DictionarySyncStore(modelContainer: container),
-            drive: drive,
-            stateFile: DictionarySyncLocalStateFile(url: stateFileURL))
+    /// The remembered file, or `nil` when none was chosen.
+    var syncFileURL: URL? { location.resolve() }
 
-        let center = NotificationCenter.default
-        observers.append(
-            center.addObserver(forName: ModelContext.didSave, object: nil, queue: .main) { [weak self] note in
-                let touched = DictionarySyncNotifications.touchesDictionary(note)
-                MainActor.assumeIsolated { if touched { self?.requestSync(after: Self.debounce) } }
-            })
-        observers.append(
-            center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) {
-                [weak self] _ in
-                MainActor.assumeIsolated { self?.requestSync(after: .seconds(1)) }
-            })
-        drive.startWatching { [weak self] in
-            Task { @MainActor in self?.requestSync(after: .seconds(2)) }
+    // MARK: Choosing the file
+
+    /// Remembers the file the user picked. A different file starts a new history: what this Mac remembered
+    /// about the old one is dropped, so the first pass on the new one merges and deletes nothing.
+    func useSyncFile(_ url: URL) {
+        if location.resolve()?.standardizedFileURL != url.standardizedFileURL {
+            stateFile.remove()
+            result = nil
+            defaults.removeObject(forKey: Self.lastResultKey)
         }
-        requestSync(after: .zero)
+        location.remember(url)
+        syncFile = DictionarySyncFileDescription.describing(url)
     }
 
-    private func stop() {
-        observers.forEach(NotificationCenter.default.removeObserver)
-        observers = []
-        drive?.stopWatching()
-        drive = nil
-        engine = nil
-        scheduled?.cancel()
-        retry?.cancel()
-        checkHold?.cancel()
-        scheduled = nil
-        retry = nil
-        checkHold = nil
-        runAgain = false
-        symbolPhase = .idle
-        status.phase = .off
-    }
+    // MARK: Sync now
 
-    // MARK: Passes
-
-    private func requestSync(after delay: Duration) {
-        guard isEnabled, engine != nil else { return }
-        scheduled?.cancel()
-        scheduled = Task { [weak self] in
-            if delay > .zero { try? await Task.sleep(for: delay) }
-            guard !Task.isCancelled else { return }
-            await self?.runPass()
+    /// Starts a pass for a click; the buttons follow `isWorking`.
+    func syncNowTapped() {
+        guard passTask == nil else { return }
+        passTask = Task { [weak self] in
+            await self?.syncNow()
+            self?.passTask = nil
         }
     }
 
-    private func runPass() async {
-        guard isEnabled, let engine else { return }
-        guard !isRunning else {
-            runAgain = true
+    func syncNow() async {
+        guard !isWorking, let file = location.resolve() else { return }
+        guard let engine = engineFactory?(file, stateFile) else {
+            finish(.failure(String(localized: "The dictionary can't be synced while it is kept in memory only.")))
             return
         }
-        isRunning = true
-        retry?.cancel()
-        retry = nil
-        status.phase = .syncing
+        isWorking = true
+        cancellation = DictionarySyncCancellation()
+        checkHold?.cancel()
         symbolPhase = .running
+        review = nil
 
+        var outcome: Outcome = .retry
+        var attempts = 0
+        while case .retry = outcome, attempts < 3 {
+            attempts += 1
+            outcome = await runOnce(engine)
+        }
+        switch outcome {
+        case .done(let kind):
+            finish(kind)
+        case .retry:
+            finish(.failure(String(localized: "The dictionary kept changing during the sync. Try again.")))
+        }
+    }
+
+    private enum Outcome {
+        case done(DictionarySyncResultLine.Kind)
+        /// The entries to remove changed after the user was asked; ask again.
+        case retry
+    }
+
+    /// Plan, ask if anything would be removed, commit.
+    private func runOnce(_ engine: DictionarySyncEngine) async -> Outcome {
         do {
-            let report = try await engine.run()
-            guard isEnabled else { return finish() }
-            defaults.set(report.syncedAt, forKey: Self.lastSyncKey)
-            status = DictionarySyncStatus(phase: .idle, lastSyncAt: report.syncedAt)
-            showCheck()
+            let plan = try await engine.plan(cancellation: cancellation)
+            var choice = DictionarySyncDeletionChoice.remove
+            if !plan.removals.isEmpty {
+                review = DictionarySyncReview(removals: plan.removals)
+                let answer = await withCheckedContinuation { reviewContinuation = $0 }
+                review = nil
+                guard let answer else { return .done(.cancelled) }
+                choice = answer
+            }
+            let report = try await engine.commit(
+                choice: choice, reviewed: plan.removalKeys, cancellation: cancellation)
+            return .done(.success(added: report.added, updated: report.updated, removed: report.removed))
+        } catch let error as DictionarySyncError {
+            switch error {
+            case .cancelled: return .done(.cancelled)
+            case .changedDuringReview: return .retry
+            default:
+                Self.logger.notice("Dictionary sync stopped: \(String(describing: error), privacy: .public)")
+                return .done(.failure(Self.message(for: error)))
+            }
         } catch {
-            guard isEnabled else { return finish() }
-            let phase = Self.phase(for: error)
-            Self.logger.notice("Dictionary sync stopped: \(String(describing: error), privacy: .public)")
-            status.phase = phase
+            return .done(.failure(Self.message(for: .failed)))
+        }
+    }
+
+    /// The user's answer to the review. `nil` stops the pass without changing anything.
+    func answerReview(_ choice: DictionarySyncDeletionChoice?) {
+        reviewContinuation?.resume(returning: choice)
+        reviewContinuation = nil
+    }
+
+    /// Stops the pass before it writes.
+    func cancel() {
+        cancellation.cancel()
+        answerReview(nil)
+    }
+
+    private func finish(_ kind: DictionarySyncResultLine.Kind) {
+        isWorking = false
+        let line = DictionarySyncResultLine(kind: kind, at: DictionarySyncMerge.floored(clock()))
+        result = line
+        switch kind {
+        case .success:
+            Self.save(line, to: defaults)
+            showCheck()
+        case .cancelled:
+            symbolPhase = .idle
+        case .failure:
             symbolPhase = .failed
-            scheduleRetry()
-        }
-        finish()
-    }
-
-    private func finish() {
-        isRunning = false
-        if runAgain {
-            runAgain = false
-            requestSync(after: .seconds(1))
-        }
-    }
-
-    private static func phase(for error: Error) -> DictionarySyncPhase {
-        switch error as? DictionarySyncError {
-        case .driveUnavailable: return .driveOff
-        case .notDownloaded: return .waitingForDownload
-        case .unreadableFile: return .unreadable
-        default: return .failed
         }
     }
 
@@ -230,26 +230,45 @@ final class DictionarySyncController: ObservableObject {
         }
     }
 
-    private func scheduleRetry() {
-        retry?.cancel()
-        retry = Task { [weak self] in
-            try? await Task.sleep(for: Self.retryDelay)
-            guard !Task.isCancelled else { return }
-            await self?.runPass()
+    static func message(for error: DictionarySyncError) -> String {
+        switch error {
+        case .folderMissing:
+            return String(localized: "The folder of the sync file is gone. Choose the file again.")
+        case .notDownloaded:
+            return String(localized: "The sync file is still downloading from iCloud. Try again in a moment.")
+        case .unreadableFile:
+            return String(localized: "The sync file can't be read, so it was left as it is.")
+        case .writeFailed:
+            return String(localized: "The sync file couldn't be written.")
+        case .storeFailed:
+            return String(localized: "The dictionary couldn't be updated.")
+        case .failed, .changedDuringReview:
+            return String(localized: "The sync file couldn't be accessed.")
+        case .cancelled:
+            return String(localized: "Cancelled.")
         }
     }
-}
 
-/// Which saves are the sync's business: those that touch the three dictionary models.
-private enum DictionarySyncNotifications {
-    static let dictionaryEntities: Set<String> = ["VocabularyWord", "WordReplacement", "Snippet"]
+    // MARK: Last result
 
-    static func touchesDictionary(_ note: Notification) -> Bool {
-        let keys: [ModelContext.NotificationKey] = [.insertedIdentifiers, .updatedIdentifiers, .deletedIdentifiers]
-        for key in keys {
-            let identifiers = note.userInfo?[key.rawValue] as? [PersistentIdentifier] ?? []
-            if identifiers.contains(where: { dictionaryEntities.contains($0.entityName) }) { return true }
-        }
-        return false
+    private struct StoredResult: Codable {
+        var added: Int
+        var updated: Int
+        var removed: Int
+        var at: Date
+    }
+
+    private static func save(_ line: DictionarySyncResultLine, to defaults: UserDefaults) {
+        guard case .success(let added, let updated, let removed) = line.kind else { return }
+        let stored = StoredResult(added: added, updated: updated, removed: removed, at: line.at)
+        defaults.set(try? JSONEncoder().encode(stored), forKey: lastResultKey)
+    }
+
+    private static func loadResult(_ defaults: UserDefaults) -> DictionarySyncResultLine? {
+        guard let data = defaults.data(forKey: lastResultKey),
+            let stored = try? JSONDecoder().decode(StoredResult.self, from: data)
+        else { return nil }
+        return DictionarySyncResultLine(
+            kind: .success(added: stored.added, updated: stored.updated, removed: stored.removed), at: stored.at)
     }
 }

@@ -21,6 +21,10 @@ struct DictionarySettingsPanel: View {
     @State private var pendingImport: DictionaryImportPayload?
     @State private var transferAlert: DictionaryTransferAlert?
     @ObservedObject private var driveSync = DictionarySyncController.shared
+    @State private var exportFolderName: String?
+    @State private var importFileName: String?
+    private let exportFolder = RememberedLocation(defaults: .standard, key: DictionaryLocationKeys.exportFolder)
+    private let importFile = RememberedLocation(defaults: .standard, key: DictionaryLocationKeys.importFile)
 
     var body: some View {
         QuickPanelScaffold {
@@ -102,18 +106,25 @@ struct DictionarySettingsPanel: View {
                     AutoLearnSectionHeader()
                 }
 
-                // Interim sync between Macs through a file in iCloud Drive, until the CloudKit sync of
-                // issue #5 can be built (it needs a paid Apple Developer membership). Hidden where the
-                // dictionary store already syncs through CloudKit (signed release builds).
+                // Interim sync between Macs through a file the user chooses (iCloud Drive or any folder),
+                // until the CloudKit sync of issue #5 can be built (it needs a paid Apple Developer
+                // membership). Hidden where the dictionary store already syncs through CloudKit (signed
+                // release builds). Nothing runs by itself: only the Sync now button.
                 if DictionarySyncController.isAvailable {
                     Section {
                         DictionarySyncRow(
-                            isOn: Binding(get: { driveSync.isEnabled }, set: { driveSync.setEnabled($0) }),
-                            status: driveSync.status,
-                            symbolPhase: driveSync.symbolPhase
+                            file: driveSync.syncFile,
+                            result: driveSync.result,
+                            isWorking: driveSync.isWorking,
+                            canSync: driveSync.canSync,
+                            symbolPhase: driveSync.symbolPhase,
+                            chooseExisting: { chooseSyncFile(createNew: false) },
+                            chooseNew: { chooseSyncFile(createNew: true) },
+                            syncNow: { driveSync.syncNowTapped() },
+                            cancel: { driveSync.cancel() }
                         ) {
                             InfoTip(
-                                "Off by default. Keeps your vocabulary, word replacements and snippets in one file in the Pnoe folder of your iCloud Drive, and merges it with the same file on your other Macs. The newest edit of each item wins, and a deletion reaches the other Macs too. Turn it on in Pnoe on each Mac."
+                                "Pick one file, for example in the Pnoe folder of your iCloud Drive, and pick the same file on your other Macs. Sync now merges your vocabulary, word replacements and snippets with the file, both ways. The newest edit of each entry wins. Before it removes entries that were deleted on another Mac, Pnoe asks. Nothing syncs until you click."
                             )
                         }
                     } header: {
@@ -122,19 +133,13 @@ struct DictionarySettingsPanel: View {
                 }
 
                 Section {
-                    LabeledContent("Export Dictionary") {
-                        Button("Export") {
-                            exportDictionary()
-                        }
-                    }
-                    .focusEffectDisabled()
+                    DictionaryTransferRow(
+                        title: "Export Dictionary", actionTitle: "Export", rememberedName: exportFolderName,
+                        change: changeExportFolder, action: exportDictionary)
 
-                    LabeledContent("Import Dictionary") {
-                        Button("Import") {
-                            chooseDictionaryFile()
-                        }
-                    }
-                    .focusEffectDisabled()
+                    DictionaryTransferRow(
+                        title: "Import Dictionary", actionTitle: "Import", rememberedName: importFileName,
+                        change: changeImportFile, action: chooseDictionaryFile)
                 } header: {
                     Text("Dictionary Data")
                 }
@@ -148,7 +153,19 @@ struct DictionarySettingsPanel: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .task {
+            refreshRememberedNames()
             await refreshPendingCorrectionCount()
+        }
+        .sheet(
+            item: Binding(
+                get: { driveSync.review },
+                // Closing the sheet any other way keeps the entries.
+                set: { if $0 == nil, driveSync.review != nil { driveSync.answerReview(.keep) } })
+        ) { review in
+            DictionarySyncReviewSheet(
+                review: review,
+                onRemove: { driveSync.answerReview(.remove) },
+                onKeep: { driveSync.answerReview(.keep) })
         }
         .onReceive(NotificationCenter.default.publisher(for: .autoLearnQueueDidChange)) { _ in
             Task {
@@ -217,19 +234,52 @@ struct DictionarySettingsPanel: View {
         pendingCorrectionCount = pending + proposals
     }
 
+    private func refreshRememberedNames() {
+        exportFolderName = exportFolder.resolve()?.lastPathComponent
+        importFileName = importFile.resolve()?.lastPathComponent
+    }
+
+    @MainActor
+    private func chooseSyncFile(createNew: Bool) {
+        guard let url = DictionaryFilePanelService.chooseSyncFile(createNew: createNew) else { return }
+        driveSync.useSyncFile(url)
+    }
+
+    @MainActor
+    private func changeExportFolder() {
+        guard let folder = DictionaryFilePanelService.chooseExportFolder() else { return }
+        exportFolder.remember(folder)
+        refreshRememberedNames()
+    }
+
+    @MainActor
+    private func changeImportFile() {
+        guard let file = DictionaryFilePanelService.chooseImportFile() else { return }
+        importFile.remember(file)
+        refreshRememberedNames()
+    }
+
+    /// Writes into the remembered folder without a dialog; the first export asks for the folder.
     @MainActor
     private func exportDictionary() {
         do {
+            let folder: URL
+            if let remembered = exportFolder.resolve() {
+                folder = remembered
+            } else {
+                guard let chosen = DictionaryFilePanelService.chooseExportFolder() else { return }
+                exportFolder.remember(chosen)
+                folder = chosen
+            }
             let archive = try DictionaryImportExportService.makeArchive(modelContext: modelContext)
             let data = try DictionaryImportExportService.encodeArchive(archive)
-            guard let url = try DictionaryFilePanelService.saveDictionaryData(data) else {
-                return
-            }
+            let url = try DictionaryTransfer.export(data, toFolder: folder)
+            refreshRememberedNames()
             showTransferAlert(
                 title: String(localized: "Dictionary Exported"),
                 message: String(
-                    format: String(localized: "Vocabulary and word replacements were exported to %@."),
-                    url.lastPathComponent
+                    format: String(localized: "Vocabulary and word replacements were exported to %@ in %@."),
+                    url.lastPathComponent, folder.lastPathComponent
                 )
             )
         } catch {
@@ -240,13 +290,21 @@ struct DictionarySettingsPanel: View {
         }
     }
 
+    /// Reads the remembered file into the usual preview; the first import asks for the file.
     @MainActor
     private func chooseDictionaryFile() {
         do {
-            guard let data = try DictionaryFilePanelService.chooseDictionaryData() else {
-                return
+            let file: URL
+            if let remembered = importFile.resolve() {
+                file = remembered
+            } else {
+                guard let chosen = DictionaryFilePanelService.chooseImportFile() else { return }
+                importFile.remember(chosen)
+                file = chosen
+                refreshRememberedNames()
             }
-            pendingImport = try DictionaryImportExportService.decodeArchiveData(data)
+            pendingImport = try DictionaryImportExportService.decodeArchiveData(
+                try DictionaryTransfer.importData(from: file))
         } catch {
             showTransferAlert(
                 title: String(localized: "Import Failed"),

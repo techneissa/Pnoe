@@ -56,6 +56,15 @@ enum DictionarySyncPayload: Equatable, Sendable {
         }
     }
 
+    /// How the entry is named to the user.
+    var displayText: String {
+        switch self {
+        case .vocabulary(let term): return term
+        case .replacement(let sources, let replacement): return "\(sources.joined(separator: ", ")) → \(replacement)"
+        case .snippet(let trigger, _): return trigger
+        }
+    }
+
     /// A text that orders two payloads the same way on every Mac, to settle edits with the same date.
     var sortText: String {
         switch self {
@@ -174,12 +183,13 @@ enum DictionarySyncMerge {
 
     /// Leaves one item per snippet trigger and per replacement text, and no word that two replacement
     /// rules both want, however the Macs got there (each added the same thing before the first sync).
+    /// A record this version can't use (an empty term, a trigger without a letter) stays in the state, so
+    /// the file keeps what a newer version wrote; the store skips it.
     private static func normalized(_ input: DictionarySyncState) -> DictionarySyncState {
         var state = input
-        state.records = state.records.filter { $0.value.payload.isUsable }
 
         for kind in [DictionarySyncKind.snippet, .replacement] {
-            let ofKind = state.records.values.filter { $0.key.kind == kind }
+            let ofKind = state.records.values.filter { $0.key.kind == kind && $0.payload.isUsable }
             for group in Dictionary(grouping: ofKind, by: { $0.payload.naturalKey }).values where group.count > 1 {
                 let byAge = group.sorted { ($0.modifiedAt, $0.key.id) < ($1.modifiedAt, $1.key.id) }
                 let newestEdit = group.reduce(group[0]) { newer($0, $1) }
@@ -208,12 +218,13 @@ enum DictionarySyncMerge {
             }
         }
 
-        // A source word belongs to one rule (the oldest edit keeps it), and no rule may close a loop.
+        // A source word belongs to one rule, the newest edit, and no rule may close a loop. A rule is
+        // never left without a source: one whose every source is taken keeps them (the entry stays).
         var detector = WordReplacementVariants.CycleDetector(records: [])
         var claimed = Set<String>()
         let rules = state.records.values
-            .filter { $0.key.kind == .replacement }
-            .sorted { ($0.modifiedAt, $0.key.id) < ($1.modifiedAt, $1.key.id) }
+            .filter { $0.key.kind == .replacement && $0.payload.isUsable }
+            .sorted { ($0.modifiedAt, $0.key.id) > ($1.modifiedAt, $1.key.id) }
         for rule in rules {
             guard case .replacement(let sources, let destination) = rule.payload else { continue }
             var kept: [String] = []
@@ -225,13 +236,83 @@ enum DictionarySyncMerge {
                 claimed.insert(sourceKey)
                 kept.append(source)
             }
-            if kept.isEmpty {
-                state.records[rule.key] = nil
-                state.tombstones[rule.key] = max(state.tombstones[rule.key] ?? .distantPast, rule.modifiedAt)
-            } else if kept != sources {
+            if !kept.isEmpty, kept != sources {
                 state.records[rule.key]?.payload = .replacement(sources: kept, replacement: destination)
             }
         }
         return state
+    }
+
+    // MARK: Before a pass
+
+    /// How far ahead of this Mac's clock a date in a file may be before it is taken for a wrong clock.
+    static let clockSkewAllowance: TimeInterval = 5 * 60
+
+    /// A date later than `now` plus the allowance is a wrong clock on some Mac; it counts as `now`, so one
+    /// far-future deletion or edit can't win against everything for good.
+    static func clamped(_ state: DictionarySyncState, now: Date) -> DictionarySyncState {
+        let limit = now.addingTimeInterval(clockSkewAllowance)
+        var result = state
+        for (key, record) in state.records {
+            var fixed = record
+            if fixed.modifiedAt > limit { fixed.modifiedAt = floored(now) }
+            if fixed.createdAt > fixed.modifiedAt { fixed.createdAt = fixed.modifiedAt }
+            result.records[key] = fixed
+        }
+        for (key, deletedAt) in state.tombstones where deletedAt > limit {
+            result.tombstones[key] = floored(now)
+        }
+        return result
+    }
+
+    /// This Mac's state as it goes into the merge.
+    /// - A first merge (no state of this Mac to compare with, or a store that is not the one the state was
+    ///   made for) has no deletions of its own, and a remote deletion must not take an entry this Mac
+    ///   has: those entries count as edited now.
+    /// - After longer than the tombstone lifetime without a pass, other Macs' deletions may have expired
+    ///   from the file. An entry unchanged since the last pass and missing from the file was then most
+    ///   likely deleted, so it is left out (not uploaded); only entries edited since go up.
+    /// - `keeping` are entries the user chose to keep: they count as edited now and go back up.
+    static func prepared(
+        local: DictionarySyncState, remote: DictionarySyncState, now: Date,
+        lastSyncAt: Date?, isFirstMerge: Bool, keeping: Set<DictionarySyncKey>
+    ) -> DictionarySyncState {
+        var state = local
+        let now = floored(now)
+        if isFirstMerge {
+            for (key, record) in local.records {
+                if let deletedAt = remote.tombstones[key], record.modifiedAt <= deletedAt {
+                    state.records[key]?.modifiedAt = max(now, deletedAt.addingTimeInterval(1))
+                }
+            }
+        } else if let lastSyncAt, now.timeIntervalSince(lastSyncAt) > tombstoneLifetime {
+            for (key, record) in local.records
+            where record.modifiedAt <= lastSyncAt && remote.records[key] == nil && !keeping.contains(key) {
+                state.records[key] = nil
+            }
+        }
+        for key in keeping {
+            guard var record = state.records[key] ?? local.records[key] else { continue }
+            let deletedAt = remote.tombstones[key] ?? .distantPast
+            record.modifiedAt = max(record.modifiedAt, now, deletedAt.addingTimeInterval(1))
+            state.records[key] = record
+        }
+        return state
+    }
+
+    /// The entries of `local` the merged state no longer has: deleted on another Mac, or left out because
+    /// of the lifetime rule. An item that only became part of another item (two snippets with one trigger
+    /// merged into one) is not a removal.
+    static func removals(local: DictionarySyncState, merged: DictionarySyncState) -> [DictionarySyncRecord] {
+        var kept = Set<String>()
+        for record in merged.records.values where record.payload.isUsable {
+            kept.insert("\(record.key.kind.rawValue)\u{0}\(record.payload.naturalKey)")
+        }
+        return local.records.values
+            .filter {
+                merged.records[$0.key] == nil
+                    && !kept.contains("\($0.key.kind.rawValue)\u{0}\($0.payload.naturalKey)")
+            }
+            .sorted { ($0.key.kind.rawValue, $0.payload.displayText) < ($1.key.kind.rawValue, $1.payload.displayText) }
     }
 }

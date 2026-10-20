@@ -5,7 +5,8 @@ import Foundation
 /// dates, snippets and the deletions added as optional keys, so the manual import still reads it.
 enum DictionarySyncFormat {
     static func archive(
-        from state: DictionarySyncState, deviceID: String, now: Date
+        from state: DictionarySyncState, deviceID: String, now: Date,
+        storeID: String? = nil, lastSyncAt: Date? = nil
     ) -> DictionaryArchive {
         func sorted(_ kind: DictionarySyncKind) -> [DictionarySyncRecord] {
             state.records.values
@@ -40,12 +41,18 @@ enum DictionarySyncFormat {
             vocabulary: vocabulary,
             replacements: replacements,
             snippets: snippets,
-            sync: DictionarySyncMetadata(deviceID: deviceID, writtenAt: now, tombstones: tombstones))
+            sync: DictionarySyncMetadata(
+                deviceID: deviceID, writtenAt: now, tombstones: tombstones, storeID: storeID, lastSyncAt: lastSyncAt))
     }
 
     /// Reads the records of an archive. An entry without an id or an edit date (an export from before
     /// sync, or one made by hand) gets an id every Mac works out the same way and its creation date.
-    static func state(from archive: DictionaryArchive) -> DictionarySyncState {
+    /// Dates later than `now` plus five minutes come from a wrong clock and count as `now`.
+    static func state(from archive: DictionaryArchive, now: Date) -> DictionarySyncState {
+        DictionarySyncMerge.clamped(unclampedState(from: archive), now: now)
+    }
+
+    static func unclampedState(from archive: DictionaryArchive) -> DictionarySyncState {
         var state = DictionarySyncState()
 
         func add(_ key: DictionarySyncKey, _ payload: DictionarySyncPayload, created: Date?, modified: Date?) {
@@ -88,14 +95,21 @@ enum DictionarySyncFormat {
         return state
     }
 
-    static func encode(_ state: DictionarySyncState, deviceID: String, now: Date) throws -> Data {
-        try DictionaryImportExportService.encodeArchive(archive(from: state, deviceID: deviceID, now: now))
+    static func encode(
+        _ state: DictionarySyncState, deviceID: String, now: Date, storeID: String? = nil, lastSyncAt: Date? = nil
+    ) throws -> Data {
+        try DictionaryImportExportService.encodeArchive(
+            archive(from: state, deviceID: deviceID, now: now, storeID: storeID, lastSyncAt: lastSyncAt))
     }
 
     /// Throws `DictionaryArchiveError` when the data is not a Pnoe dictionary this version can read.
-    static func decode(_ data: Data) throws -> (state: DictionarySyncState, deviceID: String?) {
+    static func decode(_ data: Data, now: Date) throws -> DictionarySyncFileContents {
         let archive = try DictionaryImportExportService.decodeArchiveData(data).archive
-        return (state(from: archive), archive.sync?.deviceID)
+        let raw = unclampedState(from: archive)
+        let state = DictionarySyncMerge.clamped(raw, now: now)
+        return DictionarySyncFileContents(
+            state: state, hadFutureDates: state != raw, deviceID: archive.sync?.deviceID,
+            storeID: archive.sync?.storeID, lastSyncAt: archive.sync?.lastSyncAt)
     }
 
     static func normalized(_ text: String) -> String {
@@ -120,30 +134,49 @@ enum DictionarySyncFormat {
     }
 }
 
-/// What this Mac remembers between syncs: the state the last sync left (to tell a local edit from a
-/// remote one), the id of this Mac and when it last synced. It is the sync file's own format.
+struct DictionarySyncFileContents: Sendable {
+    var state: DictionarySyncState
+    /// The file had dates from a wrong clock. They were clamped, and the file is written again so they
+    /// don't keep counting as "now" on every later pass.
+    var hadFutureDates = false
+    var deviceID: String?
+    var storeID: String?
+    var lastSyncAt: Date?
+}
+
+/// What this Mac remembers between passes, in the sync file's own format: the state the last pass left
+/// (to tell a local edit from a remote one), the id of this Mac, the store the state was made for and
+/// when the last pass finished. Never in the iCloud Drive: it describes this Mac's store only.
 struct DictionarySyncLocalStateFile: Sendable {
     struct Contents: Sendable {
         var deviceID: String
+        var storeID: String
+        var lastSyncAt: Date?
         var state: DictionarySyncState
     }
 
     let url: URL
 
-    /// `nil` when there is no file yet or it can't be read; the next sync then treats this Mac as new,
-    /// which merges and never deletes.
-    func load() -> Contents? {
+    /// `nil` when there is no file yet or it can't be read. The pass then is a first merge, which merges
+    /// and never deletes on this Mac or from the file.
+    func load(now: Date) -> Contents? {
         guard let data = try? Data(contentsOf: url),
-            let decoded = try? DictionarySyncFormat.decode(data),
-            let deviceID = decoded.deviceID
+            let decoded = try? DictionarySyncFormat.decode(data, now: now),
+            let deviceID = decoded.deviceID, let storeID = decoded.storeID
         else { return nil }
-        return Contents(deviceID: deviceID, state: decoded.state)
+        return Contents(deviceID: deviceID, storeID: storeID, lastSyncAt: decoded.lastSyncAt, state: decoded.state)
     }
 
     func save(_ contents: Contents, now: Date) throws {
-        let data = try DictionarySyncFormat.encode(contents.state, deviceID: contents.deviceID, now: now)
+        let data = try DictionarySyncFormat.encode(
+            contents.state, deviceID: contents.deviceID, now: now, storeID: contents.storeID,
+            lastSyncAt: contents.lastSyncAt)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: url, options: .atomic)
+    }
+
+    func remove() {
+        try? FileManager.default.removeItem(at: url)
     }
 }

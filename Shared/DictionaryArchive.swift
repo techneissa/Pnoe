@@ -74,6 +74,10 @@ struct DictionarySyncMetadata: Codable, Sendable {
     let deviceID: String
     let writtenAt: Date
     let tombstones: [DictionaryTombstoneEntry]
+    /// Only in the state file a Mac keeps for itself: which store the state was made for, and when this
+    /// Mac last finished a pass.
+    var storeID: String?
+    var lastSyncAt: Date?
 }
 
 enum DictionaryImportMode: String, CaseIterable, Identifiable, Sendable {

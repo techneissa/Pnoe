@@ -33,11 +33,13 @@ actor DictionarySyncStore {
                     modelContext.delete(entry.model)
                     continue
                 }
-                if record.payload != entry.item.payload {
+                if record.payload != entry.item.payload, record.payload.isUsable {
                     update(entry.model, to: record.payload)
                 }
             }
-            for (key, record) in merged.records where byKey[key] == nil && local.records[key] == nil {
+            // A record this version can't use stays in the file and is not put into the store.
+            for (key, record) in merged.records
+            where byKey[key] == nil && local.records[key] == nil && record.payload.isUsable {
                 insert(record)
             }
             if modelContext.hasChanges { try modelContext.save() }

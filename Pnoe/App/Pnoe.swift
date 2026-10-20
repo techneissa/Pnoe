@@ -93,10 +93,15 @@ struct PnoeApp: App {
 
         container = resolvedContainer
         DictionaryService.cleanUpDictionaryContent(context: resolvedContainer.mainContext, source: "launch")
-        // Does nothing unless the user turned on Sync through iCloud Drive. An empty fallback store
-        // must never be synced: it would read as the user deleting everything.
+        // Only remembers the store for the Sync now button; nothing syncs by itself. An empty fallback
+        // store is never given to it: it would read as the user deleting everything.
         if !usesInMemoryStorage {
-            DictionarySyncController.shared.configure(container: resolvedContainer)
+            let supportFolder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("com.techneissa.Pnoe", isDirectory: true)
+            DictionarySyncController.shared.configure(
+                container: resolvedContainer,
+                storeURL: supportFolder.appendingPathComponent("dictionary.store"),
+                identityURL: supportFolder.appendingPathComponent("dictionary-store-id.json"))
         }
 
         // Initialize services with proper sharing of instances
