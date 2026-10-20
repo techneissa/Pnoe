@@ -56,6 +56,7 @@ struct PnoeApp: App {
             Snippet.self,
         ])
         let resolvedContainer: ModelContainer
+        var usesInMemoryStorage = false
 
         // Attempt 1: Try persistent storage
         do {
@@ -64,6 +65,7 @@ struct PnoeApp: App {
             // Attempt 2: Try in-memory storage
             do {
                 resolvedContainer = try Self.createInMemoryContainer(schema: schema, logger: logger)
+                usesInMemoryStorage = true
                 logger.warning("Using in-memory storage as fallback. Data will not persist between sessions.")
 
                 DispatchQueue.main.async {
@@ -91,6 +93,16 @@ struct PnoeApp: App {
 
         container = resolvedContainer
         DictionaryService.cleanUpDictionaryContent(context: resolvedContainer.mainContext, source: "launch")
+        // Only remembers the store for the Sync now button; nothing syncs by itself. An empty fallback
+        // store is never given to it: it would read as the user deleting everything.
+        if !usesInMemoryStorage {
+            let supportFolder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("com.techneissa.Pnoe", isDirectory: true)
+            DictionarySyncController.shared.configure(
+                container: resolvedContainer,
+                storeURL: supportFolder.appendingPathComponent("dictionary.store"),
+                identityURL: supportFolder.appendingPathComponent("dictionary-store-id.json"))
+        }
 
         // Initialize services with proper sharing of instances
         let aiService = AIService()

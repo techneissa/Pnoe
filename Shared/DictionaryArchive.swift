@@ -12,12 +12,18 @@ struct DictionaryArchive: Codable, Sendable {
     let appVersion: String?
     let vocabulary: [DictionaryVocabularyEntry]
     let replacements: [DictionaryReplacementEntry]
+    /// Snippets and the sync block only appear in the iCloud Drive sync file. Older exports have
+    /// neither key and the manual import ignores them, so both stay in schema version 1.
+    var snippets: [DictionarySnippetEntry]?
+    var sync: DictionarySyncMetadata?
 
     init(
         exportedAt: Date = Date(),
         appVersion: String? = nil,
         vocabulary: [DictionaryVocabularyEntry],
-        replacements: [DictionaryReplacementEntry]
+        replacements: [DictionaryReplacementEntry],
+        snippets: [DictionarySnippetEntry]? = nil,
+        sync: DictionarySyncMetadata? = nil
     ) {
         self.format = Self.formatIdentifier
         self.schemaVersion = Self.currentSchemaVersion
@@ -25,6 +31,8 @@ struct DictionaryArchive: Codable, Sendable {
         self.appVersion = appVersion
         self.vocabulary = vocabulary
         self.replacements = replacements
+        self.snippets = snippets
+        self.sync = sync
     }
 
 }
@@ -32,6 +40,9 @@ struct DictionaryArchive: Codable, Sendable {
 struct DictionaryVocabularyEntry: Codable, Sendable {
     let term: String
     let createdAt: Date?
+    /// Sync fields: the stable id of the entry and when it was last edited.
+    var id: String?
+    var modifiedAt: Date?
 }
 
 struct DictionaryReplacementEntry: Codable, Sendable {
@@ -40,6 +51,35 @@ struct DictionaryReplacementEntry: Codable, Sendable {
     let sources: [String]
     let replacement: String
     let createdAt: Date?
+    var id: String?
+    var modifiedAt: Date?
+    /// Written by the sync; a file without it means the rule is on.
+    var isEnabled: Bool?
+}
+
+struct DictionarySnippetEntry: Codable, Sendable {
+    let trigger: String
+    let expansion: String
+    let createdAt: Date?
+    var id: String?
+    var modifiedAt: Date?
+}
+
+/// A deletion kept in the sync file so the other Macs remove the item too.
+struct DictionaryTombstoneEntry: Codable, Equatable, Sendable {
+    let kind: String
+    let id: String
+    let deletedAt: Date
+}
+
+struct DictionarySyncMetadata: Codable, Sendable {
+    let deviceID: String
+    let writtenAt: Date
+    let tombstones: [DictionaryTombstoneEntry]
+    /// Only in the state file a Mac keeps for itself: which store the state was made for, and when this
+    /// Mac last finished a pass.
+    var storeID: String?
+    var lastSyncAt: Date?
 }
 
 enum DictionaryImportMode: String, CaseIterable, Identifiable, Sendable {
