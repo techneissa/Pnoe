@@ -10,6 +10,15 @@ enum SearchWords {
     }
 }
 
+/// Where the highlight starts, on open and after each change of the search: on the selected row when it is among
+/// the matches, else on the first. Return on open then keeps the current choice.
+enum PopoverHighlight {
+    static func start(matchIDs: [String], selectedID: String?) -> String? {
+        if let selectedID, matchIDs.contains(selectedID) { return selectedID }
+        return matchIDs.first
+    }
+}
+
 /// A popover list with a search field at the top, focused when it opens, and the matching items below. Typing
 /// filters, the arrow keys move the highlight, Return or a click picks, Escape closes. The model picker in the
 /// Workflow editor and the Playground's model menu both use it; each supplies its own row.
@@ -48,7 +57,13 @@ struct SearchablePopoverContent<Item: Identifiable, Row: View>: View where Item.
 
     private var matches: [Item] { items.filter { SearchWords.matches(searchText($0), query: query) } }
 
-    private var current: Item? { matches.first { $0.id == highlighted } ?? matches.first }
+    /// The highlighted row: the one the arrows moved to, else where the highlight starts.
+    private var current: Item? {
+        let ids = matches.map(\.id)
+        let id = highlighted.flatMap { ids.contains($0) ? $0 : nil }
+            ?? PopoverHighlight.start(matchIDs: ids, selectedID: selectedID)
+        return matches.first { $0.id == id }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -83,6 +98,7 @@ struct SearchablePopoverContent<Item: Identifiable, Row: View>: View where Item.
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, minHeight: 64)
             } else {
+                ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 2) {
                         ForEach(matches) { item in
@@ -103,6 +119,15 @@ struct SearchablePopoverContent<Item: Identifiable, Row: View>: View where Item.
                     .padding(6)
                 }
                 .frame(maxHeight: 280)
+                // The highlighted row is in view when the popover opens, after a search and as the arrows move
+                // (a jump, not an animation).
+                .onAppear { scrollToHighlight(proxy) }
+                .onChange(of: query) { _, _ in
+                    highlighted = nil
+                    scrollToHighlight(proxy)
+                }
+                .onChange(of: highlighted) { _, _ in scrollToHighlight(proxy) }
+                }
             }
         }
         .frame(width: 400)
@@ -118,6 +143,11 @@ struct SearchablePopoverContent<Item: Identifiable, Row: View>: View where Item.
         .onKeyPress(.upArrow) { move(by: -1) }
         .onExitCommand(perform: onClose)
         .onChange(of: query) { _, _ in highlighted = nil }
+    }
+
+    private func scrollToHighlight(_ proxy: ScrollViewProxy) {
+        guard let id = current?.id else { return }
+        proxy.scrollTo(id, anchor: .center)
     }
 
     private func move(by step: Int) -> KeyPress.Result {

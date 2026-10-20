@@ -62,6 +62,23 @@ final class MLXChatTemplateTests: XCTestCase {
             MLXChatTemplate.closingThinking(template: qwen, promptTail: "<|im_start|>assistant\n<think>\n\n</think>\n\n"))
     }
 
+    func testABareOpenThinkBlockOnlyGetsTheRestOfIt() {
+        let template = "... <think> ..."
+        // A template that opens the block itself: `<think>\n` is already there, so only the close is added.
+        XCTAssertEqual(
+            MLXChatTemplate.closingThinking(template: template, promptTail: "<|Assistant|><think>\n"), "\n</think>\n\n")
+        // The result is the empty block exactly once.
+        XCTAssertEqual("<think>\n" + "\n</think>\n\n", MLXChatTemplate.emptyThinkingBlock)
+    }
+
+    func testABareOpenThoughtChannelOnlyGetsTheRestOfIt() {
+        let gemma4 = "<|channel>thought\n"
+        XCTAssertEqual(
+            MLXChatTemplate.closingThinking(template: "<|channel>", promptTail: "<|turn>model\n<|channel>thought\n"),
+            "<channel|>")
+        XCTAssertEqual(gemma4 + "<channel|>", MLXChatTemplate.emptyThoughtChannel)
+    }
+
     func testGemma4GetsAClosedThoughtChannel() {
         let gemma4 = "<|turn>model\n{% if not enable_thinking %}<|channel>thought\n<channel|>{% endif %}"
         XCTAssertEqual(

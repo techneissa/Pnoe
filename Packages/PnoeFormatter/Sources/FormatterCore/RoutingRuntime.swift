@@ -6,6 +6,12 @@ import Foundation
 ///
 /// Each backend keeps its own state (loaded model, idle timer, crash count), so a model on one never reloads
 /// because a workflow switched to a model on the other. `unload` and `cancel` reach both.
+///
+/// Workflows overlap (a take on one model while a preload starts another), and a request carries only its
+/// prefix, which every Cleaned Text workflow shares. So callers that know their model use `bound(to:)`: a runtime
+/// that sends everything, the take's `generate` included, to the backend of that model. Calling `generate` on
+/// the router itself follows the backend a prefix was last prepared on, which is only right for one workflow at
+/// a time.
 public final class RoutingFormatterRuntime: FormatterRuntime, @unchecked Sendable {
     public let id: FormatterRuntimeID
     private let backends: [FormatterRuntimeID: any FormatterRuntime]
@@ -31,6 +37,14 @@ public final class RoutingFormatterRuntime: FormatterRuntime, @unchecked Sendabl
         if let wanted = spec.backend, backends[wanted] != nil { return wanted }
         return fallback
     }
+
+    /// A runtime for one model: prepare, generate and cancel go to the backend that loads `spec`, whatever else is
+    /// prepared on the router in the meantime.
+    public func bound(to spec: RuntimeModelSpec) -> any FormatterRuntime {
+        BoundRuntime(router: self, backend: backend(for: spec))
+    }
+
+    fileprivate func runtime(for backend: FormatterRuntimeID) -> any FormatterRuntime { runtime(backend) }
 
     public func prepare(_ spec: RuntimeModelSpec, prefix: PromptPrefix) async throws {
         let target = route(spec, prefix: prefix)
@@ -82,4 +96,34 @@ public final class RoutingFormatterRuntime: FormatterRuntime, @unchecked Sendabl
         if let key = request.prefixKey, let known = routes[key] { return known }
         return last
     }
+}
+
+/// One backend of a `RoutingFormatterRuntime`, chosen by the model a workflow uses. Unload and cancel reach every
+/// backend, as on the router.
+private final class BoundRuntime: FormatterRuntime, @unchecked Sendable {
+    let id: FormatterRuntimeID
+    private let router: RoutingFormatterRuntime
+    private let target: any FormatterRuntime
+
+    init(router: RoutingFormatterRuntime, backend: FormatterRuntimeID) {
+        self.router = router
+        id = backend
+        target = router.runtime(for: backend)
+    }
+
+    func prepare(_ spec: RuntimeModelSpec, prefix: PromptPrefix) async throws {
+        try await target.prepare(spec, prefix: prefix)
+    }
+
+    func prepare(_ spec: RuntimeModelSpec, prefix: PromptPrefix, deadline: ContinuousClock.Instant) async throws {
+        try await target.prepare(spec, prefix: prefix, deadline: deadline)
+    }
+
+    func generate(_ request: GenerationRequest) async throws -> GenerationResult {
+        try await target.generate(request)
+    }
+
+    func cancel(_ requestID: UUID) async { await router.cancel(requestID) }
+
+    func unload() async { await router.unload() }
 }

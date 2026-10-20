@@ -51,13 +51,19 @@ public enum MLXChatTemplate {
         template.contains("<think>") || template.contains("<|channel>")
     }
 
-    /// The text to add after the generation prompt: the empty think block (or Gemma 4's closed thought channel)
-    /// when `template` thinks and the prompt (its last tokens, decoded) does not already end in it. Nil when
-    /// nothing is to be added. Templates that honour `enable_thinking = false` already emit it themselves.
+    /// The text to add after the generation prompt so the model answers at once, or nil when nothing is to be added.
+    /// For a template that thinks (a think block or Gemma 4's thought channel), judged by the prompt's last
+    /// tokens, decoded: already closed and empty, nothing; opened but not closed (`<think>\n`, as a template that
+    /// starts the block itself ends), only the rest of the block; otherwise the whole empty block. Templates that
+    /// honour `enable_thinking = false` already emit it themselves.
     public static func closingThinking(template: String, promptTail: String) -> String? {
-        let block = template.contains("<|channel>") ? emptyThoughtChannel : emptyThinkingBlock
-        guard thinks(template), !promptTail.hasSuffix(block) else { return nil }
-        return block
+        guard thinks(template) else { return nil }
+        let isChannel = template.contains("<|channel>")
+        let closed = isChannel ? emptyThoughtChannel : emptyThinkingBlock
+        if promptTail.hasSuffix(closed) { return nil }
+        let opened = isChannel ? "<|channel>thought\n" : "<think>\n"
+        if promptTail.hasSuffix(opened) { return String(closed.dropFirst(opened.count)) }
+        return closed
     }
 
     /// Splits a rendered conversation at the cache boundary. `prefix` is the token ids of the fixed turns alone,

@@ -10,6 +10,9 @@ import Tokenizers
 /// on the model; `MLXRuntime` reaches the decode loop through `StopCheck` instead of the actor.
 actor MLXHost {
     private var loaded: LoadedModel?
+    /// Bumped by every unload. A load that was awaited while an unload came in is dropped instead of published
+    /// (the actor is free while a model loads, so `unload()` can run in the middle of `prepare`).
+    private var epoch = 0
 
     func prepare(modelURL: URL, contextLength: Int, prefix: PromptPrefix) async throws {
         let url = modelURL.standardizedFileURL
@@ -18,18 +21,18 @@ actor MLXHost {
             do {
                 try current.setPrefix(prefix)
             } catch {
-                loaded = nil
+                drop()
                 throw error
             }
             return
         }
-        loaded = nil
+        // Another model (or none): the old one and its GPU buffers go before the new one loads.
+        drop()
+        let started = epoch
         let fresh = try await LoadedModel.load(url: url, contextLength: contextLength)
-        do {
-            try fresh.setPrefix(prefix)
-        } catch {
-            throw error
-        }
+        guard started == epoch else { throw FormatterRuntimeError.cancelled }
+        try fresh.setPrefix(prefix)
+        guard started == epoch else { throw FormatterRuntimeError.cancelled }
         loaded = fresh
     }
 
@@ -39,8 +42,15 @@ actor MLXHost {
     }
 
     func unload() {
+        epoch += 1
+        drop()
+    }
+
+    /// Frees the model and returns its buffers to the system, not only at an unload.
+    private func drop() {
+        let hadModel = loaded != nil
         loaded = nil
-        MLX.Memory.clearCache()
+        if hadModel { MLX.Memory.clearCache() }
     }
 }
 

@@ -144,20 +144,22 @@ struct BuiltInQuantizationBadge: View {
     }
 }
 
-/// MLX's wordmark next to the quantization: this model runs on MLX, not llama.cpp. The official logo (ml-explore/mlx,
-/// MIT) in its own colours, a light and a dark file, at the height of a badge's text so the row keeps its height.
+/// MLX's wordmark at the end of the row's second line: this model runs on MLX, not llama.cpp. The official logo
+/// (ml-explore/mlx, MIT) in its own colours, a light and a dark file, at the height of that line's text so the row
+/// keeps its height.
 struct BuiltInMLXBadge: View {
     var body: some View {
         Image("provider-mlx", bundle: BuiltInSourceIcon.logoBundle)
             .renderingMode(.original)
             .resizable()
             .scaledToFit()
-            .frame(height: 10)
+            .frame(height: 8)
             .accessibilityLabel(BuiltInModels.mlxLabel)
     }
 }
 
-/// A model as two lines: the name and its quantization badge, then the size and the source, each with a symbol.
+/// A model as two lines: the name and its quantization badge, then the size and the source, each with a symbol,
+/// and the MLX wordmark for an MLX model.
 struct BuiltInModelRowLabel: View {
     let row: BuiltInModelRow
     var isSelected = false
@@ -173,9 +175,6 @@ struct BuiltInModelRowLabel: View {
                     .truncationMode(.middle)
                 if let quantization = row.quantization {
                     BuiltInQuantizationBadge(quantization: quantization)
-                }
-                if row.isMLX {
-                    BuiltInMLXBadge()
                 }
                 if showsCheckmark {
                     Spacer(minLength: 4)
@@ -196,6 +195,9 @@ struct BuiltInModelRowLabel: View {
                 HStack(spacing: 3) {
                     BuiltInSourceIcon(source: row.source)
                     Text(row.sourceLabel)
+                }
+                if row.isMLX {
+                    BuiltInMLXBadge()
                 }
             }
             .font(.system(size: 11))
@@ -556,8 +558,20 @@ struct BuiltInEngineSection: View {
         if let gguf = UTType(filenameExtension: "gguf") { panel.allowedContentTypes = [gguf, .folder] }
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task {
-            await models.addChosenFile(url)
-            selectedModelID = "file:" + url.standardizedFileURL.path
+            // Look at what the path holds before storing it: a folder with nothing Pnoe can run is not kept.
+            let found = await Task.detached { BuiltInModels.entries(forChosen: url) }.value
+            switch BuiltInModels.outcome(forChosen: found) {
+            case .noModel:
+                let alert = NSAlert()
+                alert.messageText = String(localized: "This folder has no model Pnoe can run.")
+                alert.informativeText = String(localized: "Choose a GGUF file, or an MLX model folder.")
+                alert.runModal()
+            case .select(let id):
+                await models.addChosenFile(url)
+                selectedModelID = id
+            case .added:
+                await models.addChosenFile(url)
+            }
         }
     }
 }

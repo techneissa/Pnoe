@@ -45,7 +45,7 @@ struct FormatterModelCatalogTests {
         try home.file("hub/models--mlx-community--Qwen3-4B-4bit/refs/main", contents: "r1")
         try home.file("lm/mlx-community/gemma-4-e2b-it-4bit/config.json", contents: #"{"quantization":{"bits":4}}"#)
         try home.file("lm/mlx-community/gemma-4-e2b-it-4bit/model.safetensors", bytes: 50)
-        try home.file("mine/my-model/config.json", contents: "{}")
+        try home.file("mine/my-model/config.json", contents: #"{"quantization":{"bits":4}}"#)
         try home.file("mine/my-model/model.safetensors", bytes: 60)
 
         let catalog = FormatterModelCatalog(configuration: .init(

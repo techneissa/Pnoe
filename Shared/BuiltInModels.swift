@@ -71,6 +71,31 @@ enum BuiltInModels {
     /// One context size for every workflow, so changing workflows never reloads the model.
     static let contextLength = 4096
 
+    // MARK: A file or folder the user chose
+
+    /// What "Choose file or folder…" does with a path.
+    enum ChosenOutcome: Equatable {
+        /// Nothing Pnoe can run in it: say so and do not store the path.
+        case noModel
+        /// One model: store the path and select this entry.
+        case select(id: String)
+        /// Several models in the folder: store the path, the user picks from the list.
+        case added
+    }
+
+    /// The models the engine would list for a chosen path, from disk.
+    static func entries(forChosen url: URL) -> [FormatterModelEntry] {
+        UserChosenModelScanner(paths: [url]).scan().filter { $0.kind == .gguf || $0.kind == .mlx }
+    }
+
+    static func outcome(forChosen entries: [FormatterModelEntry]) -> ChosenOutcome {
+        switch entries.count {
+        case 0: .noModel
+        case 1: .select(id: entries[0].id)
+        default: .added
+        }
+    }
+
     // MARK: Text for the picker
 
     /// The badge on an MLX model.

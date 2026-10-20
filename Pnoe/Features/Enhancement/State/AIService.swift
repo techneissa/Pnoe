@@ -16,7 +16,7 @@ enum AIProvider: String, CaseIterable {
     case speechmatics = "Speechmatics"
     case assemblyAI = "AssemblyAI"
     case ollama = "Ollama"
-    /// The engine inside Pnoe: llama.cpp in an XPC service, running GGUF models already on the Mac.
+    /// The engine inside Pnoe: GGUF models (llama.cpp) and MLX models, each in its own XPC service, already on the Mac.
     case builtIn = "Built-in"
     case localCLI = "Local CLI"
     case custom = "Custom"

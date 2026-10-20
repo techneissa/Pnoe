@@ -106,6 +106,59 @@ final class BuiltInModelListingTests: XCTestCase {
         XCTAssertTrue(BuiltInModels.isInstalled(modelID: id, chosenFiles: [chosenFolder], artifact: mac.artifact, catalog: mac.configuration))
     }
 
+    func testAChosenFolderIsStoredOnlyWhenItHoldsAModel() throws {
+        let mac = try FakeMac()
+        // Nothing to run: a text file, and a plain checkpoint without a sign of MLX.
+        try mac.write("empty/readme.txt", "x")
+        try mac.write("checkpoint/config.json", #"{"model_type":"qwen3"}"#)
+        try mac.write("checkpoint/model.safetensors", "w")
+        let empty = mac.root.appendingPathComponent("empty")
+        let checkpoint = mac.root.appendingPathComponent("checkpoint")
+        XCTAssertEqual(BuiltInModels.outcome(forChosen: BuiltInModels.entries(forChosen: empty)), .noModel)
+        XCTAssertEqual(BuiltInModels.outcome(forChosen: BuiltInModels.entries(forChosen: checkpoint)), .noModel)
+
+        // One GGUF in a folder: that entry is selected.
+        try mac.write("one/model-Q4_K_M.gguf")
+        let one = BuiltInModels.entries(forChosen: mac.root.appendingPathComponent("one"))
+        XCTAssertEqual(BuiltInModels.outcome(forChosen: one), .select(id: try XCTUnwrap(one.first).id))
+
+        // An MLX folder with a quantized config: selected, and it is the folder's own id.
+        try mac.write("mlx/config.json", #"{"quantization":{"bits":4}}"#)
+        try mac.write("mlx/model.safetensors", "w")
+        let mlx = BuiltInModels.entries(forChosen: mac.root.appendingPathComponent("mlx"))
+        XCTAssertEqual(mlx.first?.kind, .mlx)
+        XCTAssertEqual(BuiltInModels.outcome(forChosen: mlx), .select(id: try XCTUnwrap(mlx.first).id))
+
+        // Two GGUF files: stored, the user picks.
+        try mac.write("two/a-Q4_K_M.gguf")
+        try mac.write("two/b-Q8_0.gguf")
+        XCTAssertEqual(BuiltInModels.outcome(forChosen: BuiltInModels.entries(forChosen: mac.root.appendingPathComponent("two"))), .added)
+    }
+
+    func testTwoWorkflowsOnDifferentEnginesEachTakeTheirOwnService() async throws {
+        let llama = FakeRuntime(id: .llama, handler: { _ in GenerationResult(text: "llama") })
+        let mlx = FakeRuntime(id: .mlx, handler: { _ in GenerationResult(text: "mlx") })
+        let engine = BuiltInEngine(
+            runtime: RoutingFormatterRuntime(backends: [.llama: llama, .mlx: mlx], fallback: .llama),
+            chosenFiles: { [] }, artifact: { FormatterModelArtifact.gemma4E2B() }, catalog: { .init() })
+        let ggufSpec = RuntimeModelSpec(modelURL: URL(fileURLWithPath: "/m/a.gguf"))
+        let mlxSpec = RuntimeModelSpec(modelURL: URL(fileURLWithPath: "/m/b-4bit"), backend: .mlx)
+        let prefix = PromptPrefix(messages: [ChatMessage(role: .system, content: "shared Cleaned Text rules")])
+        let request = GenerationRequest(
+            suffix: [ChatMessage(role: .user, content: "hi")], maxTokens: 8, deadline: .now + .seconds(5), prefixKey: prefix.key)
+
+        let ggufWorkflow = engine.runtime(for: ggufSpec)
+        let mlxWorkflow = engine.runtime(for: mlxSpec)
+        try await ggufWorkflow.prepare(ggufSpec, prefix: prefix)
+        // The MLX workflow's preload lands while the GGUF take is between prepare and generate.
+        try await mlxWorkflow.prepare(mlxSpec, prefix: prefix)
+        let take = try await ggufWorkflow.generate(request)
+        let other = try await mlxWorkflow.generate(request)
+        XCTAssertEqual(take.text, "llama")
+        XCTAssertEqual(other.text, "mlx")
+        XCTAssertEqual(engine.requestsInFlight, 0)
+    }
+
     func testAnMLXModelIsNeverPreselected() async throws {
         let mac = try FakeMac()
         let config = #"{"quantization":{"bits":4}}"#
@@ -524,6 +577,13 @@ final class BuiltInPickerTextTests: XCTestCase {
         XCTAssertEqual(BuiltInModelStyle.logo(for: .lmStudio), "provider-lmstudio")
         XCTAssertNil(BuiltInModelStyle.logo(for: .userChosen))
         XCTAssertNil(BuiltInModelStyle.logo(for: .downloaded))
+    }
+
+    func testTheHighlightStartsOnTheSelectedRowWhenItMatchesElseOnTheFirst() {
+        XCTAssertEqual(PopoverHighlight.start(matchIDs: ["a", "b", "c"], selectedID: "b"), "b")
+        XCTAssertEqual(PopoverHighlight.start(matchIDs: ["a", "b", "c"], selectedID: "z"), "a", "selected row filtered out")
+        XCTAssertEqual(PopoverHighlight.start(matchIDs: ["a", "b"], selectedID: nil), "a")
+        XCTAssertNil(PopoverHighlight.start(matchIDs: [], selectedID: "b"))
     }
 
     func testPlaygroundListsAnMLXModelNextToTheGGUFOnes() {

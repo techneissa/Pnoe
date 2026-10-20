@@ -59,6 +59,41 @@ final class RoutingRuntimeTests: XCTestCase {
         XCTAssertEqual(result.text, "mlx")
     }
 
+    func testTwoOverlappingTakesOnDifferentBackendsEachStayOnTheirOwn() async throws {
+        // Both workflows are Cleaned Text, so both requests carry the same prefix key. Each take is bound to its
+        // model, so a preload on the other backend in between cannot take it over.
+        let (router, llama, mlxRuntime) = rig()
+        let ggufRuntime = router.bound(to: gguf)
+        let mlxBound = router.bound(to: mlx)
+
+        try await ggufRuntime.prepare(gguf, prefix: prefix)
+        try await mlxBound.prepare(mlx, prefix: prefix)  // the preload of the MLX workflow lands in the middle
+        let req = request(prefix)
+        let first = Task { try await ggufRuntime.generate(req) }
+        let second = Task { try await mlxBound.generate(req) }
+        let (a, b) = (try await first.value, try await second.value)
+        XCTAssertEqual(a.text, "llama")
+        XCTAssertEqual(b.text, "mlx")
+        let llamaRequests = await llama.requests.count
+        let mlxRequests = await mlxRuntime.requests.count
+        XCTAssertEqual(llamaRequests, 1)
+        XCTAssertEqual(mlxRequests, 1)
+        XCTAssertEqual(ggufRuntime.id, .llama)
+        XCTAssertEqual(mlxBound.id, .mlx)
+    }
+
+    func testABoundRuntimesUnloadAndCancelReachEveryBackend() async {
+        let (router, llama, mlxRuntime) = rig()
+        let bound = router.bound(to: mlx)
+        let id = UUID()
+        await bound.cancel(id)
+        await bound.unload()
+        let cancelled = await llama.cancelled
+        let unloads = await llama.unloadCount + mlxRuntime.unloadCount
+        XCTAssertEqual(cancelled, [id])
+        XCTAssertEqual(unloads, 2)
+    }
+
     func testDeadlinePrepareIsRoutedToo() async throws {
         let (router, llama, mlxRuntime) = rig()
         try await router.prepare(mlx, prefix: prefix, deadline: .now + .seconds(3))

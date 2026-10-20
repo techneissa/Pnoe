@@ -33,6 +33,8 @@ final class BuiltInEngine: @unchecked Sendable {
 
     /// The runtime every request goes through; it counts the requests in flight (a load or a generation).
     let runtime: any FormatterRuntime
+    /// The runtime without the counter, to bind a workflow's model to its backend.
+    private let base: any FormatterRuntime
     private let activity: ActivityCounter
     private let chosenFiles: @Sendable () -> [URL]
     private let artifact: @Sendable () -> FormatterModelArtifact
@@ -47,6 +49,7 @@ final class BuiltInEngine: @unchecked Sendable {
     ) {
         let activity = ActivityCounter()
         self.activity = activity
+        base = runtime
         self.runtime = CountingRuntime(wrapping: runtime, activity: activity)
         self.chosenFiles = chosenFiles
         self.artifact = artifact
@@ -87,6 +90,14 @@ final class BuiltInEngine: @unchecked Sendable {
         await BuiltInModels.spec(forID: id, chosenFiles: chosenFiles(), artifact: artifact(), catalog: catalog())
     }
 
+    /// The runtime for a workflow that uses `spec`: loading and generating go to the service that runs that model,
+    /// so a take on a GGUF model is never sent to the MLX service because another workflow prepared an MLX model
+    /// with the same prompt in between (every Cleaned Text workflow shares its prefix). Counted like `runtime`.
+    func runtime(for spec: RuntimeModelSpec) -> any FormatterRuntime {
+        guard let router = base as? RoutingFormatterRuntime else { return runtime }
+        return CountingRuntime(wrapping: router.bound(to: spec), activity: activity)
+    }
+
     // MARK: Free-form requests
 
     /// One system prompt and one user message, answered in full: the workflows that rewrite the text (Checklist,
@@ -96,6 +107,7 @@ final class BuiltInEngine: @unchecked Sendable {
         let deadline = ContinuousClock.now + .seconds(timeout)
         guard let spec = await spec(forModelID: modelID) else { throw BuiltInEngineError.modelMissing }
         let prefix = PromptPrefix(messages: [ChatMessage(role: .system, content: system)])
+        let runtime = self.runtime(for: spec)
         do {
             try await runtime.prepare(spec, prefix: prefix, deadline: deadline)
             let request = GenerationRequest(
@@ -133,11 +145,10 @@ final class BuiltInEngine: @unchecked Sendable {
     @discardableResult
     func preloadIfUsed(isEnabled: Bool, providerName: String?, modelID: String?) -> Task<Void, Never>? {
         guard isEnabled, providerName == BuiltInModels.providerName, let modelID, !modelID.isEmpty else { return nil }
-        let runtime = self.runtime
         return Task.detached(priority: .utility) { [self] in
-            guard let spec = await spec(forModelID: modelID),
-                let pipeline = try? FormatterPipeline.bundled(runtime: runtime)
-            else { return }
+            guard let spec = await spec(forModelID: modelID) else { return }
+            let runtime = self.runtime(for: spec)
+            guard let pipeline = try? FormatterPipeline.bundled(runtime: runtime) else { return }
             // The Cleaned Text prefix: a Cleaned Text take finds it ready, and any other template replaces only
             // the cached prefix, not the loaded model.
             try? await runtime.prepare(spec, prefix: pipeline.prefix, deadline: .now + .seconds(120))
