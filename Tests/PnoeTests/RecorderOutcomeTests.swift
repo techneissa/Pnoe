@@ -123,6 +123,23 @@ final class RecorderOutcomeTests: XCTestCase {
         XCTAssertEqual(stage.states, [.transcribing, .failed, .idle])
     }
 
+    func testAnOutcomeShowsOverAPasteThatIsStillLanding() async throws {
+        let stage = Stage(.pasting)
+        XCTAssertTrue(stage.flow.show(.done))
+        try await settle()
+        XCTAssertEqual(stage.states, [.pasting, .done, .idle])
+        XCTAssertTrue(RecordingState.pasting.isProcessing)
+    }
+
+    func testARecorderThatMustStayUpIsNotHiddenAfterTheError() async throws {
+        let stage = Stage(.enhancing)
+        XCTAssertTrue(stage.flow.show(.failed, hidesRecorder: false))
+        XCTAssertEqual(stage.state, .failed)
+        try await settle()
+        XCTAssertEqual(stage.states, [.enhancing, .failed, .idle])
+        XCTAssertEqual(stage.hides, 0, "the answer panel stays up")
+    }
+
     func testTheHoldIsShortAndBelongsToMotion() {
         XCTAssertEqual(Motion.outcomeHold, 0.6)
         XCTAssertLessThanOrEqual(Motion.outcomeHold, 1.0)

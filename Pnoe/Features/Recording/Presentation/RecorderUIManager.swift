@@ -245,8 +245,8 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
                 await engine.toggleRecord(modeId: modeId)
             case .starting, .transcribing, .enhancing:
                 await cancelRecording()
-            case .done, .failed:
-                // The take ended a moment ago: start the next one at once, the outcome goes.
+            case .pasting, .done, .failed:
+                // The take is over for the user: start the next one at once, its outcome is not shown.
                 playStartSound()
                 await engine.toggleRecord(modeId: modeId)
             case .idle:
@@ -315,7 +315,7 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
         case .starting, .recording, .transcribing, .enhancing:
             SoundManager.shared.play(.cancel)
             cancelsATake = true
-        case .idle, .busy, .done, .failed:
+        case .idle, .busy, .pasting, .done, .failed:
             cancelsATake = false
         }
         await engine.cancelRecording()
@@ -387,7 +387,7 @@ class RecorderUIManager: ObservableObject, RecorderPanelPresenting {
             switch engine?.recordingState {
             case .starting, .recording, .transcribing, .enhancing:
                 await cancelRecording()
-            case .idle, .busy, .done, .failed, nil:
+            case .idle, .busy, .pasting, .done, .failed, nil:
                 await dismissRecorderPanel()
             }
         }

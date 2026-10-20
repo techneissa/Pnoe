@@ -11,6 +11,9 @@ enum RecordingState: Equatable {
     case recording
     case transcribing
     case enhancing
+    /// The text is being pasted (a moment): the recorder still shows its processing indicator, but a
+    /// shortcut press starts the next take at once instead of waiting for the paste.
+    case pasting
     /// The take was pasted: the recorder shows a check mark for a moment (`RecorderOutcomeFlow`).
     case done
     /// The take was cancelled or failed: the recorder shows the error symbol for a moment.

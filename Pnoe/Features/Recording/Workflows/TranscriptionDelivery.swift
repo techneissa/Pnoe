@@ -62,6 +62,8 @@ final class TranscriptionDelivery {
         guard let text = item.text?.trimmingCharacters(in: .whitespacesAndNewlines),
             !text.isEmpty
         else {
+            // Nothing was said: back to idle, which keeps the conversation open, with no error icon.
+            actions.setState(.idle)
             return
         }
 
@@ -164,22 +166,26 @@ final class TranscriptionDelivery {
         String(format: "%.3f", duration)
     }
 
-    /// Pastes the text, then shows the check mark (or the error symbol when the paste did not land
-    /// or the AI step failed). The paste starts first and the outcome waits for it, so the outcome
-    /// never delays the paste.
+    /// Starts the paste, and shows the check mark (or the error symbol when it did not land or the AI
+    /// step failed) once it has landed. Nothing waits for the paste: this returns at once, so the
+    /// history save and the completion notice run as before, and a new recording can start while the
+    /// paste lands; its outcome is then dropped by the engine.
     private func paste(_ text: String, sendKey: FinishAndSendKey, takeHadError: Bool, actions: Actions) async {
         let appendSpace = UserDefaults.standard.bool(forKey: "AppendTrailingSpace")
         let pastedText = text + (appendSpace ? " " : "")
         SoundManager.shared.play(.stop)
+        actions.setState(.pasting)
 
-        let pasteOutcome = await RecorderOutcomeFlow.report(
-            afterPaste: { CursorPaster.startPasteAtCursor(pastedText) },
-            landed: { $0.result.didPostPasteCommand },
-            takeHadError: takeHadError,
-            into: { actions.setState($0.state) })
+        let pasteTask = CursorPaster.startPasteAtCursor(pastedText)
 
-        if sendKey.isEnabled && pasteOutcome.result.didPostPasteCommand {
-            Task { @MainActor in
+        Task { @MainActor in
+            let pasteOutcome = await RecorderOutcomeFlow.report(
+                afterPaste: { pasteTask },
+                landed: { $0.result.didPostPasteCommand },
+                takeHadError: takeHadError,
+                into: { actions.setState($0.state) })
+
+            if sendKey.isEnabled && pasteOutcome.result.didPostPasteCommand {
                 try? await Task.sleep(nanoseconds: 150_000_000)
                 if let generation = pasteOutcome.autoLearnGeneration {
                     await AutoLearnService.shared.cancelForAutoSend(generation: generation)

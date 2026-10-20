@@ -354,7 +354,7 @@ extension RecordingState {
     /// Whether the record button (or the dot, which is one) reacts to a click.
     var allowsRecordButton: Bool {
         switch self {
-        case .idle, .recording, .done, .failed:
+        case .idle, .recording, .pasting, .done, .failed:
             return true
         case .starting, .transcribing, .enhancing, .busy:
             return false
@@ -363,7 +363,7 @@ extension RecordingState {
 
     var recordButtonLabel: String {
         switch self {
-        case .idle, .done, .failed:
+        case .idle, .pasting, .done, .failed:
             return String(localized: "Start recording")
         case .starting:
             return String(localized: "Starting recording")
@@ -390,7 +390,7 @@ struct RecorderRecordButton: View {
             return .ready
         case .recording:
             return .recording
-        case .transcribing, .enhancing:
+        case .transcribing, .enhancing, .pasting:
             return .processing
         case .done:
             return .outcome(.done)
@@ -636,7 +636,7 @@ struct RecorderStatusDisplay: View {
         Group {
             if currentState == .enhancing {
                 ProcessingStatusDisplay(mode: .enhancing, color: palette.ink).motionFade()
-            } else if currentState == .transcribing {
+            } else if currentState == .transcribing || currentState == .pasting {
                 ProcessingStatusDisplay(mode: .transcribing, color: palette.ink).motionFade()
             } else if currentState.isOutcome {
                 // The outcome shows on the record button (the Dot has its own); the centre stays empty.
@@ -759,7 +759,7 @@ struct RecorderDotView: View {
 
     static func showsTimer(for state: RecordingState) -> Bool {
         switch state {
-        case .recording, .transcribing, .enhancing, .done, .failed: return true
+        case .recording, .transcribing, .enhancing, .pasting, .done, .failed: return true
         case .idle, .starting, .busy: return false
         }
     }
@@ -769,7 +769,7 @@ struct RecorderDotView: View {
     private var isAnimated: Bool {
         switch recordingState {
         case .recording: return true
-        case .transcribing, .enhancing: return !reducesMotion
+        case .transcribing, .enhancing, .pasting: return !reducesMotion
         case .idle, .starting, .busy, .done, .failed: return false
         }
     }
@@ -808,7 +808,7 @@ struct RecorderDotView: View {
                     Circle().fill(red.opacity(haloOpacity)).frame(width: diameter, height: diameter).scaleEffect(halo)
                     Circle().fill(red).frame(width: diameter, height: diameter)
                 })
-        case .transcribing, .enhancing:
+        case .transcribing, .enhancing, .pasting:
             let pulse = reducesMotion ? 0.7 : 0.45 + 0.4 * (0.5 + 0.5 * sin(date.timeIntervalSinceReferenceDate * 2 * .pi / 1.2))
             return AnyView(Circle().fill(palette.ink.opacity(pulse)).frame(width: diameter, height: diameter))
         case .done:

@@ -104,6 +104,9 @@ class PnoeEngine: NSObject, ObservableObject {
     private var currentSessionTranscriptionConfiguration: TranscriptionRuntimeConfiguration?
     private var activeRecordingStartID: UUID?
     private var activePipelineTranscriptionID: UUID?
+    /// The take whose outcome the recorder may still show: set when its pipeline starts, cleared when a
+    /// new recording starts or the recorder closes, so a late paste result never lands on another take.
+    private var outcomeTakeID: UUID?
     private var canceledPipelineTranscriptionIDs = Set<UUID>()
     private var activeRecordingUseCase: RecordingUseCase = .newSession
     private var activePipelineUseCase: RecordingUseCase = .newSession
@@ -225,11 +228,13 @@ class PnoeEngine: NSObject, ObservableObject {
                 }
             } else {
                 cancelCurrentSession()
-                if !shouldCancelRecording {
+                let wasCancelled = shouldCancelRecording
+                if !wasCancelled {
                     logger.error("❌ No recorded file found after stopping recording")
                 }
                 recordingState = .idle
                 await cleanupResources()
+                if !wasCancelled { await endTakeWithFailure() }
             }
         } else {
             let canContinueAssistantSession = isAssistantFollowUp && assistantSession.canSendFollowUp
@@ -237,6 +242,7 @@ class PnoeEngine: NSObject, ObservableObject {
 
             // A check mark or error symbol still showing from the last take goes at once.
             outcomeFlow.interrupt()
+            outcomeTakeID = nil
             activePipelineTranscriptionID = nil
             shouldCancelRecording = false
             partialTranscript = ""
@@ -558,6 +564,7 @@ class PnoeEngine: NSObject, ObservableObject {
     /// recording starts).
     func dismissOutcome() {
         outcomeFlow.interrupt()
+        outcomeTakeID = nil
     }
 
     // MARK: - Recording Context
@@ -610,6 +617,7 @@ class PnoeEngine: NSObject, ObservableObject {
         let session = currentSession
         let transcriptionID = transcription.id
         activePipelineTranscriptionID = transcriptionID
+        outcomeTakeID = transcriptionID
 
         await pipeline.run(
             transcription: transcription,
@@ -644,12 +652,18 @@ class PnoeEngine: NSObject, ObservableObject {
             },
             sendAfterPaste: sendAfterPaste,
             onStateChange: { [weak self] state in
-                guard let self, self.activePipelineTranscriptionID == transcriptionID else { return }
+                guard let self else { return }
                 if let outcome = state.outcome {
-                    self.outcomeFlow.show(outcome)
-                } else {
-                    self.recordingState = state
+                    // The paste result can arrive after the pipeline has returned; only a newer
+                    // recording or a closed recorder drops it.
+                    guard self.outcomeTakeID == transcriptionID else { return }
+                    if !self.outcomeFlow.show(outcome), self.recordingState.isProcessing {
+                        self.recordingState = .idle
+                    }
+                    return
                 }
+                guard self.activePipelineTranscriptionID == transcriptionID else { return }
+                self.recordingState = state
             },
             shouldCancel: { [weak self] in
                 guard let self else { return false }
@@ -684,6 +698,8 @@ class PnoeEngine: NSObject, ObservableObject {
                 failResponse: { [weak self] message in
                     guard let self, self.activePipelineTranscriptionID == transcriptionID else { return }
                     self.assistantSession.fail(message)
+                    // The answer panel stays up; only the circle shows the red error for a moment.
+                    self.outcomeFlow.show(.failed, hidesRecorder: false)
                 }
             )
         )
@@ -733,7 +749,7 @@ class PnoeEngine: NSObject, ObservableObject {
             partialTranscript = ""
             recordingState = .idle
             shouldFinishSessionImmediately = false
-        case .idle, .busy, .done, .failed:
+        case .idle, .busy, .pasting, .done, .failed:
             partialTranscript = ""
             shouldCancelRecording = false
             recordingState = .idle
@@ -747,6 +763,7 @@ class PnoeEngine: NSObject, ObservableObject {
 
     func resetRecordingSession() async {
         outcomeFlow.interrupt()
+        outcomeTakeID = nil
         cancelCurrentSession()
         activeRecordingStartID = nil
         activePipelineTranscriptionID = nil

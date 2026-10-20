@@ -4,13 +4,13 @@ import Foundation
 class ModeShortcutManager {
     private let shortcutMonitor = ShortcutMonitor()
     private let modeProvider: @MainActor () -> RecordingShortcutManager.Mode
-    private let shortcutModeHandler: RecordingShortcutModeHandler
+    private let shortcutModeHandler: ShortcutModeHandler
     private var shortcutChangeObserver: NSObjectProtocol?
     private var monitoredActions = Set<ShortcutAction>()
 
     init(
         modeProvider: @escaping @MainActor () -> RecordingShortcutManager.Mode,
-        shortcutModeHandler: RecordingShortcutModeHandler
+        shortcutModeHandler: ShortcutModeHandler
     ) {
         self.modeProvider = modeProvider
         self.shortcutModeHandler = shortcutModeHandler

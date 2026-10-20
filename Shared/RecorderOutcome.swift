@@ -27,10 +27,18 @@ enum RecorderOutcome: Equatable {
 
 extension RecordingState {
     /// A take is being transcribed or enhanced: the recorder shows its processing indicator.
-    var isProcessing: Bool { self == .transcribing || self == .enhancing }
+    var isProcessing: Bool { self == .transcribing || self == .enhancing || self == .pasting }
 
     /// The recorder shows the check mark or the error symbol.
     var isOutcome: Bool { self == .done || self == .failed }
+
+    /// The take is over for the user (its text is being pasted, or its outcome shows): a shortcut
+    /// press starts the next take at once instead of waiting.
+    var startsNextTakeAtOnce: Bool { self == .pasting || isOutcome }
+
+    /// Whether a recording shortcut is handled in this state. Not while a take is being transcribed or
+    /// enhanced; while it pastes, shows an outcome or has nothing running, a press starts a take.
+    var acceptsShortcutAction: Bool { self != .transcribing && self != .enhancing && self != .busy }
 
     /// The outcome this state shows, if it is one.
     var outcome: RecorderOutcome? {
@@ -76,10 +84,11 @@ final class RecorderOutcomeFlow {
         recorderVisible && (state.isProcessing || state == .idle)
     }
 
-    /// Shows `outcome` and schedules the hide. Returns false, changing nothing, when the take's
+    /// Shows `outcome` and schedules the hide (`hidesRecorder: false` for a recorder that must stay
+    /// up, such as one carrying an assistant answer). Returns false, changing nothing, when the take's
     /// recorder is already hidden or replaced, so the caller can fall back to hiding it.
     @discardableResult
-    func show(_ outcome: RecorderOutcome) -> Bool {
+    func show(_ outcome: RecorderOutcome, hidesRecorder: Bool = true) -> Bool {
         guard Self.canShow(over: currentState(), recorderVisible: isRecorderVisible()) else { return false }
         pendingHide?.cancel()
         generation += 1
@@ -92,7 +101,7 @@ final class RecorderOutcomeFlow {
             else { return }
             self.pendingHide = nil
             self.setState(.idle)
-            await self.hide()
+            if hidesRecorder { await self.hide() }
         }
         return true
     }
