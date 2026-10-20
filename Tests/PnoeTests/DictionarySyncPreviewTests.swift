@@ -81,21 +81,39 @@ final class DictionarySyncPreviewTests: XCTestCase {
 
     private struct ReviewHarness: View {
         let scheme: ColorScheme
+        let review: DictionarySyncReview
 
         var body: some View {
-            DictionarySyncReviewSheet(
-                review: DictionarySyncReview(
-                    removals: ["Kubernetes", "teh → the", "my email", "Zeta", "recieve → receive", "sig", "Beta"]
-                        .enumerated().map {
-                            DictionarySyncRemoval(
-                                key: DictionarySyncKey(kind: .vocabulary, id: "\($0.offset)"), title: $0.element)
-                        }),
-                onRemove: {}, onKeep: {}
-            )
-            .background(Color(nsColor: .windowBackgroundColor))
-            .environment(\.colorScheme, scheme)
+            DictionarySyncReviewSheet(review: review, onContinue: { _ in }, onCancel: {})
+                .frame(width: 460, height: 620, alignment: .top)
+                .background(Color(nsColor: .windowBackgroundColor))
+                .environment(\.colorScheme, scheme)
         }
     }
+
+    private static func removal(_ title: String, _ reason: DictionarySyncRemoval.Reason, _ offset: Int)
+        -> DictionarySyncRemoval
+    {
+        DictionarySyncRemoval(key: DictionarySyncKey(kind: .vocabulary, id: "\(offset)"), title: title, reason: reason)
+    }
+
+    private static let review = DictionarySyncReview(
+        removals: [
+            removal("Kubernetes", .deletedElsewhere, 0), removal("teh → the", .deletedElsewhere, 1),
+            removal("Zeta", .deletedElsewhere, 2), removal("my email", .notInFile, 3),
+            removal("sig", .notInFile, 4),
+        ],
+        conflicts: [
+            DictionarySyncConflict(
+                key: DictionarySyncKey(kind: .snippet, id: "a"), title: "sig", thisMac: "Best,\nSam",
+                otherMac: "Regards, Sam"),
+            DictionarySyncConflict(
+                key: DictionarySyncKey(kind: .replacement, id: "b"), title: "recieve → receive",
+                thisMac: "recieve → receive", otherMac: nil),
+            DictionarySyncConflict(
+                key: DictionarySyncKey(kind: .snippet, id: "c"), title: "my email", thisMac: nil,
+                otherMac: "sam@example.com"),
+        ])
 
     /// `ImageRenderer` draws nothing for a `Form`, whose rows are AppKit controls, so the view goes into
     /// an `NSHostingView` that is laid out and drawn into a bitmap. The view never gets a window.
@@ -122,10 +140,14 @@ final class DictionarySyncPreviewTests: XCTestCase {
     }
 
     func testRenderReviewLight() throws {
-        try render(ReviewHarness(scheme: .light), size: NSSize(width: 400, height: 300), scheme: .light, name: "sync-review-light.png")
+        try render(
+            ReviewHarness(scheme: .light, review: Self.review), size: NSSize(width: 460, height: 620),
+            scheme: .light, name: "sync-review-light.png")
     }
 
     func testRenderReviewDark() throws {
-        try render(ReviewHarness(scheme: .dark), size: NSSize(width: 400, height: 300), scheme: .dark, name: "sync-review-dark.png")
+        try render(
+            ReviewHarness(scheme: .dark, review: Self.review), size: NSSize(width: 460, height: 620),
+            scheme: .dark, name: "sync-review-dark.png")
     }
 }

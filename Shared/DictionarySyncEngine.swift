@@ -1,18 +1,22 @@
 import Foundation
 
-/// An entry this Mac would lose in a pass: deleted on another Mac, or left out by the lifetime rule.
-struct DictionarySyncRemoval: Equatable, Sendable {
-    let key: DictionarySyncKey
-    let title: String
-}
+typealias DictionarySyncRemoval = DictionarySyncMerge.Removal
+typealias DictionarySyncConflict = DictionarySyncMerge.Conflict
 
 /// What a pass would do to this Mac's dictionary, worked out without changing anything.
 struct DictionarySyncPlan: Equatable, Sendable {
     var added: Int
     var updated: Int
+    /// Entries this Mac would lose: deleted on another Mac, or left out by the lifetime rule.
     var removals: [DictionarySyncRemoval]
+    /// Entries changed on both Macs since this Mac's last pass, or edited on one and deleted on the other.
+    var conflicts: [DictionarySyncConflict]
 
     var removalKeys: Set<DictionarySyncKey> { Set(removals.map(\.key)) }
+    var conflictKeys: Set<DictionarySyncKey> { Set(conflicts.map(\.key)) }
+    /// Everything the user is asked about.
+    var reviewedKeys: Set<DictionarySyncKey> { removalKeys.union(conflictKeys) }
+    var needsReview: Bool { !removals.isEmpty || !conflicts.isEmpty }
 }
 
 struct DictionarySyncReport: Equatable, Sendable {
@@ -29,6 +33,20 @@ enum DictionarySyncDeletionChoice: Sendable {
     case remove
     /// Keep the entries here and put them back into the file.
     case keep
+}
+
+/// One choice for every conflict.
+enum DictionarySyncConflictChoice: Sendable {
+    /// This Mac's version (or its deletion) goes into the file and wins.
+    case thisMac
+    /// The file's version (or deletion) wins here.
+    case otherMac
+}
+
+/// The user's answers to the question. The defaults are the ones that lose nothing.
+struct DictionarySyncAnswer: Equatable, Sendable {
+    var removals: DictionarySyncDeletionChoice = .keep
+    var conflicts: DictionarySyncConflictChoice = .thisMac
 }
 
 /// Lets the Cancel button stop a pass before it writes.
@@ -89,17 +107,17 @@ actor DictionarySyncEngine {
         let context = try await startPass()
         try cancellation.check()
         let contents = try await readDrive()
-        let combined = try Self.combine(contents, with: context, keeping: [])
+        let combined = try Self.combine(contents, with: context, keepingRemovals: [], conflictChoice: .thisMac)
         return DictionarySyncPlan(
             added: Self.addedCount(local: context.local, merged: combined.merged),
             updated: Self.updatedCount(local: context.local, merged: combined.merged),
-            removals: combined.removals)
+            removals: combined.removals, conflicts: combined.conflicts)
     }
 
-    /// - Parameter reviewed: the removals the user was shown. If the pass would remove anything else,
-    ///   it stops with `changedDuringReview` and nothing changes.
+    /// - Parameter reviewed: the entries the user was asked about (`plan.reviewedKeys`). If the pass would
+    ///   remove or settle anything else, it stops with `changedDuringReview` and nothing changes.
     func commit(
-        choice: DictionarySyncDeletionChoice,
+        answer: DictionarySyncAnswer,
         reviewed: Set<DictionarySyncKey>,
         cancellation: DictionarySyncCancellation = DictionarySyncCancellation()
     ) async throws -> DictionarySyncReport {
@@ -111,11 +129,14 @@ actor DictionarySyncEngine {
             var result: Combined?
             var wrote = false
             try drive.exchange { contents in
-                var combined = try Self.combine(contents, with: context, keeping: [])
+                var combined = try Self.combine(
+                    contents, with: context, keepingRemovals: [], conflictChoice: answer.conflicts)
                 let removalKeys = Set(combined.removals.map(\.key))
-                guard removalKeys.isSubset(of: reviewed) else { throw DictionarySyncError.changedDuringReview }
-                if choice == .keep, !removalKeys.isEmpty {
-                    combined = try Self.combine(contents, with: context, keeping: removalKeys)
+                let asked = removalKeys.union(combined.conflicts.map(\.key))
+                guard asked.isSubset(of: reviewed) else { throw DictionarySyncError.changedDuringReview }
+                if answer.removals == .keep, !removalKeys.isEmpty {
+                    combined = try Self.combine(
+                        contents, with: context, keepingRemovals: removalKeys, conflictChoice: answer.conflicts)
                 }
                 try cancellation.check()
                 result = combined
@@ -145,7 +166,7 @@ actor DictionarySyncEngine {
             syncedAt: context.now,
             added: Self.addedCount(local: context.local, merged: combined.merged),
             updated: Self.updatedCount(local: context.local, merged: combined.merged),
-            removed: Self.removalCount(local: context.local, merged: combined.merged),
+            removed: combined.removals.count,
             wroteFile: wroteFile)
     }
 
@@ -158,11 +179,14 @@ actor DictionarySyncEngine {
         let local: DictionarySyncState
         let lastSyncAt: Date?
         let isFirstMerge: Bool
+        /// What the last pass left; `nil` in a first merge.
+        let last: DictionarySyncState?
     }
 
     private struct Combined: Sendable {
         var merged: DictionarySyncState
         var removals: [DictionarySyncRemoval]
+        var conflicts: [DictionarySyncConflict]
         var consumed: Set<Int>
         var needsWrite: Bool
     }
@@ -183,7 +207,8 @@ actor DictionarySyncEngine {
         }
         return PassContext(
             deviceID: remembered?.deviceID ?? UUID().uuidString, storeID: storeID, now: now, local: local,
-            lastSyncAt: isFirstMerge ? nil : remembered?.lastSyncAt, isFirstMerge: isFirstMerge)
+            lastSyncAt: isFirstMerge ? nil : remembered?.lastSyncAt, isFirstMerge: isFirstMerge,
+            last: isFirstMerge ? nil : remembered?.state)
     }
 
     private func readDrive() async throws -> DictionarySyncDriveContents {
@@ -194,7 +219,8 @@ actor DictionarySyncEngine {
     /// Merges the file and its conflict copies with this Mac's state. A file this version can't read
     /// stops the pass here, before anything is written; a conflict copy it can't read is left alone.
     private static func combine(
-        _ contents: DictionarySyncDriveContents, with context: PassContext, keeping: Set<DictionarySyncKey>
+        _ contents: DictionarySyncDriveContents, with context: PassContext,
+        keepingRemovals: Set<DictionarySyncKey>, conflictChoice: DictionarySyncConflictChoice
     ) throws -> Combined {
         var remote = DictionarySyncState()
         var mainState: DictionarySyncState?
@@ -214,14 +240,18 @@ actor DictionarySyncEngine {
             consumed.insert(index)
         }
 
+        let conflicts = DictionarySyncMerge.conflicts(local: context.local, remote: remote, last: context.last)
+        let conflictKeys = Set(conflicts.map(\.key))
         let prepared = DictionarySyncMerge.prepared(
             local: context.local, remote: remote, now: context.now, lastSyncAt: context.lastSyncAt,
-            isFirstMerge: context.isFirstMerge, keeping: keeping)
+            isFirstMerge: context.isFirstMerge,
+            keeping: keepingRemovals.union(conflictChoice == .thisMac ? conflictKeys : []),
+            yielding: conflictChoice == .otherMac ? conflictKeys : [])
         let merged = DictionarySyncMerge.merge(prepared, remote, now: context.now)
-        let removals = DictionarySyncMerge.removals(local: context.local, merged: merged)
-            .map { DictionarySyncRemoval(key: $0.key, title: $0.payload.displayText) }
+        let removals = DictionarySyncMerge.removals(
+            local: context.local, merged: merged, remote: remote, excluding: conflictKeys)
         return Combined(
-            merged: merged, removals: removals, consumed: consumed,
+            merged: merged, removals: removals, conflicts: conflicts, consumed: consumed,
             needsWrite: mainState == nil || merged != mainState || mainHadFutureDates)
     }
 
@@ -234,9 +264,5 @@ actor DictionarySyncEngine {
             guard let before = local.records[record.key] else { return false }
             return before.payload != record.payload && record.payload.isUsable
         }.count
-    }
-
-    private static func removalCount(local: DictionarySyncState, merged: DictionarySyncState) -> Int {
-        DictionarySyncMerge.removals(local: local, merged: merged).count
     }
 }

@@ -82,9 +82,12 @@ final class SyncTestMac {
 
     /// What Sync now does: plan, then commit with every shown removal confirmed.
     @discardableResult
-    func sync(_ choice: DictionarySyncDeletionChoice = .remove) async throws -> DictionarySyncReport {
+    func sync(
+        _ removals: DictionarySyncDeletionChoice = .remove, conflicts: DictionarySyncConflictChoice = .thisMac
+    ) async throws -> DictionarySyncReport {
         let plan = try await engine.plan()
-        return try await engine.commit(choice: choice, reviewed: plan.removalKeys)
+        return try await engine.commit(
+            answer: DictionarySyncAnswer(removals: removals, conflicts: conflicts), reviewed: plan.reviewedKeys)
     }
 
     func plan() async throws -> DictionarySyncPlan {
@@ -141,6 +144,20 @@ final class SyncTestMac {
     func replacements() throws -> [String] {
         try context().fetch(FetchDescriptor<WordReplacement>())
             .map { "\($0.originalText) → \($0.replacementText)" }.sorted()
+    }
+
+    func setReplacementEnabled(to destination: String, _ isEnabled: Bool) throws {
+        let context = context()
+        for rule in try context.fetch(FetchDescriptor<WordReplacement>()) where rule.replacementText == destination {
+            rule.isEnabled = isEnabled
+        }
+        try context.save()
+    }
+
+    func replacementStates() throws -> [String: Bool] {
+        Dictionary(
+            uniqueKeysWithValues: try context().fetch(FetchDescriptor<WordReplacement>())
+                .map { ($0.replacementText, $0.isEnabled) })
     }
 
     func replacementIDs() throws -> [UUID] {
@@ -299,9 +316,10 @@ final class DictionarySyncTests: XCTestCase {
         let plan = try await a.plan()
         XCTAssertEqual(plan.removals.count, 3)
         XCTAssertEqual(Set(plan.removals.map(\.title)), ["Gone", "teh → the", "sig"])
+        XCTAssertEqual(Set(plan.removals.map(\.reason)), [.deletedElsewhere])
         XCTAssertEqual(try a.words(), ["Gone", "Pnoe"], "planning changes nothing")
 
-        let report = try await a.engine.commit(choice: .remove, reviewed: plan.removalKeys)
+        let report = try await a.engine.commit(answer: .init(removals: .remove), reviewed: plan.reviewedKeys)
         XCTAssertEqual(report.removed, 3)
         XCTAssertEqual(try a.words(), ["Pnoe"])
         XCTAssertEqual(try a.replacements(), [])
@@ -332,7 +350,7 @@ final class DictionarySyncTests: XCTestCase {
 
         let plan = try await a.plan()
         XCTAssertEqual(plan.removals.count, 2)
-        let report = try await a.engine.commit(choice: .keep, reviewed: plan.removalKeys)
+        let report = try await a.engine.commit(answer: .init(removals: .keep), reviewed: plan.reviewedKeys)
         XCTAssertEqual(report.removed, 0)
         XCTAssertEqual(try a.words(), ["Keeper", "Pnoe"])
         XCTAssertEqual(try a.snippets(), ["sig=Best"])
@@ -358,7 +376,7 @@ final class DictionarySyncTests: XCTestCase {
         advance()
 
         do {
-            _ = try await a.engine.commit(choice: .remove, reviewed: [])
+            _ = try await a.engine.commit(answer: .init(removals: .remove), reviewed: [])
             XCTFail("a removal the user was not asked about must stop the pass")
         } catch {
             XCTAssertEqual(error as? DictionarySyncError, .changedDuringReview)
@@ -417,6 +435,8 @@ final class DictionarySyncTests: XCTestCase {
         try await a.sync()
         advance(20)
         try b.editSnippet("sig", expansion: "from B")
+        let plan = try await b.plan()
+        XCTAssertEqual(plan.conflicts.map(\.title), ["sig"], "B changed it and so did A since B's last pass")
         try await b.sync()
         advance()
         try await a.sync()
@@ -487,7 +507,7 @@ final class DictionarySyncTests: XCTestCase {
         {
             DictionarySyncRecord(
                 key: DictionarySyncKey(kind: .replacement, id: "00000000-0000-0000-0000-0000000000\(id)"),
-                payload: .replacement(sources: sources, replacement: destination),
+                payload: .replacement(sources: sources, replacement: destination, isEnabled: true),
                 createdAt: now.addingTimeInterval(seconds), modifiedAt: now.addingTimeInterval(seconds))
         }
         let older = rule("0A", ["tea", "green"], "Tea", at: -100)
@@ -500,15 +520,264 @@ final class DictionarySyncTests: XCTestCase {
         b.records[newer.key] = newer
 
         let merged = DictionarySyncMerge.merge(a, b, now: now)
-        XCTAssertEqual(merged.records[newer.key]?.payload, .replacement(sources: ["TEA", "chai"], replacement: "Chai"))
+        XCTAssertEqual(merged.records[newer.key]?.payload, .replacement(sources: ["TEA", "chai"], replacement: "Chai", isEnabled: true))
         XCTAssertEqual(
-            merged.records[older.key]?.payload, .replacement(sources: ["green"], replacement: "Tea"),
+            merged.records[older.key]?.payload, .replacement(sources: ["green"], replacement: "Tea", isEnabled: true),
             "the newest rule has the word; the older one keeps its other source")
         XCTAssertEqual(
-            merged.records[only.key]?.payload, .replacement(sources: ["tea"], replacement: "Black"),
+            merged.records[only.key]?.payload, .replacement(sources: ["tea"], replacement: "Black", isEnabled: true),
             "a rule with only that source keeps it: nothing is lost")
         XCTAssertEqual(DictionarySyncMerge.merge(merged, a, now: now), merged)
         XCTAssertEqual(DictionarySyncMerge.merge(merged, b, now: now), merged)
+    }
+
+    // MARK: Changed on both Macs
+
+    /// A and B share a snippet `sig`; A has edited it, B edited it and synced (the file is newer than A's
+    /// edit, and A's pass comes later still: dates would silently pick A).
+    private func bothMacsEditedTheSnippet() async throws -> (SyncTestMac, SyncTestMac) {
+        let a = try makeMac()
+        let b = try makeMac()
+        try a.addSnippet("sig", "Best")
+        try await a.sync()
+        advance()
+        try await b.sync()
+        advance()
+        try a.editSnippet("sig", expansion: "from A")
+        advance()
+        try b.editSnippet("sig", expansion: "from B")
+        try await b.sync()
+        advance(3600)
+        return (a, b)
+    }
+
+    func testEntryChangedOnBothMacsShowsBothVersionsAndTheOtherMacsCanWin() async throws {
+        let (a, _) = try await bothMacsEditedTheSnippet()
+        let plan = try await a.plan()
+        XCTAssertEqual(plan.conflicts.count, 1)
+        XCTAssertEqual(plan.conflicts.first?.title, "sig")
+        XCTAssertEqual(plan.conflicts.first?.thisMac, "from A")
+        XCTAssertEqual(plan.conflicts.first?.otherMac, "from B")
+        XCTAssertEqual(try a.snippets(), ["sig=from A"], "asking changes nothing")
+
+        let before = try Data(contentsOf: syncFile)
+        try await a.engine.commit(
+            answer: DictionarySyncAnswer(conflicts: .otherMac), reviewed: plan.reviewedKeys)
+        XCTAssertEqual(try a.snippets(), ["sig=from B"])
+        XCTAssertEqual(try Data(contentsOf: syncFile), before, "the file already had the other Mac's version")
+    }
+
+    func testEntryChangedOnBothMacsKeepsThisMacsVersionByDefaultAndPutsItInTheFile() async throws {
+        let (a, b) = try await bothMacsEditedTheSnippet()
+        let plan = try await a.plan()
+        try await a.engine.commit(answer: DictionarySyncAnswer(), reviewed: plan.reviewedKeys)
+        XCTAssertEqual(try a.snippets(), ["sig=from A"])
+        XCTAssertEqual(try fileArchive().snippets?.first?.expansion, "from A")
+
+        advance()
+        let next = try await b.plan()
+        XCTAssertEqual(next.conflicts, [], "B changed nothing since, so it takes the file's version without asking")
+        try await b.sync()
+        XCTAssertEqual(try b.snippets(), ["sig=from A"])
+    }
+
+    func testEditedHereAndDeletedThereIsAskedAbout() async throws {
+        let a = try makeMac()
+        let b = try makeMac()
+        try a.addSnippet("sig", "Best")
+        try await a.sync()
+        advance()
+        try await b.sync()
+        advance()
+        try b.removeSnippet("sig")
+        try await b.sync()
+        advance(3600)
+        try a.editSnippet("sig", expansion: "mine")
+
+        let plan = try await a.plan()
+        XCTAssertEqual(plan.removals, [], "an entry edited here is not a plain removal")
+        XCTAssertEqual(plan.conflicts.map(\.title), ["sig"])
+        XCTAssertEqual(plan.conflicts.first?.thisMac, "mine")
+        XCTAssertNil(plan.conflicts.first?.otherMac, "deleted on the other Mac")
+
+        try await a.engine.commit(answer: DictionarySyncAnswer(conflicts: .otherMac), reviewed: plan.reviewedKeys)
+        XCTAssertEqual(try a.snippets(), [], "the other Mac's deletion, chosen")
+    }
+
+    func testEditedHereAndDeletedThereKeepsThisMacsEditByDefault() async throws {
+        let a = try makeMac()
+        let b = try makeMac()
+        try a.addSnippet("sig", "Best")
+        try await a.sync()
+        advance()
+        try await b.sync()
+        advance()
+        try b.removeSnippet("sig")
+        try await b.sync()
+        advance(3600)
+        try a.editSnippet("sig", expansion: "mine")
+
+        try await a.sync(.remove, conflicts: .thisMac)
+        XCTAssertEqual(try a.snippets(), ["sig=mine"])
+        XCTAssertEqual(try fileArchive().snippets?.first?.expansion, "mine")
+        advance()
+        try await b.sync()
+        XCTAssertEqual(try b.snippets(), ["sig=mine"], "the edit comes back to the Mac that deleted it")
+    }
+
+    func testDeletedHereAndEditedThereIsAskedAbout() async throws {
+        let a = try makeMac()
+        let b = try makeMac()
+        try a.addSnippet("sig", "Best")
+        try await a.sync()
+        advance()
+        try await b.sync()
+        advance()
+        try a.removeSnippet("sig")
+        advance()
+        try b.editSnippet("sig", expansion: "from B")
+        try await b.sync()
+        advance(3600)
+
+        let plan = try await a.plan()
+        XCTAssertEqual(plan.conflicts.map(\.title), ["sig"])
+        XCTAssertNil(plan.conflicts.first?.thisMac, "deleted on this Mac")
+        XCTAssertEqual(plan.conflicts.first?.otherMac, "from B")
+
+        try await a.engine.commit(answer: DictionarySyncAnswer(conflicts: .otherMac), reviewed: plan.reviewedKeys)
+        XCTAssertEqual(try a.snippets(), ["sig=from B"], "the other Mac's edit wins over this deletion")
+    }
+
+    func testDeletedHereStaysDeletedWhenThisMacIsChosen() async throws {
+        let a = try makeMac()
+        let b = try makeMac()
+        try a.addSnippet("sig", "Best")
+        try await a.sync()
+        advance()
+        try await b.sync()
+        advance()
+        try a.removeSnippet("sig")
+        try b.editSnippet("sig", expansion: "from B")
+        advance()
+        try await b.sync()
+        advance(3600)
+
+        try await a.sync(.remove, conflicts: .thisMac)
+        XCTAssertEqual(try a.snippets(), [])
+        XCTAssertEqual(try fileArchive().snippets?.count, 0)
+    }
+
+    func testAChangeOnOneSideOnlyAppliesWithoutAsking() async throws {
+        let a = try makeMac()
+        let b = try makeMac()
+        try a.addSnippet("one", "1")
+        try a.addSnippet("two", "2")
+        try await a.sync()
+        advance()
+        try await b.sync()
+        advance()
+
+        // Only A changes "one"; only B changes "two".
+        try a.editSnippet("one", expansion: "1 from A")
+        try b.editSnippet("two", expansion: "2 from B")
+        advance(3600)
+        try await b.sync()
+        advance(3600)
+        let plan = try await a.plan()
+        XCTAssertEqual(plan.conflicts, [], "A's edit and B's edit are different entries")
+        XCTAssertEqual(plan.removals, [])
+        try await a.sync()
+        XCTAssertEqual(try a.snippets(), ["one=1 from A", "two=2 from B"])
+        advance()
+        let back = try await b.plan()
+        XCTAssertEqual(back.conflicts, [])
+        try await b.sync()
+        XCTAssertEqual(try b.snippets(), ["one=1 from A", "two=2 from B"])
+    }
+
+    func testTwoSnippetsWithOneTriggerOnFirstMergeAskWhichTextStays() async throws {
+        let a = try makeMac()
+        let b = try makeMac()
+        try a.addSnippet("my email", "old@example.com")
+        try await a.sync()
+        advance()
+        try b.addSnippet("My Email", "new@example.com")
+
+        let plan = try await b.plan()
+        XCTAssertEqual(plan.conflicts.count, 1)
+        XCTAssertEqual(plan.conflicts.first?.thisMac, "new@example.com")
+        XCTAssertEqual(plan.conflicts.first?.otherMac, "old@example.com")
+        try await b.engine.commit(answer: DictionarySyncAnswer(conflicts: .otherMac), reviewed: plan.reviewedKeys)
+        XCTAssertEqual(try b.snippets().map { $0.lowercased() }, ["my email=old@example.com"])
+        XCTAssertEqual(try fileArchive().snippets?.count, 1)
+    }
+
+    // MARK: Removals that are not folded into another entry
+
+    func testRuleDeletedElsewhereIsListedEvenWhenAnotherRuleHasTheSameText() async throws {
+        let a = try makeMac()
+        let b = try makeMac()
+        try a.addReplacement("teh", to: "the")
+        try await a.sync()
+        advance()
+        try await b.sync()
+        advance()
+        try b.removeReplacement(to: "the")
+        advance()
+        try b.addReplacement("thx", to: "the")
+        try await b.sync()
+        advance()
+
+        let plan = try await a.plan()
+        XCTAssertEqual(plan.removals.map(\.title), ["teh → the"], "its source is not in the other rule")
+        XCTAssertEqual(try a.replacements(), ["teh → the"])
+
+        let kept = try await a.engine.commit(answer: .init(removals: .keep), reviewed: plan.reviewedKeys)
+        XCTAssertEqual(kept.removed, 0)
+        XCTAssertEqual(try a.replacements(), ["thx, teh → the"], "kept: the sources are joined into one rule")
+    }
+
+    func testRuleFoldedIntoAnotherIsNotARemoval() async throws {
+        let a = try makeMac()
+        let b = try makeMac()
+        try a.addReplacement("teh", to: "the")
+        try b.addReplacement("teh", to: "the")
+        try b.addReplacement("adn", to: "and")
+        try await a.sync()
+        advance()
+        let plan = try await b.plan()
+        XCTAssertEqual(plan.removals, [], "the same source for the same text becomes one rule")
+        try await b.sync()
+        XCTAssertEqual(try b.replacements(), ["adn → and", "teh → the"])
+    }
+
+    // MARK: Rules that are switched off
+
+    func testSwitchedOffRuleSyncsAndOldFilesReadAsOn() async throws {
+        let a = try makeMac()
+        let b = try makeMac()
+        try a.addReplacement("teh", to: "the")
+        try await a.sync()
+        advance()
+        try await b.sync()
+        XCTAssertEqual(try b.replacementStates(), ["the": true])
+
+        advance()
+        try a.setReplacementEnabled(to: "the", false)
+        try await a.sync()
+        advance()
+        try await b.sync()
+        XCTAssertEqual(try b.replacementStates(), ["the": false])
+        XCTAssertEqual(try fileArchive().replacements.first?.isEnabled, false)
+
+        let old = DictionaryArchive(
+            vocabulary: [],
+            replacements: [DictionaryReplacementEntry(sources: ["teh"], replacement: "the", createdAt: Date())])
+        let state = DictionarySyncFormat.state(from: old, now: Date())
+        guard case .replacement(_, _, let isEnabled)? = state.records.values.first?.payload else {
+            return XCTFail("a rule")
+        }
+        XCTAssertTrue(isEnabled, "a file without the key means on")
     }
 
     // MARK: First merge, lifetime, clock, store identity
@@ -638,7 +907,8 @@ final class DictionarySyncTests: XCTestCase {
         let (a, _) = try await macAwayForOneHundredTenDays()
         let plan = try await a.plan()
         XCTAssertEqual(plan.removals.map(\.title), ["x"], "unchanged since the last pass and gone from the file")
-        let report = try await a.engine.commit(choice: .remove, reviewed: plan.removalKeys)
+        XCTAssertEqual(plan.removals.map(\.reason), [.notInFile], "not a deletion by another Mac")
+        let report = try await a.engine.commit(answer: .init(removals: .remove), reviewed: plan.reviewedKeys)
         XCTAssertEqual(report.removed, 1)
         XCTAssertEqual(try a.snippets(), ["y=edited meanwhile"], "only the entry edited since goes up")
         XCTAssertEqual(try fileState().records.count, 1)
@@ -648,7 +918,7 @@ final class DictionarySyncTests: XCTestCase {
     func testKeepingAfterTheLifetimeUploadsTheEntriesAgain() async throws {
         let (a, _) = try await macAwayForOneHundredTenDays()
         let plan = try await a.plan()
-        try await a.engine.commit(choice: .keep, reviewed: plan.removalKeys)
+        try await a.engine.commit(answer: .init(removals: .keep), reviewed: plan.reviewedKeys)
         XCTAssertEqual(try a.snippets(), ["x=1", "y=edited meanwhile"])
         XCTAssertEqual(try fileArchive().snippets?.count, 2)
     }
@@ -773,10 +1043,14 @@ final class DictionarySyncTests: XCTestCase {
         state.records[odd.key] = odd
         try write(state)
 
+        // A pass that writes (A has a new word) must not drop what it can't use.
         advance()
-        try await a.sync()
+        try a.addWord("Extra")
+        let report = try await a.sync()
+        XCTAssertTrue(report.wroteFile)
         XCTAssertEqual(try a.snippets(), [], "the store does not take it")
         XCTAssertEqual(try fileArchive().snippets?.count, 1, "the file keeps it")
+        XCTAssertEqual(try fileArchive().vocabulary.map(\.term).sorted(), ["Extra", "Pnoe"])
     }
 
     func testFileStillInICloudIsAskedForAndNothingIsTouched() async throws {
@@ -833,7 +1107,7 @@ final class DictionarySyncTests: XCTestCase {
         let cancellation = DictionarySyncCancellation()
         cancellation.cancel()
         do {
-            _ = try await a.engine.commit(choice: .remove, reviewed: [], cancellation: cancellation)
+            _ = try await a.engine.commit(answer: .init(removals: .remove), reviewed: [], cancellation: cancellation)
             XCTFail("a cancelled pass must stop")
         } catch {
             XCTAssertEqual(error as? DictionarySyncError, .cancelled)
@@ -1083,10 +1357,11 @@ final class DictionarySyncControllerTests: XCTestCase {
 
         let task = Task { await controller.syncNow() }
         try await waitForReview(controller)
-        XCTAssertEqual(controller.review?.sampleNames, ["Gone"])
-        XCTAssertEqual(controller.review?.count, 1)
+        XCTAssertEqual(controller.review?.removals.map(\.title), ["Gone"])
+        XCTAssertEqual(controller.review?.deletedElsewhere.count, 1)
+        XCTAssertEqual(controller.review?.conflicts, [])
         XCTAssertEqual(try a.words(), ["Gone", "Pnoe"], "nothing changes while the question is open")
-        controller.answerReview(.keep)
+        controller.answerReview(DictionarySyncAnswer(removals: .keep))
         await task.value
         XCTAssertEqual(try a.words(), ["Gone", "Pnoe"])
         XCTAssertEqual(controller.result?.kind, .success(added: 0, updated: 0, removed: 0))
@@ -1100,7 +1375,7 @@ final class DictionarySyncControllerTests: XCTestCase {
         clock.advance(10)
         let second = Task { await controller.syncNow() }
         try await waitForReview(controller)
-        controller.answerReview(.remove)
+        controller.answerReview(DictionarySyncAnswer(removals: .remove))
         await second.value
         XCTAssertEqual(try a.words(), ["Pnoe"])
         XCTAssertEqual(controller.result?.kind, .success(added: 0, updated: 0, removed: 1))
@@ -1129,6 +1404,32 @@ final class DictionarySyncControllerTests: XCTestCase {
         await task.value
         XCTAssertEqual(controller.result?.kind, .cancelled)
         XCTAssertEqual(try a.words(), ["Gone"])
+        XCTAssertEqual(try Data(contentsOf: syncFile), before)
+    }
+
+    func testClosingTheQuestionWithoutAnsweringStopsThePassAndWritesNothing() async throws {
+        let a = try makeMac("a.json")
+        let b = try makeMac("b.json")
+        let controller = makeController(mac: a, stateName: "a.json")
+        controller.useSyncFile(syncFile)
+        try a.addSnippet("sig", "Best")
+        try await a.sync()
+        clock.advance(10)
+        try await b.sync()
+        clock.advance(10)
+        try a.editSnippet("sig", expansion: "from A")
+        try b.editSnippet("sig", expansion: "from B")
+        try await b.sync()
+        clock.advance(3600)
+        let before = try Data(contentsOf: syncFile)
+
+        let task = Task { await controller.syncNow() }
+        try await waitForReview(controller)
+        XCTAssertEqual(controller.review?.conflicts.map(\.title), ["sig"])
+        controller.answerReview(nil)  // the sheet was dismissed
+        await task.value
+        XCTAssertEqual(controller.result?.kind, .cancelled)
+        XCTAssertEqual(try a.snippets(), ["sig=from A"])
         XCTAssertEqual(try Data(contentsOf: syncFile), before)
     }
 
@@ -1172,6 +1473,14 @@ final class DictionaryTransferTests: XCTestCase {
     private var directory: URL!
     private var defaults: UserDefaults!
     private var suite: String!
+    private let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "GMT")!
+        return calendar
+    }()
+    private var exportDate: Date {
+        calendar.date(from: DateComponents(year: 2026, month: 10, day: 20, hour: 14, minute: 5))!
+    }
 
     override func setUpWithError() throws {
         directory = FileManager.default.temporaryDirectory
@@ -1196,12 +1505,20 @@ final class DictionaryTransferTests: XCTestCase {
 
         let again = RememberedLocation(defaults: defaults, key: DictionaryLocationKeys.exportFolder)
         let remembered = try XCTUnwrap(again.resolve())
-        let url = try DictionaryTransfer.export(Data("{}".utf8), toFolder: remembered)
-        XCTAssertEqual(url.lastPathComponent, DictionaryTransfer.exportFileName)
+        let url = try DictionaryTransfer.export(
+            Data("{}".utf8), toFolder: remembered, at: exportDate, calendar: calendar)
+        XCTAssertEqual(url.lastPathComponent, "Pnoe Dictionary 2026-10-20 14.05.json")
         XCTAssertEqual(try Data(contentsOf: url), Data("{}".utf8))
 
-        try DictionaryTransfer.export(Data("[]".utf8), toFolder: remembered)
-        XCTAssertEqual(try Data(contentsOf: url), Data("[]".utf8), "the next export replaces the file")
+        // The same minute again, and a later one: nothing is replaced.
+        let second = try DictionaryTransfer.export(
+            Data("[]".utf8), toFolder: remembered, at: exportDate, calendar: calendar)
+        XCTAssertEqual(second.lastPathComponent, "Pnoe Dictionary 2026-10-20 14.05 2.json")
+        let later = try DictionaryTransfer.export(
+            Data("[1]".utf8), toFolder: remembered, at: exportDate.addingTimeInterval(120), calendar: calendar)
+        XCTAssertEqual(later.lastPathComponent, "Pnoe Dictionary 2026-10-20 14.07.json")
+        XCTAssertEqual(try Data(contentsOf: url), Data("{}".utf8), "the first export is untouched")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.path).count, 3)
     }
 
     func testRememberedFolderFollowsARenameAndAMissingFolderIsReported() throws {

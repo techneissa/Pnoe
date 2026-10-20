@@ -106,45 +106,106 @@ struct DictionarySyncRow<InfoButton: View>: View {
     }
 }
 
-/// The question before a pass removes entries on this Mac.
+/// The question before a pass removes entries on this Mac or has to pick between two versions of an
+/// entry. Nothing is written until the user continues; Cancel (or closing it) changes nothing.
 struct DictionarySyncReviewSheet: View {
     let review: DictionarySyncReview
-    let onRemove: () -> Void
-    let onKeep: () -> Void
+    let onContinue: (DictionarySyncAnswer) -> Void
+    let onCancel: () -> Void
+
+    @State private var answer = DictionarySyncAnswer()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(review.count == 1 ? "Remove 1 entry?" : "Remove \(review.count) entries?")
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Review before syncing")
                 .font(.headline)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(
-                    review.count == 1
-                        ? "This will remove 1 entry deleted on another Mac:"
-                        : "This will remove \(review.count) entries deleted on another Mac:"
-                )
-                .foregroundStyle(.secondary)
-                ForEach(Array(review.sampleNames.enumerated()), id: \.offset) { _, name in
-                    Text("• " + name).lineLimit(1).truncationMode(.tail)
-                }
-                if review.moreCount > 0 {
-                    Text("and \(review.moreCount) more").foregroundStyle(.secondary)
-                }
+            if !review.conflicts.isEmpty {
+                conflictSection
             }
-
-            Text("Keep them to leave them here and put them back into the sync file.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if !review.deletedElsewhere.isEmpty {
+                removalSection(
+                    review.deletedElsewhere,
+                    title: review.deletedElsewhere.count == 1
+                        ? "Deleted on another Mac (1 entry)"
+                        : "Deleted on another Mac (\(review.deletedElsewhere.count) entries)")
+            }
+            if !review.notInFile.isEmpty {
+                removalSection(
+                    review.notInFile,
+                    title: review.notInFile.count == 1
+                        ? "Not in the sync file, unchanged here for over 90 days (1 entry)"
+                        : "Not in the sync file, unchanged here for over 90 days (\(review.notInFile.count) entries)")
+            }
+            if !review.removals.isEmpty {
+                Picker("Entries to remove", selection: $answer.removals) {
+                    Text("Keep them").tag(DictionarySyncDeletionChoice.keep)
+                    Text("Remove them").tag(DictionarySyncDeletionChoice.remove)
+                }
+                .pickerStyle(.segmented)
+                Text("Keeping puts them back into the sync file.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
 
             HStack {
                 Spacer()
-                Button("Remove", action: onRemove)
-                Button("Keep Them", action: onKeep)
+                Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button("Sync") { onContinue(answer) }
                     .keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)
-        .frame(width: 400)
+        .frame(width: 460)
+    }
+
+    private var conflictSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(
+                verbatim: review.conflicts.count == 1
+                    ? "Changed on both Macs (1 entry)" : "Changed on both Macs (\(review.conflicts.count) entries)"
+            )
+            .font(.subheadline.weight(.semibold))
+            ForEach(Array(review.conflicts.prefix(DictionarySyncReview.sampleSize).enumerated()), id: \.offset) { _, conflict in
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(conflict.title).lineLimit(1).truncationMode(.tail)
+                    Text("This Mac: " + Self.oneLine(conflict.thisMac ?? String(localized: "deleted")))
+                        .foregroundStyle(.secondary)
+                    Text("Other Mac: " + Self.oneLine(conflict.otherMac ?? String(localized: "deleted")))
+                        .foregroundStyle(.secondary)
+                }
+                .font(.callout)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            }
+            let more = review.conflicts.count - DictionarySyncReview.sampleSize
+            if more > 0 {
+                Text("and \(more) more").font(.callout).foregroundStyle(.secondary)
+            }
+            Picker("Which version", selection: $answer.conflicts) {
+                Text("Use this Mac's").tag(DictionarySyncConflictChoice.thisMac)
+                Text("Use the other Mac's").tag(DictionarySyncConflictChoice.otherMac)
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    /// A text with line breaks on one line, so a long snippet still shows its start.
+    private static func oneLine(_ text: String) -> String {
+        text.split(whereSeparator: \.isNewline).joined(separator: " ")
+    }
+
+    private func removalSection(_ removals: [DictionarySyncRemoval], title: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(verbatim: title).font(.subheadline.weight(.semibold))
+            ForEach(Array(removals.prefix(DictionarySyncReview.sampleSize).enumerated()), id: \.offset) { _, removal in
+                Text("• " + removal.title).font(.callout).lineLimit(1).truncationMode(.tail)
+            }
+            let more = removals.count - DictionarySyncReview.sampleSize
+            if more > 0 {
+                Text("and \(more) more").font(.callout).foregroundStyle(.secondary)
+            }
+        }
     }
 }

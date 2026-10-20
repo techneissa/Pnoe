@@ -14,17 +14,18 @@ struct DictionarySyncResultLine: Equatable, Sendable {
     var at: Date
 }
 
-/// The entries a pass would remove, waiting for the user to choose.
+/// The question before a pass changes anything the user may care about: entries it would remove, and
+/// entries that changed on both Macs. It waits for the user's answer.
 struct DictionarySyncReview: Identifiable, Equatable, Sendable {
     let id = UUID()
     let removals: [DictionarySyncRemoval]
+    let conflicts: [DictionarySyncConflict]
 
+    /// How many names a list shows before "and N more".
     static let sampleSize = 5
 
-    var count: Int { removals.count }
-    /// A few names for the confirmation text.
-    var sampleNames: [String] { removals.prefix(Self.sampleSize).map(\.title) }
-    var moreCount: Int { max(0, removals.count - Self.sampleSize) }
+    var deletedElsewhere: [DictionarySyncRemoval] { removals.filter { $0.reason == .deletedElsewhere } }
+    var notInFile: [DictionarySyncRemoval] { removals.filter { $0.reason == .notInFile } }
 }
 
 /// The dictionary sync file and its "Sync now" button. Nothing here runs by itself: no watcher, no timer,
@@ -66,7 +67,7 @@ final class DictionarySyncController: ObservableObject {
     private let stateFile: DictionarySyncLocalStateFile
     private let clock: @Sendable () -> Date
     private var cancellation = DictionarySyncCancellation()
-    private var reviewContinuation: CheckedContinuation<DictionarySyncDeletionChoice?, Never>?
+    private var reviewContinuation: CheckedContinuation<DictionarySyncAnswer?, Never>?
     private var checkHold: Task<Void, Never>?
     private var passTask: Task<Void, Never>?
 
@@ -168,16 +169,17 @@ final class DictionarySyncController: ObservableObject {
     private func runOnce(_ engine: DictionarySyncEngine) async -> Outcome {
         do {
             let plan = try await engine.plan(cancellation: cancellation)
-            var choice = DictionarySyncDeletionChoice.remove
-            if !plan.removals.isEmpty {
-                review = DictionarySyncReview(removals: plan.removals)
-                let answer = await withCheckedContinuation { reviewContinuation = $0 }
+            var answer = DictionarySyncAnswer()
+            if plan.needsReview {
+                review = DictionarySyncReview(removals: plan.removals, conflicts: plan.conflicts)
+                let given = await withCheckedContinuation { reviewContinuation = $0 }
                 review = nil
-                guard let answer else { return .done(.cancelled) }
-                choice = answer
+                // Closing the question any other way than answering it stops the pass, unchanged.
+                guard let given else { return .done(.cancelled) }
+                answer = given
             }
             let report = try await engine.commit(
-                choice: choice, reviewed: plan.removalKeys, cancellation: cancellation)
+                answer: answer, reviewed: plan.reviewedKeys, cancellation: cancellation)
             return .done(.success(added: report.added, updated: report.updated, removed: report.removed))
         } catch let error as DictionarySyncError {
             switch error {
@@ -192,9 +194,10 @@ final class DictionarySyncController: ObservableObject {
         }
     }
 
-    /// The user's answer to the review. `nil` stops the pass without changing anything.
-    func answerReview(_ choice: DictionarySyncDeletionChoice?) {
-        reviewContinuation?.resume(returning: choice)
+    /// The user's answer to the review. `nil` (cancel, or closing the question) stops the pass without
+    /// writing or applying anything.
+    func answerReview(_ answer: DictionarySyncAnswer?) {
+        reviewContinuation?.resume(returning: answer)
         reviewContinuation = nil
     }
 

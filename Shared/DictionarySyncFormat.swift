@@ -20,10 +20,10 @@ enum DictionarySyncFormat {
                 term: term, createdAt: record.createdAt, id: record.key.id, modifiedAt: record.modifiedAt)
         }
         let replacements = sorted(.replacement).compactMap { record -> DictionaryReplacementEntry? in
-            guard case .replacement(let sources, let replacement) = record.payload else { return nil }
+            guard case .replacement(let sources, let replacement, let isEnabled) = record.payload else { return nil }
             return DictionaryReplacementEntry(
                 sources: sources, replacement: replacement, createdAt: record.createdAt,
-                id: record.key.id, modifiedAt: record.modifiedAt)
+                id: record.key.id, modifiedAt: record.modifiedAt, isEnabled: isEnabled)
         }
         let snippets = sorted(.snippet).compactMap { record -> DictionarySnippetEntry? in
             guard case .snippet(let trigger, let expansion) = record.payload else { return nil }
@@ -60,7 +60,8 @@ enum DictionarySyncFormat {
             let modifiedAt = DictionarySyncMerge.floored(modified ?? created ?? .distantPast)
             let record = DictionarySyncRecord(
                 key: key, payload: payload, createdAt: min(createdAt, modifiedAt), modifiedAt: modifiedAt)
-            guard payload.isUsable else { return }
+            // A record this version can't use stays in the state, so a write keeps it in the file; the
+            // store skips it.
             if let existing = state.records[key], existing.modifiedAt >= record.modifiedAt { return }
             state.records[key] = record
         }
@@ -72,7 +73,8 @@ enum DictionarySyncFormat {
         for entry in archive.replacements {
             let payload = DictionarySyncPayload.replacement(
                 sources: WordReplacementVariants.parse(WordReplacementVariants.serialize(entry.sources.map(normalized))),
-                replacement: WordReplacementVariants.destinationKey(for: entry.replacement))
+                replacement: WordReplacementVariants.destinationKey(for: entry.replacement),
+                isEnabled: entry.isEnabled ?? true)
             let id = validID(entry.id) ?? derivedID(.replacement, payload.naturalKey)
             add(
                 DictionarySyncKey(kind: .replacement, id: id), payload,

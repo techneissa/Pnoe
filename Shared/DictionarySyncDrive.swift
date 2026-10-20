@@ -158,10 +158,8 @@ final class SyncFileDrive: DictionarySyncDrive, @unchecked Sendable {
         for version in conflictVersions.unresolvedVersions(of: url) {
             guard let data = try? version.contents() else { continue }
             gathered.contents.conflicts.append(data)
-            gathered.resolvers.append {
-                try version.markResolvedAndRemove()
-                try? NSFileVersion.removeOtherVersionsOfItem(at: url)
-            }
+            // Only the version that was merged goes: the others may hold changes nobody has read.
+            gathered.resolvers.append { try version.markResolvedAndRemove() }
         }
         for sibling in siblingCopies() {
             guard let data = try? Data(contentsOf: sibling) else { continue }

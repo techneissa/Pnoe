@@ -46,7 +46,14 @@ enum DictionaryLocationKeys {
 /// Export to a remembered folder and import from a remembered file, without a dialog after the first
 /// choice. Neither ever creates a folder.
 enum DictionaryTransfer {
-    static let exportFileName = "Pnoe_Dictionary.json"
+    /// `Pnoe Dictionary 2026-10-20 14.05.json` (local time). A name that is taken gets " 2", " 3"…, so an
+    /// export never replaces an earlier one.
+    static func exportFileName(at date: Date = Date(), calendar: Calendar = .current) -> String {
+        let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        return String(
+            format: "Pnoe Dictionary %04d-%02d-%02d %02d.%02d.json",
+            parts.year ?? 0, parts.month ?? 0, parts.day ?? 0, parts.hour ?? 0, parts.minute ?? 0)
+    }
 
     enum Failure: LocalizedError, Equatable {
         case folderMissing(String)
@@ -62,12 +69,21 @@ enum DictionaryTransfer {
         }
     }
 
-    /// Writes `data` as `Pnoe_Dictionary.json` into `folder`, replacing the previous export there.
-    static func export(_ data: Data, toFolder folder: URL) throws -> URL {
+    /// Writes `data` into `folder` under a dated name; nothing is replaced.
+    static func export(
+        _ data: Data, toFolder folder: URL, at date: Date = Date(), calendar: Calendar = .current
+    ) throws -> URL {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue
         else { throw Failure.folderMissing(folder.lastPathComponent) }
-        let url = folder.appendingPathComponent(exportFileName)
+        let name = exportFileName(at: date, calendar: calendar)
+        let stem = (name as NSString).deletingPathExtension
+        var url = folder.appendingPathComponent(name)
+        var copy = 2
+        while FileManager.default.fileExists(atPath: url.path) {
+            url = folder.appendingPathComponent("\(stem) \(copy).json")
+            copy += 1
+        }
         try data.write(to: url, options: .atomic)
         return url
     }

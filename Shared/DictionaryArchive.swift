@@ -53,6 +53,8 @@ struct DictionaryReplacementEntry: Codable, Sendable {
     let createdAt: Date?
     var id: String?
     var modifiedAt: Date?
+    /// Written by the sync; a file without it means the rule is on.
+    var isEnabled: Bool?
 }
 
 struct DictionarySnippetEntry: Codable, Sendable {

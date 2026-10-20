@@ -124,7 +124,7 @@ struct DictionarySettingsPanel: View {
                             cancel: { driveSync.cancel() }
                         ) {
                             InfoTip(
-                                "Pick one file, for example in the Pnoe folder of your iCloud Drive, and pick the same file on your other Macs. Sync now merges your vocabulary, word replacements and snippets with the file, both ways. The newest edit of each entry wins. Before it removes entries that were deleted on another Mac, Pnoe asks. Nothing syncs until you click."
+                                "Pick one file, for example in the Pnoe folder of your iCloud Drive, and pick the same file on your other Macs. Sync now merges your vocabulary, word replacements and snippets with the file, both ways. An entry changed on one Mac takes that change. Before it removes an entry, or when an entry changed on both Macs, Pnoe asks. Nothing syncs until you click."
                             )
                         }
                     } header: {
@@ -159,13 +159,13 @@ struct DictionarySettingsPanel: View {
         .sheet(
             item: Binding(
                 get: { driveSync.review },
-                // Closing the sheet any other way keeps the entries.
-                set: { if $0 == nil, driveSync.review != nil { driveSync.answerReview(.keep) } })
+                // Closing the sheet without answering stops the pass: nothing is written or applied.
+                set: { if $0 == nil, driveSync.review != nil { driveSync.answerReview(nil) } })
         ) { review in
             DictionarySyncReviewSheet(
                 review: review,
-                onRemove: { driveSync.answerReview(.remove) },
-                onKeep: { driveSync.answerReview(.keep) })
+                onContinue: { driveSync.answerReview($0) },
+                onCancel: { driveSync.answerReview(nil) })
         }
         .onReceive(NotificationCenter.default.publisher(for: .autoLearnQueueDidChange)) { _ in
             Task {

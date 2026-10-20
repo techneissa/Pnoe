@@ -71,7 +71,8 @@ actor DictionarySyncStore {
         for replacement in replacements {
             let payload = DictionarySyncPayload.replacement(
                 sources: WordReplacementVariants.parse(replacement.originalText),
-                replacement: WordReplacementVariants.destinationKey(for: replacement.replacementText))
+                replacement: WordReplacementVariants.destinationKey(for: replacement.replacementText),
+                isEnabled: replacement.isEnabled)
             guard payload.isUsable else { continue }
             result.append(
                 Entry(
@@ -104,9 +105,10 @@ actor DictionarySyncStore {
         switch (model, payload) {
         case (let word as VocabularyWord, .vocabulary(let term)):
             word.word = term
-        case (let replacement as WordReplacement, .replacement(let sources, let destination)):
+        case (let replacement as WordReplacement, .replacement(let sources, let destination, let isEnabled)):
             replacement.originalText = WordReplacementVariants.serialize(sources)
             replacement.replacementText = destination
+            replacement.isEnabled = isEnabled
         case (let snippet as Snippet, .snippet(let trigger, let expansion)):
             snippet.trigger = trigger
             snippet.expansion = expansion
@@ -119,10 +121,11 @@ actor DictionarySyncStore {
         switch record.payload {
         case .vocabulary(let term):
             modelContext.insert(VocabularyWord(word: term, dateAdded: record.createdAt))
-        case .replacement(let sources, let destination):
+        case .replacement(let sources, let destination, let isEnabled):
             let replacement = WordReplacement(
                 originalText: WordReplacementVariants.serialize(sources), replacementText: destination,
                 dateAdded: record.createdAt)
+            replacement.isEnabled = isEnabled
             if let id = UUID(uuidString: record.key.id) { replacement.id = id }
             modelContext.insert(replacement)
         case .snippet(let trigger, let expansion):

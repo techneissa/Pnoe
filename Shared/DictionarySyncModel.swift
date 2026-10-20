@@ -22,7 +22,7 @@ struct DictionarySyncKey: Hashable, Sendable {
 
 enum DictionarySyncPayload: Equatable, Sendable {
     case vocabulary(term: String)
-    case replacement(sources: [String], replacement: String)
+    case replacement(sources: [String], replacement: String, isEnabled: Bool)
     case snippet(trigger: String, expansion: String)
 
     var kind: DictionarySyncKind {
@@ -37,7 +37,7 @@ enum DictionarySyncPayload: Equatable, Sendable {
     var naturalKey: String {
         switch self {
         case .vocabulary(let term): return WordReplacementVariants.key(for: term)
-        case .replacement(_, let replacement): return WordReplacementVariants.destinationKey(for: replacement)
+        case .replacement(_, let replacement, _): return WordReplacementVariants.destinationKey(for: replacement)
         case .snippet(let trigger, _): return SnippetTrigger.key(trigger)
         }
     }
@@ -46,7 +46,7 @@ enum DictionarySyncPayload: Equatable, Sendable {
         switch self {
         case .vocabulary(let term):
             return !WordReplacementVariants.key(for: term).isEmpty
-        case .replacement(let sources, let replacement):
+        case .replacement(let sources, let replacement, _):
             return !sources.isEmpty
                 && sources.allSatisfy { !$0.isEmpty && !$0.contains(",") }
                 && !WordReplacementVariants.destinationKey(for: replacement).isEmpty
@@ -60,8 +60,19 @@ enum DictionarySyncPayload: Equatable, Sendable {
     var displayText: String {
         switch self {
         case .vocabulary(let term): return term
-        case .replacement(let sources, let replacement): return "\(sources.joined(separator: ", ")) → \(replacement)"
+        case .replacement(let sources, let replacement, _): return "\(sources.joined(separator: ", ")) → \(replacement)"
         case .snippet(let trigger, _): return trigger
+        }
+    }
+
+    /// The content of the entry, for showing two versions side by side.
+    var detailText: String {
+        switch self {
+        case .vocabulary(let term): return term
+        case .replacement(let sources, let replacement, let isEnabled):
+            let text = "\(sources.joined(separator: ", ")) → \(replacement)"
+            return isEnabled ? text : text + " (off)"
+        case .snippet(_, let expansion): return expansion
         }
     }
 
@@ -69,8 +80,8 @@ enum DictionarySyncPayload: Equatable, Sendable {
     var sortText: String {
         switch self {
         case .vocabulary(let term): return "v\u{0}\(term)"
-        case .replacement(let sources, let replacement):
-            return "r\u{0}\(replacement)\u{0}\(sources.joined(separator: "\u{1}"))"
+        case .replacement(let sources, let replacement, let isEnabled):
+            return "r\u{0}\(replacement)\u{0}\(sources.joined(separator: "\u{1}"))\u{0}\(isEnabled)"
         case .snippet(let trigger, let expansion): return "s\u{0}\(trigger)\u{0}\(expansion)"
         }
     }
@@ -199,14 +210,14 @@ enum DictionarySyncMerge {
                 winner.createdAt = group.map(\.createdAt).min()!
                 winner.modifiedAt = group.map(\.modifiedAt).max()!
                 switch newestEdit.payload {
-                case .replacement(_, let destination):
+                case .replacement(_, let destination, let isEnabled):
                     let sources = byAge.flatMap { record -> [String] in
-                        if case .replacement(let own, _) = record.payload { return own }
+                        if case .replacement(let own, _, _) = record.payload { return own }
                         return []
                     }
                     winner.payload = .replacement(
                         sources: WordReplacementVariants.parse(WordReplacementVariants.serialize(sources)),
-                        replacement: destination)
+                        replacement: destination, isEnabled: isEnabled)
                 default:
                     winner.payload = newestEdit.payload
                 }
@@ -226,7 +237,7 @@ enum DictionarySyncMerge {
             .filter { $0.key.kind == .replacement && $0.payload.isUsable }
             .sorted { ($0.modifiedAt, $0.key.id) > ($1.modifiedAt, $1.key.id) }
         for rule in rules {
-            guard case .replacement(let sources, let destination) = rule.payload else { continue }
+            guard case .replacement(let sources, let destination, let isEnabled) = rule.payload else { continue }
             var kept: [String] = []
             for source in sources {
                 let sourceKey = WordReplacementVariants.key(for: source)
@@ -237,7 +248,8 @@ enum DictionarySyncMerge {
                 kept.append(source)
             }
             if !kept.isEmpty, kept != sources {
-                state.records[rule.key]?.payload = .replacement(sources: kept, replacement: destination)
+                state.records[rule.key]?.payload = .replacement(
+                    sources: kept, replacement: destination, isEnabled: isEnabled)
             }
         }
         return state
@@ -265,6 +277,81 @@ enum DictionarySyncMerge {
         return result
     }
 
+    // MARK: Conflicts
+
+    /// An entry that changed on both Macs since this Mac's last pass. Dates are not used to pick a side:
+    /// the user sees both versions and chooses.
+    struct Conflict: Equatable, Sendable {
+        /// The key on this Mac.
+        let key: DictionarySyncKey
+        let title: String
+        /// How this Mac has it (`nil`: deleted here).
+        let thisMac: String?
+        /// How the file has it (`nil`: deleted there).
+        let otherMac: String?
+    }
+
+    /// The entries changed on this Mac since its last pass that the file also changed, or deleted, since.
+    /// With no `last` (a first merge) every entry counts as changed on both sides, but a deletion in the
+    /// file never conflicts: this Mac keeps what it has.
+    static func conflicts(
+        local: DictionarySyncState, remote: DictionarySyncState, last: DictionarySyncState?
+    ) -> [Conflict] {
+        func changedHere(_ record: DictionarySyncRecord) -> Bool {
+            guard let last else { return true }
+            return last.records[record.key]?.payload != record.payload
+        }
+        func changedThere(_ record: DictionarySyncRecord) -> Bool {
+            guard let last else { return true }
+            return last.records[record.key]?.payload != record.payload
+        }
+
+        var result: [Conflict] = []
+        for record in local.records.values.sorted(by: { $0.key.id < $1.key.id }) where record.payload.isUsable {
+            guard changedHere(record) else { continue }
+            if let other = remote.records[record.key] {
+                if other.payload != record.payload, other.payload.isUsable, changedThere(other) {
+                    result.append(
+                        Conflict(
+                            key: record.key, title: record.payload.displayText, thisMac: record.payload.detailText,
+                            otherMac: other.payload.detailText))
+                }
+            } else if let last, let deletedAt = remote.tombstones[record.key],
+                last.tombstones[record.key] != deletedAt
+            {
+                // A deletion this Mac has not seen yet; one it already knew is a past decision.
+                result.append(
+                    Conflict(
+                        key: record.key, title: record.payload.displayText, thisMac: record.payload.detailText,
+                        otherMac: nil))
+            } else if record.key.kind == .snippet, let other = remote.records.values.first(where: {
+                $0.key.kind == .snippet && $0.key != record.key && $0.payload.isUsable
+                    && $0.payload.naturalKey == record.payload.naturalKey && $0.payload != record.payload
+                    && $0.payload.detailText != record.payload.detailText
+            }) {
+                // Two snippets with one trigger: only one text can stay.
+                result.append(
+                    Conflict(
+                        key: record.key, title: record.payload.displayText, thisMac: record.payload.detailText,
+                        otherMac: other.payload.detailText))
+            }
+        }
+        // Deleted here since the last pass, changed in the file since.
+        if let last {
+            for (key, _) in local.tombstones where local.records[key] == nil {
+                guard let before = last.records[key], let other = remote.records[key],
+                    other.payload != before.payload, other.payload.isUsable
+                else { continue }
+                result.append(
+                    Conflict(
+                        key: key, title: other.payload.displayText, thisMac: nil, otherMac: other.payload.detailText))
+            }
+        }
+        return result
+    }
+
+    // MARK: Before a pass
+
     /// This Mac's state as it goes into the merge.
     /// - A first merge (no state of this Mac to compare with, or a store that is not the one the state was
     ///   made for) has no deletions of its own, and a remote deletion must not take an entry this Mac
@@ -272,10 +359,14 @@ enum DictionarySyncMerge {
     /// - After longer than the tombstone lifetime without a pass, other Macs' deletions may have expired
     ///   from the file. An entry unchanged since the last pass and missing from the file was then most
     ///   likely deleted, so it is left out (not uploaded); only entries edited since go up.
-    /// - `keeping` are entries the user chose to keep: they count as edited now and go back up.
+    /// - `keeping` are entries the user chose to keep, and conflicts the user settled with this Mac's
+    ///   version: they count as edited now and go back up (a deletion here stays a deletion).
+    /// - `yielding` are conflicts the user settled with the other Mac's version: this Mac's version (or its
+    ///   deletion) is left out, so the file's wins.
     static func prepared(
         local: DictionarySyncState, remote: DictionarySyncState, now: Date,
-        lastSyncAt: Date?, isFirstMerge: Bool, keeping: Set<DictionarySyncKey>
+        lastSyncAt: Date?, isFirstMerge: Bool, keeping: Set<DictionarySyncKey>,
+        yielding: Set<DictionarySyncKey> = []
     ) -> DictionarySyncState {
         var state = local
         let now = floored(now)
@@ -287,32 +378,86 @@ enum DictionarySyncMerge {
             }
         } else if let lastSyncAt, now.timeIntervalSince(lastSyncAt) > tombstoneLifetime {
             for (key, record) in local.records
-            where record.modifiedAt <= lastSyncAt && remote.records[key] == nil && !keeping.contains(key) {
+            where record.modifiedAt <= lastSyncAt && remote.records[key] == nil && !keeping.contains(key)
+                && !yielding.contains(key)
+            {
                 state.records[key] = nil
             }
         }
+        for key in yielding {
+            state.records[key] = nil
+            state.tombstones[key] = nil
+        }
         for key in keeping {
-            guard var record = state.records[key] ?? local.records[key] else { continue }
-            let deletedAt = remote.tombstones[key] ?? .distantPast
-            record.modifiedAt = max(record.modifiedAt, now, deletedAt.addingTimeInterval(1))
-            state.records[key] = record
+            if var record = state.records[key] ?? local.records[key] {
+                let deletedAt = remote.tombstones[key] ?? .distantPast
+                record.modifiedAt = max(record.modifiedAt, now, deletedAt.addingTimeInterval(1))
+                state.records[key] = record
+            } else if let other = remote.records[key] {
+                // This Mac deleted it and keeps its deletion over the file's newer version.
+                state.tombstones[key] = max(
+                    state.tombstones[key] ?? .distantPast, now, other.modifiedAt.addingTimeInterval(1))
+            }
         }
         return state
     }
 
     /// The entries of `local` the merged state no longer has: deleted on another Mac, or left out because
-    /// of the lifetime rule. An item that only became part of another item (two snippets with one trigger
-    /// merged into one) is not a removal.
-    static func removals(local: DictionarySyncState, merged: DictionarySyncState) -> [DictionarySyncRecord] {
-        var kept = Set<String>()
+    /// of the lifetime rule. Not removals: an entry whose content went into another one (a rule whose
+    /// sources are all in the merged rule for the same text, a snippet with the same trigger and text), and
+    /// an entry the user settled as a conflict.
+    static func removals(
+        local: DictionarySyncState, merged: DictionarySyncState, remote: DictionarySyncState,
+        excluding settled: Set<DictionarySyncKey>
+    ) -> [Removal] {
+        var rulesByDestination: [String: Set<String>] = [:]
+        var snippetsByTrigger: [String: Set<String>] = [:]
         for record in merged.records.values where record.payload.isUsable {
-            kept.insert("\(record.key.kind.rawValue)\u{0}\(record.payload.naturalKey)")
+            switch record.payload {
+            case .replacement(let sources, let destination, _):
+                rulesByDestination[WordReplacementVariants.destinationKey(for: destination), default: []]
+                    .formUnion(sources.map(WordReplacementVariants.key(for:)))
+            case .snippet(let trigger, let expansion):
+                snippetsByTrigger[SnippetTrigger.key(trigger), default: []].insert(expansion)
+            case .vocabulary:
+                break
+            }
         }
         return local.records.values
-            .filter {
-                merged.records[$0.key] == nil
-                    && !kept.contains("\($0.key.kind.rawValue)\u{0}\($0.payload.naturalKey)")
+            .filter { record in
+                guard merged.records[record.key] == nil, !settled.contains(record.key) else { return false }
+                switch record.payload {
+                case .replacement(let sources, let destination, _):
+                    let folded = rulesByDestination[WordReplacementVariants.destinationKey(for: destination)]
+                    if let folded, sources.allSatisfy({ folded.contains(WordReplacementVariants.key(for: $0)) }) {
+                        return false
+                    }
+                case .snippet(let trigger, let expansion):
+                    if snippetsByTrigger[SnippetTrigger.key(trigger)]?.contains(expansion) == true { return false }
+                case .vocabulary:
+                    break
+                }
+                return true
             }
-            .sorted { ($0.key.kind.rawValue, $0.payload.displayText) < ($1.key.kind.rawValue, $1.payload.displayText) }
+            .map {
+                Removal(
+                    key: $0.key, title: $0.payload.displayText,
+                    reason: remote.tombstones[$0.key] != nil ? .deletedElsewhere : .notInFile)
+            }
+            .sorted { ($0.key.kind.rawValue, $0.title) < ($1.key.kind.rawValue, $1.title) }
+    }
+
+    /// An entry this Mac would lose in a pass.
+    struct Removal: Equatable, Sendable {
+        enum Reason: Equatable, Sendable {
+            /// Another Mac deleted it.
+            case deletedElsewhere
+            /// The file doesn't have it and it hasn't changed here in over the tombstone lifetime.
+            case notInFile
+        }
+
+        let key: DictionarySyncKey
+        let title: String
+        let reason: Reason
     }
 }
