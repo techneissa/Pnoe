@@ -14,8 +14,9 @@ struct SettingsView: View {
     @ObservedObject private var mediaController = MediaController.shared
     @ObservedObject private var playbackController = PlaybackController.shared
     @AppStorage(OnboardingSettings.completedV2Key) private var hasCompletedOnboardingV2 = true
-    @AppStorage("restoreClipboardAfterPaste") private var restoreClipboardAfterPaste = true
-    @AppStorage("clipboardRestoreDelay") private var clipboardRestoreDelay = 2.0
+    @AppStorage(ClipboardPasteSettings.restoreKey) private var restoreClipboardAfterPaste = true
+    @AppStorage(ClipboardPasteSettings.delayKey) private var clipboardRestoreDelay = ClipboardPasteSettings.defaultRestoreDelay
+    @AppStorage(ClipboardPasteSettings.addToHistoryKey) private var addDictationToClipboardHistory = true
     @AppStorage(PasteMethod.userDefaultsKey) private var pasteMethodRawValue = PasteMethod.standard.rawValue
     @AppStorage(AppAppearancePreference.userDefaultsKey) private var appAppearancePreference = AppAppearancePreference
         .system
@@ -38,7 +39,6 @@ struct SettingsView: View {
     @State private var cancelRecordingShortcutRecorderResetID = 0
     @State private var isImportingSettings = false
 
-    @State private var isRestoreClipboardExpanded = false
 
     /// Connected displays for the picker, plus the chosen one while it is disconnected so the
     /// picker keeps showing the stored choice.
@@ -204,23 +204,11 @@ struct SettingsView: View {
                     InfoTip("Press Return while recording to stop and deliver the result. Pnoe will then paste the result and press the selected key to send it. Choose None to disable this feature.")
                 }
 
-                ExpandableSettingsRow(
-                    isExpanded: $isRestoreClipboardExpanded,
-                    isEnabled: $restoreClipboardAfterPaste,
-                    label: "Keep Clipboard Content",
-                    infoMessage:
-                        "Default and AppleScript temporarily use the clipboard to paste transcription. When enabled, this restores your previous clipboard content after the selected delay. Direct Typing leaves the clipboard unchanged."
-                ) {
-                    Picker("Restore Delay", selection: $clipboardRestoreDelay) {
-                        Text("250ms").tag(0.25)
-                        Text("500ms").tag(0.5)
-                        Text("1s").tag(1.0)
-                        Text("2s").tag(2.0)
-                        Text("3s").tag(3.0)
-                        Text("4s").tag(4.0)
-                        Text("5s").tag(5.0)
-                    }
-                }
+                PastingSettingRows(
+                    restoreClipboard: $restoreClipboardAfterPaste,
+                    restoreDelay: $clipboardRestoreDelay,
+                    addToHistory: $addDictationToClipboardHistory
+                )
                 .disabled(pasteMethodRawValue == PasteMethod.directTyping.rawValue)
 
                 HStack(spacing: 4) {

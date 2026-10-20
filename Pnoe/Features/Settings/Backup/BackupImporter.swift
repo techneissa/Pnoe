@@ -187,10 +187,13 @@ enum BackupImporter {
             UserDefaults.standard.set(textFormattingEnabled, forKey: keyIsTextFormattingEnabled)
         }
         if let restoreClipboard = general.restoreClipboardAfterPaste {
-            UserDefaults.standard.set(restoreClipboard, forKey: "restoreClipboardAfterPaste")
+            UserDefaults.standard.set(restoreClipboard, forKey: ClipboardPasteSettings.restoreKey)
         }
         if let clipboardDelay = general.clipboardRestoreDelay {
-            UserDefaults.standard.set(clipboardDelay, forKey: "clipboardRestoreDelay")
+            UserDefaults.standard.set(clipboardDelay, forKey: ClipboardPasteSettings.delayKey)
+        }
+        if let addToHistory = general.addDictatedTextToClipboardHistory {
+            UserDefaults.standard.set(addToHistory, forKey: ClipboardPasteSettings.addToHistoryKey)
         }
         if let finishAndSendKey = general.finishAndSendKey.flatMap(FinishAndSendKey.init(rawValue:)) {
             UserDefaults.standard.set(finishAndSendKey.rawValue, forKey: FinishAndSendSettings.key)
