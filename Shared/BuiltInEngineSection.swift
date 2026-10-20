@@ -164,9 +164,12 @@ struct BuiltInModelRowLabel: View {
     let row: BuiltInModelRow
     var isSelected = false
     var showsCheckmark = false
+    /// `.leading` in the popover's rows; the closed picker button uses `.trailing`, so the name and the
+    /// quantization end at the same edge as the second line, above the MLX wordmark and next to the chevron.
+    var alignment: HorizontalAlignment = .leading
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: alignment, spacing: 2) {
             HStack(spacing: 6) {
                 Text(row.name)
                     .font(.system(size: 13, weight: .medium))
@@ -246,7 +249,7 @@ struct BuiltInModelPicker: View {
             HStack(spacing: 8) {
                 Group {
                     if let selectedRow {
-                        BuiltInModelRowLabel(row: selectedRow)
+                        BuiltInModelRowLabel(row: selectedRow, alignment: .trailing)
                     } else if isLoading {
                         // The folders are still being read: nothing to say about the stored model yet.
                         HStack(spacing: 6) {
