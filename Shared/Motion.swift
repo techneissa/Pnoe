@@ -14,7 +14,7 @@ import SwiftUI
 /// | A job starts (recording, transcribing, Run, a download) | Symbol replace; pulse on its symbol while it runs | `motionJobSymbol`, `motionSymbolReplace` |
 /// | A job finishes | Replace with a check mark, one bounce; a transient chip fades out | `motionJobSymbol`, `motionFade` |
 /// | A job fails (or a Playground run falls back) | Replace with the error symbol, one wiggle | `motionJobSymbol` |
-/// | A take ends in the recorder (pasted, cancelled, failed) | The processing indicator is replaced by a check mark with one bounce, or the error symbol with one wiggle, for `Motion.outcomeHold` | `motionBounce`, `motionWiggle`, `motionFade` |
+/// | A take ends in the recorder (pasted, cancelled, failed) | The processing indicator shrinks to nothing, then the check mark (or the red error symbol) grows to full size, no overshoot, and holds for `Motion.outcomeHold` | `MotionOutcomeSwap` |
 /// | A control changes state on a click (toggle, eye, media pausing) | Symbol replace, magic where the two symbols share a shape | `motionSymbolReplace` |
 /// | A value is copied or saved | Copy → check mark, back after about 1 s | `Motion.copiedHold` |
 /// | A panel opens or closes | Fade with a small move from its edge | `motionPanel` |
@@ -28,6 +28,7 @@ import SwiftUI
 /// Timing: at most 200 ms for any state change (hover 120, disclosure and copy 150, symbol
 /// replace 180, panel, finish, failure, reveal and screen 200). A loop (pulse, spin) runs only
 /// while its job runs: gate it on the running flag, never on `true`. A bounce or wiggle plays once.
+/// The recorder's outcome swap is two steps of 90 ms (shrink, then grow).
 enum Motion: CaseIterable, Sendable {
     /// A pointer enters or leaves a control or row, a drop target lights.
     case hover
@@ -49,6 +50,10 @@ enum Motion: CaseIterable, Sendable {
     case finish
     /// A job fails (the error symbol wiggles).
     case failure
+    /// The recorder's processing indicator shrinks to nothing when a take ends.
+    case outcomeShrink
+    /// The recorder's check mark or error symbol grows to full size.
+    case outcomeGrow
     /// A whole screen or stage changes.
     case screen
     /// A progress value moves; data, so short and linear.
@@ -68,13 +73,14 @@ enum Motion: CaseIterable, Sendable {
         case .symbolReplace: return 0.18
         case .reveal, .panel, .finish, .failure, .screen: return 0.2
         case .progress: return 0.1
+        case .outcomeShrink, .outcomeGrow: return 0.09
         }
     }
 
     var curve: Curve {
         switch self {
-        case .hover, .press, .reveal, .finish, .failure: return .easeOut
-        case .disclosure, .copy, .symbolReplace, .change, .panel, .screen: return .easeInOut
+        case .hover, .press, .reveal, .finish, .failure, .outcomeGrow: return .easeOut
+        case .disclosure, .copy, .symbolReplace, .change, .panel, .screen, .outcomeShrink: return .easeInOut
         case .progress: return .linear
         }
     }
@@ -218,6 +224,123 @@ extension Motion {
     /// The symbol of an on/off control whose two symbols share a shape (eye and eye.slash).
     static func toggleSymbol(isOn: Bool, on: String, off: String) -> String {
         isOn ? on : off
+    }
+}
+
+// MARK: - Outcome swap
+
+/// The scales of the two parts of the recorder's outcome swap at a moment: the processing indicator
+/// shrinks to nothing, then the check mark (or error symbol) grows to full size. No overshoot: both
+/// stay between 0 and 1.
+struct MotionOutcomeScales: Equatable {
+    let old: CGFloat
+    let new: CGFloat
+}
+
+extension Motion {
+    /// The timing curve of this moment as a unit cubic Bézier (the definitions SwiftUI uses for
+    /// `.easeInOut` and `.easeOut`), sampled at `x` from 0 to 1.
+    func progress(at x: Double) -> Double {
+        let (x1, y1, x2, y2): (Double, Double, Double, Double)
+        switch curve {
+        case .easeInOut: (x1, y1, x2, y2) = (0.42, 0, 0.58, 1)
+        case .easeOut: (x1, y1, x2, y2) = (0, 0, 0.58, 1)
+        case .linear: return min(1, max(0, x))
+        }
+        if x <= 0 { return 0 }
+        if x >= 1 { return 1 }
+        let target = x
+        func bezier(_ t: Double, _ a: Double, _ b: Double) -> Double {
+            let u = 1 - t
+            return 3 * u * u * t * a + 3 * u * t * t * b + t * t * t
+        }
+        var low = 0.0, high = 1.0
+        for _ in 0..<40 {
+            let mid = (low + high) / 2
+            if bezier(mid, x1, x2) < target { low = mid } else { high = mid }
+        }
+        return bezier((low + high) / 2, y1, y2)
+    }
+
+    /// The outcome swap `elapsed` seconds after the take ended: the indicator shrinks for
+    /// `outcomeShrink`, then the icon grows for `outcomeGrow`. Under Reduce Motion the icon is simply
+    /// there (same end state).
+    static func outcomeScales(at elapsed: TimeInterval, reduceMotion: Bool = Motion.systemReducesMotion)
+        -> MotionOutcomeScales
+    {
+        if reduceMotion { return MotionOutcomeScales(old: 0, new: 1) }
+        let shrink = Motion.outcomeShrink.baseDuration
+        let grow = Motion.outcomeGrow.baseDuration
+        if elapsed <= 0 { return MotionOutcomeScales(old: 1, new: 0) }
+        if elapsed < shrink {
+            return MotionOutcomeScales(old: CGFloat(1 - Motion.outcomeShrink.progress(at: elapsed / shrink)), new: 0)
+        }
+        if elapsed < shrink + grow {
+            return MotionOutcomeScales(old: 0, new: CGFloat(Motion.outcomeGrow.progress(at: (elapsed - shrink) / grow)))
+        }
+        return MotionOutcomeScales(old: 0, new: 1)
+    }
+}
+
+/// The recorder's end-of-take swap: `old` (the processing indicator) shrinks to nothing, then `new`
+/// (the check mark or error symbol) grows from small to full size, and it holds. Under Reduce Motion
+/// `new` simply appears. A view that first shows with `showsOutcome` already true shows `new` at once.
+struct MotionOutcomeSwap<Old: View, New: View>: View {
+    private enum Phase { case old, shrinking, growing, new }
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let showsOutcome: Bool
+    let old: Old
+    let new: New
+    @State private var phase: Phase
+    @State private var scale: CGFloat = 1
+
+    init(showsOutcome: Bool, @ViewBuilder old: () -> Old, @ViewBuilder new: () -> New) {
+        self.showsOutcome = showsOutcome
+        self.old = old()
+        self.new = new()
+        _phase = State(initialValue: showsOutcome ? .new : .old)
+    }
+
+    var body: some View {
+        Group {
+            switch phase {
+            case .old: old
+            case .shrinking: old.scaleEffect(scale)
+            case .growing: new.scaleEffect(scale)
+            case .new: new
+            }
+        }
+        .task(id: showsOutcome) { await advance() }
+    }
+
+    @MainActor
+    private func advance() async {
+        guard showsOutcome else {
+            phase = .old
+            scale = 1
+            return
+        }
+        guard phase == .old else { return }
+        if reduceMotion {
+            phase = .new
+            return
+        }
+        phase = .shrinking
+        scale = 1
+        Motion.animate(.outcomeShrink, reduceMotion: false) { scale = 0 }
+        try? await Task.sleep(nanoseconds: UInt64(Motion.outcomeShrink.baseDuration * 1_000_000_000))
+        guard !Task.isCancelled else { return }
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        withTransaction(instant) {
+            phase = .growing
+            scale = 0
+        }
+        Motion.animate(.outcomeGrow, reduceMotion: false) { scale = 1 }
+        try? await Task.sleep(nanoseconds: UInt64(Motion.outcomeGrow.baseDuration * 1_000_000_000))
+        guard !Task.isCancelled else { return }
+        phase = .new
     }
 }
 

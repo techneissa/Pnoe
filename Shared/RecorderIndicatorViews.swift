@@ -321,24 +321,15 @@ struct ProcessingStatusDisplay: View {
 
 // MARK: - Outcome Icon
 
-/// The check mark (one bounce, in `color`) or the error symbol (one wiggle, system red) that replaces
-/// the processing indicator when a take ends. The effect plays when the view appears, which is when the outcome
-/// is reached, and not at all under Reduce Motion.
+/// The check mark (in `color`) or the red error symbol that replaces the processing indicator when a
+/// take ends. It arrives through `MotionOutcomeSwap` (shrink the indicator, grow the icon); this view
+/// is only the icon.
 struct RecorderOutcomeIcon: View {
     let outcome: RecorderOutcome
     let color: Color
     var size: CGFloat = 16
 
     var body: some View {
-        switch outcome {
-        case .done:
-            symbol.motionBounce(when: true)
-        case .failed:
-            symbol.motionWiggle(when: true)
-        }
-    }
-
-    private var symbol: some View {
         Image(systemName: Motion.symbol(for: outcome.phase, idle: ""))
             .symbolVariant(outcome == .failed ? .fill : .none)
             .font(.system(size: size, weight: .semibold))
@@ -461,11 +452,15 @@ struct RecorderRecordButton: View {
                 .foregroundStyle(colors.mark)
                 .frame(width: 8, height: 8)
                 .motionJobSymbol(visualState == .recording ? .running : .idle)
-        case .processing:
-            ProcessingIndicator(color: colors.mark, isActive: visualState == .processing)
-        case .outcome(let outcome):
-            RecorderOutcomeIcon(outcome: outcome, color: colors.mark, size: 10)
-                .frame(width: 12, height: 12)
+        case .processing, .outcome:
+            // One branch for both, so the swap keeps its state when the take ends.
+            MotionOutcomeSwap(showsOutcome: recordingState.isOutcome) {
+                // Shown only while the take is processed and for the 90 ms it shrinks, so it keeps turning.
+                ProcessingIndicator(color: colors.mark, isActive: true)
+            } new: {
+                RecorderOutcomeIcon(outcome: recordingState.outcome ?? .done, color: colors.mark, size: 10)
+                    .frame(width: 12, height: 12)
+            }
         }
     }
 
@@ -808,13 +803,15 @@ struct RecorderDotView: View {
                     Circle().fill(red.opacity(haloOpacity)).frame(width: diameter, height: diameter).scaleEffect(halo)
                     Circle().fill(red).frame(width: diameter, height: diameter)
                 })
-        case .transcribing, .enhancing, .pasting:
+        case .transcribing, .enhancing, .pasting, .done, .failed:
             let pulse = reducesMotion ? 0.7 : 0.45 + 0.4 * (0.5 + 0.5 * sin(date.timeIntervalSinceReferenceDate * 2 * .pi / 1.2))
-            return AnyView(Circle().fill(palette.ink.opacity(pulse)).frame(width: diameter, height: diameter))
-        case .done:
-            return AnyView(RecorderOutcomeIcon(outcome: .done, color: palette.ink, size: diameter + 4))
-        case .failed:
-            return AnyView(RecorderOutcomeIcon(outcome: .failed, color: palette.ink, size: diameter + 4))
+            // One branch for the processing dot and the outcome, so the swap keeps its state.
+            return AnyView(
+                MotionOutcomeSwap(showsOutcome: recordingState.isOutcome) {
+                    Circle().fill(palette.ink.opacity(pulse)).frame(width: diameter, height: diameter)
+                } new: {
+                    RecorderOutcomeIcon(outcome: recordingState.outcome ?? .done, color: palette.ink, size: diameter + 4)
+                })
         case .idle, .starting, .busy:
             return AnyView(Circle().fill(palette.ink.opacity(0.45)).frame(width: diameter, height: diameter))
         }

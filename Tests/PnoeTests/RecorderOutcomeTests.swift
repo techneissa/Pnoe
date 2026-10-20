@@ -285,27 +285,58 @@ final class RecorderOutcomeTests: XCTestCase {
     // MARK: - Reduce Motion
 
     func testReduceMotionShowsTheSameIconsAndStatesWithoutMovement() async throws {
-        for outcome in [RecorderOutcome.done, .failed] {
+        // The icons are the same either way: a check mark, and the error symbol.
+        XCTAssertEqual(Motion.symbol(for: RecorderOutcome.done.phase, idle: ""), "checkmark")
+        XCTAssertEqual(Motion.symbol(for: RecorderOutcome.failed.phase, idle: ""), "exclamationmark.triangle")
+        // Under Reduce Motion the icon is simply there from the first moment; the end state is the same.
+        for elapsed in [0, 0.05, 0.1, 0.2, 1] as [TimeInterval] {
             XCTAssertEqual(
-                Motion.symbol(for: outcome.phase, idle: ""),
-                outcome == .done ? "checkmark" : "exclamationmark.triangle")
-            XCTAssertEqual(
-                Motion.symbolEffect(for: outcome.phase, reduceMotion: false), outcome == .done ? .bounce : .wiggle)
-            XCTAssertEqual(Motion.symbolEffect(for: outcome.phase, reduceMotion: true), .none)
+                Motion.outcomeScales(at: elapsed, reduceMotion: true), MotionOutcomeScales(old: 0, new: 1),
+                "at \(elapsed)")
         }
+        XCTAssertEqual(Motion.outcomeScales(at: 1, reduceMotion: false), MotionOutcomeScales(old: 0, new: 1))
         // The hold does not shrink under Reduce Motion: the icon is the message, only the movement goes.
         XCTAssertEqual(Motion.outcomeHold, 0.6)
-        var reachedWithMotion = false
-        var reachedWithout = false
-        Motion.animate(.finish, reduceMotion: false) { reachedWithMotion = true }
-        Motion.animate(.finish, reduceMotion: true) { reachedWithout = true }
-        XCTAssertTrue(reachedWithMotion && reachedWithout)
-        XCTAssertNil(Motion.finish.animation(reduceMotion: true))
-        XCTAssertNil(Motion.failure.animation(reduceMotion: true))
+        XCTAssertNil(Motion.outcomeShrink.animation(reduceMotion: true))
+        XCTAssertNil(Motion.outcomeGrow.animation(reduceMotion: true))
 
         let stage = Stage(.transcribing)
         stage.flow.show(.done)
         try await settle()
         XCTAssertEqual(stage.states, [.transcribing, .done, .idle])
+    }
+
+    // MARK: - Shrink, then grow
+
+    func testTheOutcomeSwapShrinksTheIndicatorThenGrowsTheIconWithNoOvershoot() {
+        let shrink = Motion.outcomeShrink.baseDuration
+        let grow = Motion.outcomeGrow.baseDuration
+        XCTAssertEqual(shrink, 0.09)
+        XCTAssertEqual(grow, 0.09)
+        XCTAssertLessThanOrEqual(shrink + grow, Motion.longestDuration)
+
+        XCTAssertEqual(Motion.outcomeScales(at: 0, reduceMotion: false), MotionOutcomeScales(old: 1, new: 0))
+        XCTAssertEqual(Motion.outcomeScales(at: shrink, reduceMotion: false), MotionOutcomeScales(old: 0, new: 0))
+        XCTAssertEqual(Motion.outcomeScales(at: shrink + grow, reduceMotion: false), MotionOutcomeScales(old: 0, new: 1))
+
+        var previousOld: CGFloat = 1
+        var previousNew: CGFloat = 0
+        for step in 0...40 {
+            let elapsed = (shrink + grow) * Double(step) / 40
+            let scales = Motion.outcomeScales(at: elapsed, reduceMotion: false)
+            XCTAssertTrue((0...1).contains(scales.old) && (0...1).contains(scales.new), "no overshoot at \(elapsed)")
+            XCTAssertLessThanOrEqual(scales.old, previousOld + 0.0001, "the indicator only shrinks")
+            XCTAssertGreaterThanOrEqual(scales.new, previousNew - 0.0001, "the icon only grows")
+            XCTAssertTrue(scales.old == 0 || scales.new == 0, "one at a time, never both")
+            previousOld = scales.old
+            previousNew = scales.new
+        }
+    }
+
+    func testTheOutcomeCurvesAreTheEasingsOfTheirMoments() {
+        XCTAssertEqual(Motion.outcomeShrink.progress(at: 0), 0, accuracy: 0.0001)
+        XCTAssertEqual(Motion.outcomeShrink.progress(at: 1), 1, accuracy: 0.0001)
+        XCTAssertEqual(Motion.outcomeShrink.progress(at: 0.5), 0.5, accuracy: 0.001, "ease in out is symmetric")
+        XCTAssertGreaterThan(Motion.outcomeGrow.progress(at: 0.5), 0.5, "ease out leads")
     }
 }
