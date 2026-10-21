@@ -1,0 +1,19 @@
+name: Feature
+description: Something new the app could do.
+title: "feat(<area>): "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: wanted
+    attributes:
+      label: Wanted
+      description: What you could do with the app afterwards.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: What it would help with, and what you do today instead.
+    validations:
+      required: true
