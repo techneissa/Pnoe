@@ -1,0 +1,45 @@
+name: Bug
+description: Something in the app does not work as it should.
+title: "fix(<area>): "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please leave out personal details: replace your user name in file paths with `~`, and crop pictures to the app's window.
+  - type: textarea
+    id: happens
+    attributes:
+      label: What happens
+      description: One or two sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: should
+    attributes:
+      label: What should happen
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to see it
+      description: Steps someone else can follow.
+      placeholder: |
+        1.
+        2.
+    validations:
+      required: true
+  - type: textarea
+    id: system-info
+    attributes:
+      label: System information
+      description: Open Pnoe's Dashboard tab and click the copy button next to "Feedback or Issues?", then paste the result here. It holds the Pnoe and macOS versions, hardware and settings.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: pictures
+    attributes:
+      label: Pictures or logs
+      description: A screenshot of the app's window (dark mode if you can), or the lines of a log around the error.
