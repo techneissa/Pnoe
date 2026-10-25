@@ -84,13 +84,23 @@ final class ReplySpeechTextTests: XCTestCase {
         let chunks = SpeechText.chunks(from: text)
         XCTAssertGreaterThan(chunks.count, 2)
         for chunk in chunks {
-            XCTAssertLessThanOrEqual(chunk.unicodeScalars.count, SpeechText.ollamaInputLimit)
+            XCTAssertLessThan(chunk.unicodeScalars.count, SpeechText.ollamaInputLimit, "a piece stays strictly under 4,096")
             XCTAssertTrue(chunk.hasSuffix("less."), "chunk ends mid-sentence: \(chunk.suffix(20))")
             XCTAssertFalse(chunk.isEmpty)
         }
         // Nothing lost or added.
         let joined = chunks.joined(separator: " ")
         XCTAssertEqual(joined.split(separator: " ").count, text.split(separator: " ").count)
+    }
+
+    func testTextOfExactlyTheLimitIsSplitSoNoPieceReachesIt() {
+        // One sentence of exactly 4,096 characters: the endpoint's maximum, which a piece must stay below.
+        let words = Array(repeating: String(repeating: "a", count: 15), count: 256).joined(separator: " ")
+        let exact = words + "."
+        XCTAssertEqual(exact.unicodeScalars.count, 4096)
+        let chunks = SpeechText.chunks(from: exact)
+        XCTAssertGreaterThan(chunks.count, 1)
+        for chunk in chunks { XCTAssertLessThan(chunk.unicodeScalars.count, 4096) }
     }
 
     func testSmallLimitPacksWholeSentences() {
@@ -102,20 +112,20 @@ final class ReplySpeechTextTests: XCTestCase {
         let sentence = Array(repeating: "word", count: 50).joined(separator: " ") + "."
         let chunks = SpeechText.chunks(from: sentence, limit: 40)
         XCTAssertGreaterThan(chunks.count, 4)
-        for chunk in chunks { XCTAssertLessThanOrEqual(chunk.unicodeScalars.count, 40) }
+        for chunk in chunks { XCTAssertLessThan(chunk.unicodeScalars.count, 40) }
         XCTAssertEqual(chunks.joined(separator: " "), sentence)
     }
 
     func testWordLongerThanTheLimitIsCutAnywhere() {
         let chunks = SpeechText.chunks(from: String(repeating: "x", count: 25), limit: 10)
-        XCTAssertEqual(chunks, [String(repeating: "x", count: 10), String(repeating: "x", count: 10), "xxxxx"])
+        XCTAssertEqual(chunks, [String(repeating: "x", count: 9), String(repeating: "x", count: 9), String(repeating: "x", count: 7)])
     }
 
     func testLimitCountsScalarsNotCharacters() {
         // Each flag is one Character but two scalars.
         let text = String(repeating: "🇩🇪", count: 30)
         for chunk in SpeechText.chunks(from: text, limit: 20) {
-            XCTAssertLessThanOrEqual(chunk.unicodeScalars.count, 20)
+            XCTAssertLessThan(chunk.unicodeScalars.count, 20)
         }
     }
 

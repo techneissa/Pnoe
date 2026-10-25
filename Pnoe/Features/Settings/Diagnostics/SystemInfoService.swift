@@ -57,7 +57,7 @@ final class SystemInfoService {
             Add Dictated Text To Clipboard History: \(ClipboardPasteSettings.addsToHistory())
             Paste Method: \(PasteMethod.current().displayName)
 
-            ASSISTANT SETTINGS:
+            Assistant Settings:
             Read Replies Aloud: \(ReplySpeechSettings.isEnabled())
             Ollama Voice: \(ReplySpeechSettings.ollamaVoice())
             Apple Voice: \(ReplySpeechSettings.appleVoice().isEmpty ? "Automatic" : ReplySpeechSettings.appleVoice())

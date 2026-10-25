@@ -1,51 +1,16 @@
-import Combine
 import Foundation
 
-enum AssistantMessageRole: String, Codable {
-    case user
-    case assistant
-}
-
-struct AssistantDisplayMessage: Identifiable, Equatable {
-    let id: UUID
-    let role: AssistantMessageRole
-    let content: String
-    let createdAt: Date
-}
-
-enum AssistantPhase: Equatable {
-    case inactive
-    case responding
-    case ready
-    case sendingFollowUp
-    case failed(String)
-}
-
+/// The Assistant panel's conversation plus where its answers come from.
 @MainActor
-final class AssistantSession: ObservableObject {
-    @Published private(set) var phase: AssistantPhase = .inactive
-    @Published private(set) var messages: [AssistantDisplayMessage] = []
-
-    /// Reads the Assistant's answers aloud when "Read Replies Aloud" is on.
-    let speaker: ReplySpeaker
-
+final class AssistantSession: AssistantConversation {
     private(set) var provider: AIProvider?
     private(set) var modelName: String?
     private(set) var modeName: String?
     private(set) var modeEmoji: String?
     private(set) var promptName: String?
-    private(set) var systemPrompt: String?
 
-    init(speaker: ReplySpeaker? = nil) {
-        self.speaker = speaker ?? .live()
-    }
-
-    var isVisible: Bool {
-        phase != .inactive
-    }
-
-    var isBusy: Bool {
-        phase == .responding || phase == .sendingFollowUp
+    init() {
+        super.init(speaker: .live())
     }
 
     var canSendFollowUp: Bool {
@@ -65,95 +30,15 @@ final class AssistantSession: ObservableObject {
         self.modeName = modeName
         self.modeEmoji = modeEmoji
         self.promptName = promptName
-        messages = []
-
-        let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedTranscript.isEmpty {
-            messages.append(
-                AssistantDisplayMessage(
-                    id: UUID(),
-                    role: .user,
-                    content: trimmedTranscript,
-                    createdAt: Date()
-                )
-            )
-        }
-
-        phase = .responding
+        beginConversation(transcript: transcript)
     }
 
-    func finishInitialResponse(_ response: String, systemPrompt: String?) {
-        self.systemPrompt = systemPrompt
-
-        let trimmedResponse = response.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedResponse.isEmpty {
-            appendOrReplace(
-                message: AssistantDisplayMessage(
-                    id: UUID(),
-                    role: .assistant,
-                    content: trimmedResponse,
-                    createdAt: Date()
-                )
-            )
-        }
-        phase = .ready
-        speaker.speakIfEnabled(trimmedResponse)
-    }
-
-    @discardableResult
-    func beginFollowUp(_ text: String) -> AssistantDisplayMessage {
-        let userMessage = AssistantDisplayMessage(
-            id: UUID(),
-            role: .user,
-            content: text,
-            createdAt: Date()
-        )
-        appendOrReplace(message: userMessage)
-        phase = .sendingFollowUp
-        speaker.stop(.replaced)
-        return userMessage
-    }
-
-    @discardableResult
-    func finishFollowUp(_ text: String) -> AssistantDisplayMessage {
-        let assistantMessage = AssistantDisplayMessage(
-            id: UUID(),
-            role: .assistant,
-            content: text,
-            createdAt: Date()
-        )
-        appendOrReplace(message: assistantMessage)
-        phase = .ready
-        speaker.speakIfEnabled(text)
-        return assistantMessage
-    }
-
-    func hasMessage(id: UUID) -> Bool {
-        messages.contains { $0.id == id }
-    }
-
-    func fail(_ message: String) {
-        phase = .failed(message)
-    }
-
-    /// Closing the panel, or starting over, ends any speech.
-    func reset() {
-        speaker.stop(.panelClosed)
-        phase = .inactive
-        messages = []
+    override func reset() {
+        super.reset()
         provider = nil
         modelName = nil
         modeName = nil
         modeEmoji = nil
         promptName = nil
-        systemPrompt = nil
-    }
-
-    private func appendOrReplace(message: AssistantDisplayMessage) {
-        if let index = messages.firstIndex(where: { $0.id == message.id }) {
-            messages[index] = message
-        } else {
-            messages.append(message)
-        }
     }
 }

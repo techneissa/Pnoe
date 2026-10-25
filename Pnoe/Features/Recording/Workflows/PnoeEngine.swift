@@ -284,6 +284,9 @@ class PnoeEngine: NSObject, ObservableObject {
                             let realtimeAudioGate = RealtimeAudioChunkGate()
                             self.recorder.onAudioChunk = realtimeAudioGate.receive
 
+                            // A reply that landed during the permission and preflight waits above was not blocked
+                            // (the state was still idle). Stop it before the microphone opens.
+                            self.assistantSession.speaker.stop(.recordingStarted)
                             self.recordingState = .starting
 
                             try await self.recorder.startRecording(toOutputFile: permanentURL)

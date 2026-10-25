@@ -68,11 +68,12 @@ enum SpeechText {
         return paragraphs.joined(separator: "\n\n")
     }
 
-    /// `text` cut into pieces of at most `limit` characters, at sentence ends. A sentence longer than the limit is
-    /// cut at a space, and a word longer than the limit is cut anywhere. Counts Unicode scalars, which never
-    /// undercounts what the server counts. Pieces are trimmed and none is empty.
+    /// `text` cut into pieces of fewer than `limit` characters, at sentence ends: with the endpoint's 4,096 a piece has
+    /// at most 4,095. A sentence too long for that is cut at a space, and a word too long is cut anywhere. Counts
+    /// Unicode scalars, which never undercounts what the server counts. Pieces are trimmed and none is empty.
     static func chunks(from text: String, limit: Int = ollamaInputLimit) -> [String] {
-        precondition(limit > 0)
+        precondition(limit > 1)
+        let maxLength = limit - 1
         var result: [String] = []
         var current = ""
 
@@ -83,10 +84,10 @@ enum SpeechText {
         }
 
         for sentence in sentences(in: text) {
-            if sentence.unicodeScalars.count > limit {
+            if sentence.unicodeScalars.count > maxLength {
                 flush()
-                result.append(contentsOf: split(longSentence: sentence, limit: limit))
-            } else if current.unicodeScalars.count + sentence.unicodeScalars.count > limit {
+                result.append(contentsOf: split(longSentence: sentence, maxLength: maxLength))
+            } else if current.unicodeScalars.count + sentence.unicodeScalars.count > maxLength {
                 flush()
                 current = sentence
             } else {
@@ -107,7 +108,7 @@ enum SpeechText {
         return result
     }
 
-    private static func split(longSentence sentence: String, limit: Int) -> [String] {
+    private static func split(longSentence sentence: String, maxLength: Int) -> [String] {
         var pieces: [String] = []
         var current = ""
         func flush() {
@@ -117,12 +118,12 @@ enum SpeechText {
         }
         for word in sentence.split(separator: " ", omittingEmptySubsequences: true) {
             var word = Substring(word)
-            while word.unicodeScalars.count > limit {
+            while word.unicodeScalars.count > maxLength {
                 flush()
-                pieces.append(string(of: word.unicodeScalars.prefix(limit)))
-                word = Substring(string(of: word.unicodeScalars.dropFirst(limit)))
+                pieces.append(string(of: word.unicodeScalars.prefix(maxLength)))
+                word = Substring(string(of: word.unicodeScalars.dropFirst(maxLength)))
             }
-            if current.unicodeScalars.count + word.unicodeScalars.count + 1 > limit { flush() }
+            if current.unicodeScalars.count + word.unicodeScalars.count + 1 > maxLength { flush() }
             current += current.isEmpty ? String(word) : " " + word
         }
         flush()
