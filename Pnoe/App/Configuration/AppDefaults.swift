@@ -188,6 +188,7 @@ enum AppDefaults {
 
         ])
         UserDefaults.standard.register(defaults: ClipboardPasteSettings.registeredDefaults)
+        UserDefaults.standard.register(defaults: ReplySpeechSettings.registeredDefaults)
 
         PasteMethod.migrateLegacyUserDefaultIfNeeded()
     }

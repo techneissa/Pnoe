@@ -195,7 +195,10 @@ class ImportExportService {
             autoLearnProvider: AutoLearnSettings.selectedProvider?.rawValue,
             autoLearnModel: AutoLearnSettings.selectedModel,
             autoLearnRepeatThreshold: autoLearnRepeatSettings.repeatThreshold,
-            autoLearnUsesAIReview: autoLearnRepeatSettings.usesAIReview
+            autoLearnUsesAIReview: autoLearnRepeatSettings.usesAIReview,
+            readRepliesAloud: ReplySpeechSettings.isEnabled(),
+            readRepliesOllamaVoice: ReplySpeechSettings.ollamaVoice(),
+            readRepliesAppleVoice: ReplySpeechSettings.appleVoice()
         )
 
         let exportedSettings = BackupFile(

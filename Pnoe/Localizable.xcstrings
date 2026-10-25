@@ -2296,6 +2296,72 @@
         }
       }
     },
+    "Read Replies Aloud" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Antworten vorlesen"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lire les réponses à voix haute"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "朗读回复"
+          }
+        }
+      }
+    },
+    "Speaks the Assistant's answer when it appears. Speech stops when you start recording, close the panel or press the stop button." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Liest die Antwort des Assistenten vor, sobald sie erscheint. Das Vorlesen endet, wenn eine Aufnahme startet, das Fenster geschlossen oder die Stopp-Taste gedrückt wird."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lit la réponse de l'assistant dès qu'elle apparaît. La lecture s'arrête quand un enregistrement démarre, que le panneau se ferme ou que vous appuyez sur le bouton d'arrêt."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "助手的回答出现后会朗读出来。开始录音、关闭面板或按下停止按钮时，朗读会立即停止。"
+          }
+        }
+      }
+    },
+    "Stop reading" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorlesen stoppen"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arrêter la lecture"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止朗读"
+          }
+        }
+      }
+    },
     "Summary" : {
       "localizations" : {
         "de" : {
@@ -2446,6 +2512,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用 Pnoe 内置的清理功能，保留你的原话"
+          }
+        }
+      }
+    },
+    "Voice" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stimme"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voix"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语音"
+          }
+        }
+      }
+    },
+    "Voice from %@ through Ollama." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stimme von %@ über Ollama."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voix de %@ via Ollama."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语音来自 %@（通过 Ollama）。"
+          }
+        }
+      }
+    },
+    "Using Apple voices. Install a speech model such as phonon in Ollama for a more natural voice." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Es werden Apple-Stimmen verwendet. Mit einem Sprachmodell wie phonon in Ollama klingt die Stimme natürlicher."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les voix Apple sont utilisées. Installez dans Ollama un modèle vocal comme phonon pour une voix plus naturelle."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在使用 Apple 语音。在 Ollama 中安装 phonon 等语音模型可获得更自然的声音。"
           }
         }
       }

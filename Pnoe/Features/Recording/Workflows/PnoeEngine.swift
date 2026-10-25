@@ -176,6 +176,11 @@ class PnoeEngine: NSObject, ObservableObject {
 
         super.init()
 
+        assistantSession.speaker.canStart = { [weak self] in
+            guard let state = self?.recordingState else { return true }
+            return state != .starting && state != .recording
+        }
+
         setupNotifications()
         createRecordingsDirectoryIfNeeded()
     }
@@ -237,6 +242,9 @@ class PnoeEngine: NSObject, ObservableObject {
                 if !wasCancelled { await endTakeWithFailure() }
             }
         } else {
+            // The microphone must not record Pnoe reading a reply.
+            assistantSession.speaker.stop(.recordingStarted)
+
             let canContinueAssistantSession = isAssistantFollowUp && assistantSession.canSendFollowUp
             let recordingUseCase: RecordingUseCase = canContinueAssistantSession ? .assistantFollowUp : .newSession
 
@@ -276,6 +284,9 @@ class PnoeEngine: NSObject, ObservableObject {
                             let realtimeAudioGate = RealtimeAudioChunkGate()
                             self.recorder.onAudioChunk = realtimeAudioGate.receive
 
+                            // A reply that landed during the permission and preflight waits above was not blocked
+                            // (the state was still idle). Stop it before the microphone opens.
+                            self.assistantSession.speaker.stop(.recordingStarted)
                             self.recordingState = .starting
 
                             try await self.recorder.startRecording(toOutputFile: permanentURL)
