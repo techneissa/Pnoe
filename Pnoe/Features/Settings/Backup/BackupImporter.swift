@@ -213,6 +213,9 @@ enum BackupImporter {
         if let model = general.autoLearnModel {
             UserDefaults.standard.set(model, forKey: AutoLearnSettings.modelKey)
         }
+        ReplySpeechSettings.apply(
+            enabled: general.readRepliesAloud, ollamaVoice: general.readRepliesOllamaVoice,
+            appleVoice: general.readRepliesAppleVoice)
         AutoLearnBackupSettings(
             repeatThreshold: general.autoLearnRepeatThreshold, usesAIReview: general.autoLearnUsesAIReview
         ).apply(

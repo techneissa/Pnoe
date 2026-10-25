@@ -17,6 +17,10 @@ struct SettingsView: View {
     @AppStorage(ClipboardPasteSettings.restoreKey) private var restoreClipboardAfterPaste = true
     @AppStorage(ClipboardPasteSettings.delayKey) private var clipboardRestoreDelay = ClipboardPasteSettings.defaultRestoreDelay
     @AppStorage(ClipboardPasteSettings.addToHistoryKey) private var addDictationToClipboardHistory = true
+    @AppStorage(ReplySpeechSettings.enabledKey) private var readRepliesAloud = false
+    @AppStorage(ReplySpeechSettings.ollamaVoiceKey) private var readRepliesOllamaVoice = ReplySpeechSettings.defaultOllamaVoice
+    @AppStorage(ReplySpeechSettings.appleVoiceKey) private var readRepliesAppleVoice = ReplySpeechSettings.defaultAppleVoice
+    @StateObject private var replySpeechSources = ReplySpeechSources()
     @AppStorage(PasteMethod.userDefaultsKey) private var pasteMethodRawValue = PasteMethod.standard.rawValue
     @AppStorage(AppAppearancePreference.userDefaultsKey) private var appAppearancePreference = AppAppearancePreference
         .system
@@ -233,6 +237,16 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Assistant") {
+                ReplySpeechSettingRows(
+                    isEnabled: $readRepliesAloud,
+                    ollamaVoice: $readRepliesOllamaVoice,
+                    appleVoice: $readRepliesAppleVoice,
+                    engine: replySpeechSources.engine,
+                    appleVoices: replySpeechSources.appleVoices
+                )
+            }
+
             Section("Interface") {
                 Picker("Appearance", selection: $appAppearancePreference) {
                     ForEach(AppAppearancePreference.allCases) { preference in
@@ -433,6 +447,10 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
+        .task {
+            await replySpeechSources.refresh(
+                ollama: OllamaSpeechService(baseURL: ReplySpeechSettings.ollamaBaseURL()))
+        }
         .alert("Reset Onboarding", isPresented: $showResetOnboardingAlert) {
             Button("Cancel", role: .cancel) {}
             Button("Reset", role: .destructive) {

@@ -203,6 +203,8 @@ struct AssistantPanelView: View {
             .background(palette.ink.opacity(0.10))
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
+            ReplySpeechStopButton(speaker: session.speaker, ink: palette.ink)
+
             Button(action: sendDraftMessage) {
                 Image(systemName: "paperplane.fill")
                     .font(.system(size: 10, weight: .semibold))

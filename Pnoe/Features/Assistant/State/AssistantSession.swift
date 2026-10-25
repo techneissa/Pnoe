@@ -26,12 +26,19 @@ final class AssistantSession: ObservableObject {
     @Published private(set) var phase: AssistantPhase = .inactive
     @Published private(set) var messages: [AssistantDisplayMessage] = []
 
+    /// Reads the Assistant's answers aloud when "Read Replies Aloud" is on.
+    let speaker: ReplySpeaker
+
     private(set) var provider: AIProvider?
     private(set) var modelName: String?
     private(set) var modeName: String?
     private(set) var modeEmoji: String?
     private(set) var promptName: String?
     private(set) var systemPrompt: String?
+
+    init(speaker: ReplySpeaker? = nil) {
+        self.speaker = speaker ?? .live()
+    }
 
     var isVisible: Bool {
         phase != .inactive
@@ -90,6 +97,7 @@ final class AssistantSession: ObservableObject {
             )
         }
         phase = .ready
+        speaker.speakIfEnabled(trimmedResponse)
     }
 
     @discardableResult
@@ -102,6 +110,7 @@ final class AssistantSession: ObservableObject {
         )
         appendOrReplace(message: userMessage)
         phase = .sendingFollowUp
+        speaker.stop(.replaced)
         return userMessage
     }
 
@@ -115,6 +124,7 @@ final class AssistantSession: ObservableObject {
         )
         appendOrReplace(message: assistantMessage)
         phase = .ready
+        speaker.speakIfEnabled(text)
         return assistantMessage
     }
 
@@ -126,7 +136,9 @@ final class AssistantSession: ObservableObject {
         phase = .failed(message)
     }
 
+    /// Closing the panel, or starting over, ends any speech.
     func reset() {
+        speaker.stop(.panelClosed)
         phase = .inactive
         messages = []
         provider = nil
